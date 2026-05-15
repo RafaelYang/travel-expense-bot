@@ -1,0 +1,196 @@
+// 小銘子記帳機器人 — Prisma Schema
+// 資料庫：Supabase (PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ======= 認證相關 =======
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  lineUserId    String?   @unique // LINE User ID
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  tripMembers  TripMember[]
+  expenses     Expense[]
+  deposits     Deposit[]
+  lineBotState LineBotState?
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id         String   @id @default(uuid())
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([identifier, token])
+}
+
+
+
+// ======= 行程相關 =======
+
+model Trip {
+  id              String   @id @default(uuid())
+  name            String   // 行程名稱
+  description     String?  // 描述
+  startDate       DateTime // 開始日期
+  endDate         DateTime // 結束日期
+  defaultCurrency String   @default("TWD") // 花費預設幣種
+  baseCurrency    String   @default("TWD") // 換算基準幣種
+  budgetAmount    Float?   // 預算上限
+  status          String   @default("planning") // planning, active, completed
+  coverImage      String?  // 封面圖片 URL
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  members       TripMember[]
+  expenses      Expense[]
+  deposits      Deposit[]
+  inviteCodes   InviteCode[]
+  lineTripLinks LineTripLink[]
+
+  @@index([status])
+}
+
+// 行程成員（多對多 + 角色）
+model TripMember {
+  id       String   @id @default(uuid())
+  tripId   String
+  trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     String   @default("member") // owner, member, viewer
+  joinedAt DateTime @default(now())
+
+  @@unique([tripId, userId])
+  @@index([userId])
+}
+
+// ======= 記帳相關 =======
+
+// 花費記錄
+model Expense {
+  id              String   @id @default(uuid())
+  tripId          String
+  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId          String   // 記帳人
+  user            User     @relation(fields: [userId], references: [id])
+  category        String   // food, transport, accommodation, shopping, ticket, other
+  item            String   // 項目名稱
+  amount          Float    // 原始金額
+  currency        String   // 原始幣種
+  convertedAmount Float?   // 換算後金額（基準幣種）
+  exchangeRate    Float?   // 當時匯率
+  date            DateTime @default(now()) // 花費日期
+  note            String?  // 備註
+  source          String   @default("web") // web, line
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tripId, date])
+  @@index([userId])
+}
+
+// 儲值記錄
+model Deposit {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Float    // 儲值金額
+  currency  String   // 儲值幣種
+  note      String?  // 備註
+  createdAt DateTime @default(now())
+
+  @@index([tripId])
+}
+
+// ======= 邀請碼 =======
+
+model InviteCode {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  code      String   @unique // 6 位英數字
+  role      String   @default("member") // 受邀者預設角色
+  maxUses   Int      @default(10)
+  usedCount Int      @default(0)
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([code])
+}
+
+// ======= LINE Bot =======
+
+// LINE Bot 使用者狀態
+model LineBotState {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeTripId String?  // 目前綁定的行程 ID
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// LINE 行程配對碼
+model LineTripLink {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  token     String   @unique // 6 位配對碼
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+}
+
+// ======= 匯率快取 =======
+
+model ExchangeRateCache {
+  id           String   @id @default(uuid())
+  baseCurrency String   @unique
+  rates        Json     // { "JPY": 154.5, "USD": 1, ... }
+  fetchedAt    DateTime @default(now())
+}
