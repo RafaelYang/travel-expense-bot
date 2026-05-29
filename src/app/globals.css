@@ -39,10 +39,40 @@
   --glass-bg: rgba(30, 41, 59, 0.8);
   --glass-border: rgba(71, 85, 105, 0.5);
   
+  /* 導覽列 */
+  --nav-bg: rgba(15, 23, 42, 0.85);
+  --nav-bg-mobile: rgba(15, 23, 42, 0.92);
+  --nav-bg-solid: rgba(15, 23, 42, 0.95);
+  --dropdown-bg: rgba(15, 23, 42, 0.95);
+  
   /* 圓角 */
   --radius: 0.75rem;
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
+}
+
+/* ===== 淺色主題 ===== */
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-input: #f1f5f9;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  
+  --border-color: #e2e8f0;
+  --border-color-light: #cbd5e1;
+  
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(203, 213, 225, 0.6);
+  
+  --nav-bg: rgba(255, 255, 255, 0.85);
+  --nav-bg-mobile: rgba(255, 255, 255, 0.92);
+  --nav-bg-solid: rgba(255, 255, 255, 0.95);
+  --dropdown-bg: rgba(255, 255, 255, 0.97);
 }
 
 /* ===== 全域樣式 ===== */
@@ -78,6 +108,13 @@ body::before {
     radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
+}
+
+/* 淺色主題背景漸層 */
+[data-theme="light"] body::before {
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(14, 165, 233, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.04) 0%, transparent 50%);
 }
 
 /* ===== 毛玻璃卡片 ===== */
@@ -347,4 +384,29 @@ body::before {
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+/* 下拉選單展開動畫 */
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 日期選擇器跟著主題切換 */
+.date-input {
+  color-scheme: dark;
+}
+[data-theme="light"] .date-input {
+  color-scheme: light;
+}
+
+/* ===== 行程卡片背景 hover 效果 ===== */
+a:hover .trip-card-bg {
+  transform: scale(1.05);
 }

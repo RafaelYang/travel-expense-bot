@@ -76,3 +76,119 @@
 
 ### 移除的依賴
 - `bcrypt` / `@types/bcrypt` — 不再需要密碼雜湊
+
+## 2026-05-15 — 使用者頭像下拉選單 + Vercel 部署
+
+### 改動概述
+- 右上角使用者區域改為 Google 頭像 + 名字 + 下拉箭頭
+- 點擊展開毛玻璃下拉選單，顯示帳號資訊（頭像、名字、Email）+ 登出按鈕
+- 手機版漢堡選單也整合頭像 + 登出
+- Prisma Client 改為 Proxy 延遲初始化（避免 Vercel build 時嘗試 DB 連線）
+- 部署至 Vercel：https://travel-expense-bot-steel.vercel.app
+
+### 修改的檔案
+- `src/components/navbar.tsx` — 頭像 + 下拉選單重構
+- `src/app/globals.css` — 新增 fadeInDown 動畫
+- `src/lib/prisma.ts` — Proxy 延遲初始化
+- `next.config.ts` — 加入 Google/LINE 圖片 domain 白名單
+- `vercel.json` — 簡化 buildCommand
+- `prisma.config.ts` — 移除不支援的 directUrl
+
+## 2026-05-15 — 主題切換 + 登入跳轉修正
+
+### 改動概述
+- 修正線上登入後跳 localhost 的問題（Vercel 加入 NEXTAUTH_URL 環境變數）
+- 加入深色/淺色/跟隨系統的主題切換功能
+- 主題選項整合在頭像下拉選單中，三個按鈕橫排（淺色 ☀️ / 深色 🌙 / 系統 🖥️）
+- 防閃爍：layout.tsx 加入 inline script，在 hydration 前就套用正確主題
+- 選擇儲存到 localStorage，下次開啟自動套用
+
+### 新增的檔案
+- `src/components/theme-provider.tsx` — 主題管理 Context + Provider
+
+### 修改的檔案
+- `src/app/globals.css` — 加入 [data-theme="light"] 淺色變數 + 淺色背景漸層
+- `src/app/layout.tsx` — 包裹 ThemeProvider + 防閃爍 script
+- `src/components/navbar.tsx` — 下拉選單加入主題切換區
+
+## 2026-05-16 — 修正 Vercel 生產環境 OAuth 登入
+
+### 問題描述
+Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 session 未被建立。
+
+### 根因分析
+1. Prisma Client 使用 Proxy 延遲初始化與 PrismaAdapter 不相容
+2. 自訂 cookies 設定（`__Secure-` + `sameSite: none`）導致 PKCE state 驗證異常
+3. middleware 使用 `getToken()` 無法正確讀取 NextAuth v5 在 HTTPS 下的 cookie
+
+### 修正內容
+- `src/lib/prisma.ts` — 移除 Proxy 模式，改回直接初始化 PrismaClient
+- `src/lib/auth.ts` — 移除自訂 cookies 設定，改用 NextAuth 預設值
+- `src/middleware.ts` — 改用 cookie 存在性檢查（同時支援 `__Secure-authjs.*` 和 `authjs.*`）
+- Vercel 環境變數加入 `NEXTAUTH_URL=https://travel-expense-bot-steel.vercel.app`
+
+## 2026-05-16 — 品牌更新 + i18n + 下拉子選單
+
+### 改動概述
+- 品牌名稱改為「小銘子旅行用記帳」/ "Ming's Travel Expense"
+- Logo 從 ✈️ emoji 改為黑色飛機剪影 SVG
+- Favicon 改為飛機剪影 SVG
+- 下拉選單：主題和語言改為 hover 展開子選單（二級選單）
+- 加入多語系（i18n）系統：繁體中文 + English
+
+### 新增的檔案
+- `src/lib/i18n.ts` — 翻譯字典（zh-TW / en）
+- `src/components/language-provider.tsx` — 語言管理 Context
+- `public/favicon.svg` — 飛機剪影 SVG favicon
+
+### 修改的檔案
+- `src/components/navbar.tsx` — 完全重寫：飛機 logo、hover 子選單、語言切換
+- `src/app/layout.tsx` — 加入 LanguageProvider + SVG favicon
+- `src/app/page.tsx` — 首頁文字改用 t() 翻譯
+- `src/app/login/page.tsx` — 登入頁文字改用 t() 翻譯
+
+## 2026-05-17 — 匯率 API 升級為每小時更新
+
+### 改動概述
+- 匯率來源從 open.er-api.com（每日更新）改為 CurrencyBeacon（每小時更新）
+- 新增 `/api/exchange-rate` API proxy route，前端不再直接呼叫外部 API
+- API key 安全存放在伺服器端，前端透過 proxy 查詢
+- 備用來源：當 CurrencyBeacon 異常時自動 fallback 到 open.er-api.com
+
+### 新增的檔案
+- `src/app/api/exchange-rate/route.ts` — 匯率查詢 API proxy
+
+### 修改的檔案
+- `src/lib/exchange-rate.ts` — 改用 CurrencyBeacon API + fallback 機制
+- `src/app/trips/[tripId]/page.tsx` — 前端改走 `/api/exchange-rate` proxy
+- `.env` — 加入 `EXCHANGE_RATE_API_KEY`
+
+## 2026-05-17 — 行程卡片視覺升級
+
+### 改動概述
+- 行程卡片改為全寬佈局（不再用 grid 卡片）
+- 日期格式加上年份（`yyyy/M/d`）
+- 行程排序改為由新到舊（`startDate desc`）
+- 卡片背景使用對應國家的城市風景照片（Unsplash）
+- 暗色遮罩確保文字可讀性，hover 時背景放大動畫
+- 顯示國旗 emoji
+
+### 修改的檔案
+- `src/app/page.tsx` — 全寬 TripCard + 城市背景照
+- `src/lib/countries.ts` — 新增 COUNTRY_COVER_IMAGES / getCountryCoverImage / getCountryFlags
+- `src/app/api/trips/route.ts` — 排序改為 startDate desc
+- `src/app/globals.css` — 新增 trip-card-bg hover 動畫
+
+## 2026-05-29 — 修正成員列表被記帳按鈕遮蓋
+
+### 問題描述
+行程主頁點擊「成員」標籤展開成員列表 popup 時，popup 被下方的「記帳」按鈕遮蓋（z-index 層疊問題）。
+
+### 根因分析
+成員列表 popup 使用 `position: absolute` + `zIndex: 30`，但它的父容器（`.glass-card`）沒有建立 stacking context，導致後續 DOM 元素（記帳按鈕）自然覆蓋在上面。
+
+### 修正內容
+- `src/app/trips/[tripId]/page.tsx`
+  - 行程標題卡片加上 `position: relative` + 動態 `zIndex`（展開成員列表時提高為 10）
+  - 成員列表 popup 的 `zIndex` 從 30 提高到 60
+  - popup 的 `boxShadow` 加深，視覺上更明確浮在上層

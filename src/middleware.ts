@@ -1,15 +1,22 @@
 /**
  * Next.js Middleware — 保護需要登入的路由
+ * 使用 cookies 檢查 session token 是否存在
  */
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { getToken } from "next-auth/jwt"
 
-export async function middleware(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET })
-  const isLoggedIn = !!token
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const isAuthPage = pathname.startsWith('/login')
+
+  // 檢查 NextAuth session token（JWT 模式）
+  // NextAuth v5 在 HTTPS 下使用 __Secure- 前綴
+  const sessionToken =
+    req.cookies.get('__Secure-authjs.session-token')?.value ||
+    req.cookies.get('authjs.session-token')?.value ||
+    req.cookies.get('next-auth.session-token')?.value
+
+  const isLoggedIn = !!sessionToken
 
   // 已登入 → 不需要看登入頁
   if (isLoggedIn && isAuthPage) {

@@ -8,11 +8,13 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { Navbar } from "@/components/navbar"
 import { BudgetProgress } from "@/components/budget-progress"
+import { useLanguage } from "@/components/language-provider"
 import { Plane, PlusCircle, Users, Calendar, TicketCheck, ArrowRight, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { format } from "date-fns"
-import { zhTW } from "date-fns/locale"
-import { getCurrencySymbol, TRIP_STATUS } from "@/lib/utils"
+import { zhTW, enUS } from "date-fns/locale"
+import { getCurrencySymbol } from "@/lib/utils"
+import { getCountryCoverImage, getCountryFlags } from "@/lib/countries"
 
 interface Trip {
   id: string
@@ -24,6 +26,7 @@ interface Trip {
   baseCurrency: string
   budgetAmount?: number
   status: string
+  countries: string[]
   totalSpent: number
   members: { user: { id: string; name: string; image?: string } }[]
   _count: { expenses: number }
@@ -32,11 +35,13 @@ interface Trip {
 export default function HomePage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const { t, locale } = useLanguage()
   const [trips, setTrips] = useState<Trip[]>([])
   const [loading, setLoading] = useState(true)
   const [joinCode, setJoinCode] = useState("")
   const [joinError, setJoinError] = useState("")
   const [joining, setJoining] = useState(false)
+  const dateLocale = locale === 'en' ? enUS : zhTW
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -83,7 +88,7 @@ export default function HomePage() {
       setJoinCode("")
       router.push(`/trips/${data.tripId}`)
     } catch {
-      setJoinError("加入失敗")
+      setJoinError(t('home.join.error'))
     } finally {
       setJoining(false)
     }
@@ -102,6 +107,7 @@ export default function HomePage() {
     )
   }
 
+  // 進行中的行程置頂，其餘按日期新到舊
   const activeTrips = trips.filter(t => t.status === 'active')
   const otherTrips = trips.filter(t => t.status !== 'active')
 
@@ -110,7 +116,7 @@ export default function HomePage() {
       <Navbar />
 
       <main style={{
-        maxWidth: '1000px',
+        maxWidth: '800px',
         margin: '0 auto',
         padding: '1.5rem',
         position: 'relative',
@@ -124,10 +130,10 @@ export default function HomePage() {
             letterSpacing: '-0.03em',
             marginBottom: '0.5rem',
           }}>
-            哈囉，{session.user?.name || '旅人'} 👋
+            {t('home.greeting', { name: session.user?.name || 'Traveler' })}
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            準備好記錄下一趟旅程了嗎？
+            {t('home.subtitle')}
           </p>
         </div>
 
@@ -161,8 +167,8 @@ export default function HomePage() {
               <PlusCircle size={22} style={{ color: 'var(--color-primary)' }} />
             </div>
             <div>
-              <div style={{ fontWeight: 600, marginBottom: '0.125rem' }}>新增行程</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>建立新的旅行記帳</div>
+              <div style={{ fontWeight: 600, marginBottom: '0.125rem' }}>{t('home.newTrip')}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{t('home.newTrip.desc')}</div>
             </div>
           </Link>
 
@@ -188,7 +194,7 @@ export default function HomePage() {
             <div style={{ flex: 1 }}>
               <input
                 className="input-field"
-                placeholder="輸入邀請碼"
+                placeholder={t('home.inviteCode')}
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 maxLength={6}
@@ -215,7 +221,7 @@ export default function HomePage() {
                 opacity: joining || joinCode.length !== 6 ? 0.5 : 1,
               }}
             >
-              {joining ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : '加入'}
+              {joining ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : t('home.join')}
             </button>
           </form>
         </div>
@@ -232,7 +238,7 @@ export default function HomePage() {
               gap: '0.5rem',
             }}>
               <span style={{ fontSize: '1.25rem' }}>✈️</span>
-              進行中
+              {t('home.section.active')}
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {activeTrips.map((trip) => (
@@ -254,13 +260,9 @@ export default function HomePage() {
               gap: '0.5rem',
             }}>
               <span style={{ fontSize: '1.25rem' }}>📋</span>
-              所有行程
+              {t('home.section.all')}
             </h2>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-              gap: '1rem',
-            }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {otherTrips.map((trip) => (
                 <TripCard key={trip.id} trip={trip} />
               ))}
@@ -276,14 +278,14 @@ export default function HomePage() {
           }}>
             <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🌏</div>
             <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-              還沒有行程呢
+              {t('home.empty')}
             </h2>
             <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-              建立一個行程，或是用邀請碼加入朋友的行程吧！
+              {t('home.empty.desc')}
             </p>
             <Link href="/trips/new" className="btn-primary">
               <PlusCircle size={18} />
-              建立第一個行程
+              {t('home.createFirst')}
             </Link>
           </div>
         )}
@@ -292,100 +294,146 @@ export default function HomePage() {
   )
 }
 
-// 行程卡片子元件
+// 行程卡片子元件 — 全寬 + 城市背景照
 function TripCard({ trip, featured }: { trip: Trip; featured?: boolean }) {
-  const statusInfo = TRIP_STATUS[trip.status as keyof typeof TRIP_STATUS] || TRIP_STATUS.planning
+  const { t, locale } = useLanguage()
+  const dateLocale = locale === 'en' ? enUS : zhTW
+  const coverImage = getCountryCoverImage(trip.countries || [])
+  const flags = getCountryFlags(trip.countries || [])
 
   return (
     <Link
       href={`/trips/${trip.id}`}
-      className={`glass-card ${featured ? 'pulse-glow' : ''}`}
       style={{
         display: 'block',
-        padding: featured ? '1.5rem' : '1.25rem',
         textDecoration: 'none',
         color: 'var(--text-primary)',
         cursor: 'pointer',
+        borderRadius: 'var(--radius-lg)',
+        overflow: 'hidden',
+        position: 'relative',
+        minHeight: featured ? '200px' : '160px',
       }}
+      className={featured ? 'pulse-glow' : ''}
     >
-      {/* 標題行 */}
+      {/* 背景圖片 */}
       <div style={{
+        position: 'absolute',
+        inset: 0,
+        backgroundImage: `url(${coverImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        transition: 'transform 0.4s ease',
+      }} className="trip-card-bg" />
+
+      {/* 暗化遮罩（確保文字可讀） */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'linear-gradient(135deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.55) 100%)',
+      }} />
+
+      {/* 內容 */}
+      <div style={{
+        position: 'relative',
+        zIndex: 1,
+        padding: featured ? '1.5rem' : '1.25rem',
         display: 'flex',
+        flexDirection: 'column',
         justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '0.75rem',
+        height: '100%',
+        minHeight: featured ? '200px' : '160px',
       }}>
+        {/* 上半部：標題 + 狀態 */}
         <div>
-          <h3 style={{
-            fontSize: featured ? '1.25rem' : '1rem',
-            fontWeight: 700,
-            marginBottom: '0.25rem',
-            letterSpacing: '-0.01em',
-          }}>
-            {trip.name}
-          </h3>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            fontSize: '0.75rem',
-            color: 'var(--text-muted)',
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <Calendar size={12} />
-              {format(new Date(trip.startDate), 'M/d', { locale: zhTW })} - {format(new Date(trip.endDate), 'M/d', { locale: zhTW })}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <Users size={12} />
-              {trip.members.length} 人
-            </span>
+          <div>
+            <h3 style={{
+              fontSize: featured ? '1.4rem' : '1.15rem',
+              fontWeight: 800,
+              marginBottom: '0.375rem',
+              letterSpacing: '-0.01em',
+              color: 'white',
+              textShadow: '0 1px 4px rgba(0,0,0,0.4)',
+            }}>
+              {flags && <span style={{ marginRight: '0.5rem' }}>{flags}</span>}
+              {trip.name}
+            </h3>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              fontSize: '0.8rem',
+              color: 'rgba(255,255,255,0.85)',
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Calendar size={13} />
+                {format(new Date(trip.startDate), 'yyyy/M/d', { locale: dateLocale })} - {format(new Date(trip.endDate), 'yyyy/M/d', { locale: dateLocale })}
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Users size={13} />
+                {t('home.card.people', { count: String(trip.members.length) })}
+              </span>
+            </div>
           </div>
         </div>
-        <span style={{
-          fontSize: '0.7rem',
-          padding: '0.2rem 0.5rem',
-          borderRadius: '9999px',
-          background: `${statusInfo.color}20`,
-          color: statusInfo.color,
-          fontWeight: 600,
-          whiteSpace: 'nowrap',
-        }}>
-          {statusInfo.label}
-        </span>
-      </div>
 
-      {/* 預算進度（進行中的行程才顯示） */}
-      {trip.budgetAmount && trip.budgetAmount > 0 && (
-        <div style={{ marginBottom: '0.75rem' }}>
-          <BudgetProgress
-            totalBudget={trip.budgetAmount}
-            totalSpent={trip.totalSpent}
-            currency={trip.defaultCurrency}
-            showLabels={featured}
-            size={featured ? 'md' : 'sm'}
-          />
-        </div>
-      )}
+        {/* 預算進度（進行中的行程才顯示） */}
+        {featured && trip.budgetAmount && trip.budgetAmount > 0 && (
+          <div style={{
+            margin: '0.75rem 0',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: 'var(--radius)',
+            padding: '0.75rem',
+            backdropFilter: 'blur(4px)',
+          }}>
+            <BudgetProgress
+              totalBudget={trip.budgetAmount}
+              totalSpent={trip.totalSpent}
+              currency={trip.defaultCurrency}
+              showLabels={true}
+              size="sm"
+            />
+          </div>
+        )}
 
-      {/* 底部資訊 */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          {trip._count.expenses} 筆花費
-        </span>
-        <span style={{
+        {/* 底部資訊 */}
+        <div style={{
           display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          gap: '0.25rem',
-          fontSize: '0.8rem',
-          color: 'var(--color-primary)',
-          fontWeight: 500,
         }}>
-          查看詳情 <ArrowRight size={14} />
-        </span>
+          <span style={{
+            fontSize: '0.8rem',
+            color: 'rgba(255,255,255,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}>
+            {t('home.card.expenses', { count: String(trip._count.expenses) })}
+            {trip.totalSpent > 0 && (
+              <span style={{
+                fontWeight: 700,
+                color: 'rgba(255,255,255,0.95)',
+              }}>
+                · {getCurrencySymbol(trip.defaultCurrency)}{trip.totalSpent.toLocaleString()}
+              </span>
+            )}
+          </span>
+          <span style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            fontSize: '0.8rem',
+            color: 'rgba(255,255,255,0.9)',
+            fontWeight: 600,
+            background: 'rgba(255,255,255,0.15)',
+            padding: '0.3rem 0.75rem',
+            borderRadius: '9999px',
+            backdropFilter: 'blur(4px)',
+          }}>
+            {t('home.card.detail')} <ArrowRight size={14} />
+          </span>
+        </div>
       </div>
     </Link>
   )

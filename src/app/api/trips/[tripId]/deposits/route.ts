@@ -1,5 +1,5 @@
 /**
- * 儲值 API
+ * 收入 API
  */
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
@@ -12,7 +12,7 @@ const depositSchema = z.object({
   note: z.string().optional(),
 })
 
-// POST — 新增儲值
+// POST — 新增收入
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ tripId: string }> }
@@ -55,6 +55,6 @@ export async function POST(
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
     }
     console.error("Create deposit error:", error)
-    return NextResponse.json({ error: "儲值失敗" }, { status: 500 })
+    return NextResponse.json({ error: "收入失敗" }, { status: 500 })
   }
 }

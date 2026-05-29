@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { TRIP_STATUS, CURRENCIES } from "@/lib/utils"
+import { useLanguage } from "@/components/language-provider"
 
 interface TripSettings {
   id: string
@@ -44,16 +45,14 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const { t } = useLanguage()
 
   const [editForm, setEditForm] = useState({
     name: "",
     description: "",
     startDate: "",
     endDate: "",
-    defaultCurrency: "",
     baseCurrency: "",
-    budgetAmount: "",
-    status: "",
   })
 
   useEffect(() => {
@@ -71,10 +70,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         description: data.description || "",
         startDate: data.startDate.split("T")[0],
         endDate: data.endDate.split("T")[0],
-        defaultCurrency: data.defaultCurrency,
         baseCurrency: data.baseCurrency,
-        budgetAmount: data.budgetAmount?.toString() || "",
-        status: data.status,
       })
     } catch {
       router.push("/")
@@ -106,10 +102,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
       await fetch(`/api/trips/${tripId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...editForm,
-          budgetAmount: editForm.budgetAmount ? parseFloat(editForm.budgetAmount) : null,
-        }),
+        body: JSON.stringify(editForm),
       })
       fetchTrip()
     } finally {
@@ -149,7 +142,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
           marginBottom: '1.5rem',
         }}>
           <ArrowLeft size={16} />
-          返回行程
+          {t('settings.back')}
         </Link>
 
         <h1 style={{
@@ -157,7 +150,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
           display: 'flex', alignItems: 'center', gap: '0.5rem',
         }}>
           <Settings size={20} />
-          行程設定
+          {t('settings.title')}
         </h1>
 
         {/* 邀請碼區塊 */}
@@ -167,10 +160,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             display: 'flex', alignItems: 'center', gap: '0.5rem',
           }}>
             <Share2 size={16} />
-            邀請碼
+            {t('settings.invite')}
           </h3>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-            產生邀請碼分享給朋友，讓他們加入這個行程。
+            {t('settings.invite.desc')}
           </p>
 
           {inviteCode ? (
@@ -189,7 +182,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                 {inviteCode}
               </span>
               <button onClick={copyCode} className="btn-primary" style={{ padding: '0.5rem 0.75rem' }}>
-                {codeCopied ? <><Check size={16} /> 已複製</> : <><Copy size={16} /> 複製</>}
+                {codeCopied ? <><Check size={16} /> {t('settings.invite.copied')}</> : <><Copy size={16} /> {t('settings.invite.copy')}</>}
               </button>
             </div>
           ) : (
@@ -197,7 +190,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
               {generating ? (
                 <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
               ) : (
-                <><PlusCircle size={16} /> 產生邀請碼</>
+                <><PlusCircle size={16} /> {t('settings.invite.generate')}</>
               )}
             </button>
           )}
@@ -209,61 +202,38 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
             display: 'flex', alignItems: 'center', gap: '0.5rem',
           }}>
-            ✏️ 基本設定
+            {t('settings.basic')}
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                行程名稱
+                {t('settings.tripName')}
               </label>
               <input className="input-field" value={editForm.name}
                 onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                狀態
-              </label>
-              <select className="input-field" value={editForm.status}
-                onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
-                {Object.entries(TRIP_STATUS).map(([value, info]) => (
-                  <option key={value} value={value}>{info.label}</option>
-                ))}
-              </select>
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                  出發日期
+                  {t('settings.startDate')}
                 </label>
-                <input type="date" className="input-field" value={editForm.startDate}
-                  onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })}
-                  style={{ colorScheme: 'dark' }} />
+                <input type="date" className="input-field date-input" value={editForm.startDate}
+                  onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                  回程日期
+                  {t('settings.endDate')}
                 </label>
-                <input type="date" className="input-field" value={editForm.endDate}
-                  onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
-                  style={{ colorScheme: 'dark' }} />
+                <input type="date" className="input-field date-input" value={editForm.endDate}
+                  onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
               </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                預算上限
-              </label>
-              <input type="number" className="input-field" value={editForm.budgetAmount}
-                onChange={(e) => setEditForm({ ...editForm, budgetAmount: e.target.value })}
-                placeholder="不設定則留空" />
             </div>
 
             <button onClick={saveSettings} className="btn-primary" disabled={saving}
               style={{ justifyContent: 'center', opacity: saving ? 0.7 : 1 }}>
-              {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : '儲存設定'}
+              {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : t('settings.save')}
             </button>
           </div>
         </div>
@@ -279,27 +249,27 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             color: 'var(--color-danger)',
           }}>
             <AlertTriangle size={16} />
-            危險區域
+            {t('settings.danger')}
           </h3>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-            刪除行程後所有花費記錄將無法復原。
+            {t('settings.danger.desc')}
           </p>
 
           {showDeleteConfirm ? (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button onClick={deleteTrip} className="btn-danger" disabled={deleting}
                 style={{ flex: 1, justifyContent: 'center' }}>
-                {deleting ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : '確定刪除'}
+                {deleting ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : t('settings.delete.confirm')}
               </button>
               <button onClick={() => setShowDeleteConfirm(false)} className="btn-secondary"
                 style={{ flex: 1, justifyContent: 'center' }}>
-                取消
+                {t('settings.delete.cancel')}
               </button>
             </div>
           ) : (
             <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger">
               <Trash2 size={16} />
-              刪除行程
+              {t('settings.delete')}
             </button>
           )}
         </div>

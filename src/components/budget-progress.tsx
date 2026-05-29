@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { formatCurrency, formatPercent, getCurrencySymbol } from "@/lib/utils"
+import { useLanguage } from "./language-provider"
 
 interface BudgetProgressProps {
   totalBudget: number
@@ -64,6 +65,7 @@ function useCountUp(target: number, duration: number = 1500, enabled: boolean = 
 
 export function BudgetProgress({ totalBudget, totalSpent, currency, showLabels = true, size = "md" }: BudgetProgressProps) {
   const [mounted, setMounted] = useState(false)
+  const { t } = useLanguage()
   
   useEffect(() => {
     // 延遲觸發動畫，讓用戶看到從 0 開始
@@ -104,7 +106,7 @@ export function BudgetProgress({ totalBudget, totalSpent, currency, showLabels =
           {/* 已花費 */}
           <div>
             <div style={{ fontSize, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-              已花費
+              {t('budget.spent')}
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
               <span className="countup" style={{
@@ -128,7 +130,7 @@ export function BudgetProgress({ totalBudget, totalSpent, currency, showLabels =
           {/* 剩餘 */}
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize, color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-              剩餘
+              {t('budget.remaining')}
             </div>
             <div className="countup" style={{
               fontSize: bigFontSize,
@@ -160,8 +162,8 @@ export function BudgetProgress({ totalBudget, totalSpent, currency, showLabels =
           fontSize: '0.75rem',
           color: 'var(--text-muted)',
         }}>
-          <span>預算 {formatCurrency(totalBudget, currency)}</span>
-          <span>剩餘 {formatPercent(remainingPercent)}</span>
+          <span>{t('budget.total')} {formatCurrency(totalBudget, currency)}</span>
+          <span>{t('budget.remaining')} {formatPercent(remainingPercent)}</span>
         </div>
       )}
     </div>

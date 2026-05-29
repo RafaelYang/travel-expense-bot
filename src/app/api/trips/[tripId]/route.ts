@@ -51,7 +51,7 @@ export async function GET(
     (sum, e) => sum + (e.convertedAmount || e.amount),
     0
   )
-  // 計算總儲值
+  // 計算總收入
   const totalDeposits = trip.deposits.reduce((sum, d) => sum + d.amount, 0)
 
   return NextResponse.json({

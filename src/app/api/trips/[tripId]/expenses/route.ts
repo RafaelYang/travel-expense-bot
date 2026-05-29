@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { convertExpenseAmount } from "@/lib/exchange-rate"
 import { z } from "zod"
 
 const expenseSchema = z.object({
@@ -86,6 +87,28 @@ export async function POST(
     const body = await req.json()
     const data = expenseSchema.parse(body)
 
+    // 查詢行程的基準幣種
+    const trip = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: { baseCurrency: true },
+    })
+    const baseCurrency = trip?.baseCurrency || 'TWD'
+
+    // 自動查詢即時匯率並換算
+    let convertedAmount = data.convertedAmount
+    let exchangeRate = data.exchangeRate
+
+    if (!convertedAmount && data.currency !== baseCurrency) {
+      const conversion = await convertExpenseAmount(data.amount, data.currency, baseCurrency)
+      if (conversion) {
+        convertedAmount = conversion.convertedAmount
+        exchangeRate = conversion.exchangeRate
+      }
+    } else if (data.currency === baseCurrency) {
+      convertedAmount = data.amount
+      exchangeRate = 1
+    }
+
     const expense = await prisma.expense.create({
       data: {
         tripId,
@@ -94,8 +117,8 @@ export async function POST(
         item: data.item,
         amount: data.amount,
         currency: data.currency,
-        convertedAmount: data.convertedAmount,
-        exchangeRate: data.exchangeRate,
+        convertedAmount,
+        exchangeRate,
         date: data.date ? new Date(data.date) : new Date(),
         note: data.note,
         source: data.source,

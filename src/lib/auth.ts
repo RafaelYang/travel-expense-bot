@@ -56,31 +56,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
   session: { strategy: "jwt" },
 
-  // 修正 mobile Safari LINE OAuth 的 Configuration 錯誤
-  // iOS Safari redirect 回來時 session cookie 可能被清除
-  cookies: {
-    pkceCodeVerifier: {
-      name: "__Secure-authjs.pkce.code_verifier",
-      options: {
-        httpOnly: true,
-        sameSite: "none" as const,
-        path: "/",
-        secure: true,
-        maxAge: 900,
-      },
-    },
-    state: {
-      name: "__Secure-authjs.state",
-      options: {
-        httpOnly: true,
-        sameSite: "none" as const,
-        path: "/",
-        secure: true,
-        maxAge: 900,
-      },
-    },
-  },
-
   pages: {
     signIn: "/login",
     error: "/login",

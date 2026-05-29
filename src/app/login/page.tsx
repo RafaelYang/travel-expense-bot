@@ -6,9 +6,11 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { Loader2 } from "lucide-react"
+import { useLanguage } from "@/components/language-provider"
 
 export default function LoginPage() {
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
+  const { t } = useLanguage()
 
   const handleLogin = async (provider: string) => {
     setLoadingProvider(provider)
@@ -77,11 +79,11 @@ export default function LoginPage() {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>
-            小銘子記帳
+            {t('login.title')}
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-            跟朋友一起記錄旅途花費<br />
-            <span style={{ fontSize: '0.8rem' }}>支援 LINE 機器人自動記帳</span>
+            {t('login.desc')}<br />
+            <span style={{ fontSize: '0.8rem' }}>{t('login.desc2')}</span>
           </p>
         </div>
 
@@ -131,7 +133,7 @@ export default function LoginPage() {
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
               </svg>
             )}
-            使用 Google 帳號登入
+            {t('login.google')}
           </button>
 
           {/* 分隔線 */}
@@ -142,7 +144,7 @@ export default function LoginPage() {
             margin: '0.25rem 0',
           }}>
             <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>或</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('login.or')}</span>
             <div style={{ flex: 1, height: '1px', background: 'var(--border-color)' }} />
           </div>
 
@@ -187,7 +189,7 @@ export default function LoginPage() {
                 <path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386a.63.63 0 0 1-.63-.629V8.108c0-.345.281-.63.63-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596a.625.625 0 0 1-.209.035.625.625 0 0 1-.52-.267l-2.4-3.268v2.905c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595a.64.64 0 0 1 .729.254l2.401 3.268V8.108c0-.345.282-.63.63-.63.345 0 .628.285.628.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917a.634.634 0 0 1-.63-.629V8.108c0-.345.281-.63.63-.63.346 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
               </svg>
             )}
-            使用 LINE 帳號登入
+            {t('login.line')}
           </button>
         </div>
 
@@ -201,8 +203,8 @@ export default function LoginPage() {
           border: '1px solid rgba(14, 165, 233, 0.1)',
         }}>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.8 }}>
-            💡 建議先用 <strong style={{ color: 'var(--text-secondary)' }}>Google 帳號</strong> 登入<br />
-            再用 LINE 登入即可自動綁定推播通知
+            💡 {t('login.tip', { google: '' })}<strong style={{ color: 'var(--text-secondary)' }}>{t('login.tip.google')}</strong><br />
+            {t('login.tip2')}
           </p>
         </div>
       </div>

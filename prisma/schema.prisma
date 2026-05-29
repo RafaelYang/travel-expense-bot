@@ -75,9 +75,10 @@ model Trip {
   description     String?  // 描述
   startDate       DateTime // 開始日期
   endDate         DateTime // 結束日期
-  defaultCurrency String   @default("TWD") // 花費預設幣種
+  defaultCurrency String   @default("TWD") // 花費預設幣種（向後相容）
   baseCurrency    String   @default("TWD") // 換算基準幣種
-  budgetAmount    Float?   // 預算上限
+  budgetAmount    Float?   // 預算上限（保留但前端不再顯示）
+  countries       String[] @default([])    // 目的地國家代碼（ISO 3166-1 alpha-2）
   status          String   @default("planning") // planning, active, completed
   coverImage      String?  // 封面圖片 URL
   createdAt       DateTime @default(now())

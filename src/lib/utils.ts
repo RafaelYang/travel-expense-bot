@@ -39,7 +39,7 @@ export function generateCode(length: number = 6): string {
 export const EXPENSE_CATEGORIES = [
   { value: 'food', label: '🍜 餐飲', color: '#f97316' },
   { value: 'transport', label: '🚃 交通', color: '#3b82f6' },
-  { value: 'accommodation', label: '🏨 住宿', color: '#8b5cf6' },
+  { value: 'accommodation', label: '🛏️ 住宿', color: '#8b5cf6' },
   { value: 'shopping', label: '🛍️ 購物', color: '#ec4899' },
   { value: 'ticket', label: '🎫 門票', color: '#14b8a6' },
   { value: 'other', label: '📦 其他', color: '#6b7280' },

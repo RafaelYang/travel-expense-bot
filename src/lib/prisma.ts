@@ -1,17 +1,15 @@
 /**
  * Prisma Client 單例模式（Prisma 7 + pg adapter）
- * 避免開發環境 hot-reload 時建立過多連線
  */
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
-
-const connectionString = process.env.DATABASE_URL || ''
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
 function createPrismaClient() {
+  const connectionString = process.env.DATABASE_URL || ''
   const adapter = new PrismaPg(connectionString)
   return new PrismaClient({
     adapter,
@@ -19,6 +17,9 @@ function createPrismaClient() {
   })
 }
 
+// 單例模式：開發環境用 global cache 避免 hot-reload 時建立過多連線
 export const prisma = globalForPrisma.prisma ?? createPrismaClient()
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma
+}

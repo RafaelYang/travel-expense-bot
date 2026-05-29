@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getCurrenciesFromCountries } from "@/lib/countries"
 import { z } from "zod"
 
 // 建立行程
@@ -12,9 +13,8 @@ const createTripSchema = z.object({
   description: z.string().optional(),
   startDate: z.string(),
   endDate: z.string(),
-  defaultCurrency: z.string().default("TWD"),
+  countries: z.array(z.string()).default([]),
   baseCurrency: z.string().default("TWD"),
-  budgetAmount: z.number().positive().optional(),
 })
 
 // GET — 取得我的行程列表
@@ -35,8 +35,7 @@ export async function GET() {
       _count: { select: { expenses: true } },
     },
     orderBy: [
-      { status: 'asc' }, // active 排前面
-      { startDate: 'desc' },
+      { startDate: 'desc' }, // 新到舊
     ],
   })
 
@@ -69,15 +68,19 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = createTripSchema.parse(body)
 
+    // 從國家列表推算預設幣種（第一個國家的幣種，或 baseCurrency）
+    const tripCurrencies = getCurrenciesFromCountries(data.countries)
+    const defaultCurrency = tripCurrencies[0] || data.baseCurrency
+
     const trip = await prisma.trip.create({
       data: {
         name: data.name,
         description: data.description,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
-        defaultCurrency: data.defaultCurrency,
+        countries: data.countries,
+        defaultCurrency,
         baseCurrency: data.baseCurrency,
-        budgetAmount: data.budgetAmount,
         members: {
           create: {
             userId: session.user.id,
