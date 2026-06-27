@@ -269,10 +269,11 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 
 ### 新增的檔案
 - `src/app/api/users/line-link/route.ts` — 產生個人 LINE 帳號連動碼 API
+- `upload-rich-menu.js` — 一鍵解析、上傳並將本地「圖文選單.png」設為預設圖文選單的自動化腳本
 
 ### 修改的檔案
 - `src/app/api/trips/[tripId]/line-link/route.ts` — 擴充支援 GET (查詢狀態) 與 PUT (網頁端一鍵切換預設)
 - `src/app/api/line/webhook/route.ts` — 重構支援個人綁定、輪播卡片、Postback 切換與行程天數警告提示
-- `src/app/trips/[tripId]/settings/page.tsx` — 重構連動 UI，整合個人綁定與網頁一鍵切換按鈕
-- `src/lib/i18n.ts` — 擴充多語系翻譯詞條
-
+- `src/components/navbar.tsx` — 全域選單整合 LINE 狀態與毛玻璃彈窗對話框
+- `src/app/trips/[tripId]/settings/page.tsx` — 簡化連動 UI，依帳號連動狀態提供相應引導與一鍵設定按鈕
+- `src/lib/i18n.ts` — 擴充全域選單、Modal 與行程狀態的多語系翻譯詞條
