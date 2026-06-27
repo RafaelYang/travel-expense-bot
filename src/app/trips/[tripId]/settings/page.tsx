@@ -51,6 +51,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState("")
   const [removingMember, setRemovingMember] = useState<string | null>(null)
+  const [lineCode, setLineCode] = useState("")
+  const [lineCodeExpires, setLineCodeExpires] = useState<string | null>(null)
+  const [generatingLineCode, setGeneratingLineCode] = useState(false)
+  const [lineCodeCopied, setLineCodeCopied] = useState(false)
   const { t } = useLanguage()
 
   const [editForm, setEditForm] = useState({
@@ -144,6 +148,30 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     } finally {
       setRemovingMember(null)
     }
+  }
+
+  const generateLineCode = async () => {
+    setGeneratingLineCode(true)
+    try {
+      const res = await fetch(`/api/trips/${tripId}/line-link`, { method: "POST" })
+      const data = await res.json()
+      if (res.ok) {
+        setLineCode(data.token)
+        setLineCodeExpires(data.expires)
+      } else {
+        alert(data.error || "產生連動碼失敗")
+      }
+    } catch {
+      alert("產生連動碼失敗")
+    } finally {
+      setGeneratingLineCode(false)
+    }
+  }
+
+  const copyLineCommand = () => {
+    navigator.clipboard.writeText(`/link ${lineCode}`)
+    setLineCodeCopied(true)
+    setTimeout(() => setLineCodeCopied(false), 2000)
   }
 
   if (loading || !trip) {
@@ -310,6 +338,56 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             }}>
               {emailError}
             </div>
+          )}
+        </div>
+
+        {/* LINE 記帳連動 */}
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+          <h3 style={{
+            fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            <span style={{ fontSize: '1.1rem' }}>💬</span>
+            {t('settings.lineLink')}
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+            {t('settings.lineLink.desc')}
+          </p>
+
+          {lineCode ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{
+                fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)',
+                background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius)',
+                border: '1px solid var(--border-color)',
+                lineHeight: 1.6,
+              }}>
+                <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step1')}</div>
+                <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step2')}</div>
+                <div style={{
+                  fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-primary-light)',
+                  fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  marginTop: '0.5rem', marginBottom: '0.5rem',
+                  padding: '0.5rem', background: 'rgba(14, 165, 233, 0.08)', borderRadius: '6px'
+                }}>
+                  /link {lineCode}
+                  <button onClick={copyLineCommand} className="btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginLeft: 'auto' }}>
+                    {lineCodeCopied ? <><Check size={12} /> {t('settings.invite.copied')}</> : <><Copy size={12} /> {t('settings.invite.copy')}</>}
+                  </button>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {t('settings.lineLink.step3')}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button onClick={generateLineCode} className="btn-primary" disabled={generatingLineCode} style={{ background: '#06c755', borderColor: '#06c755' }}>
+              {generatingLineCode ? (
+                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <><PlusCircle size={16} /> {t('settings.lineLink.generate')}</>
+              )}
+            </button>
           )}
         </div>
 

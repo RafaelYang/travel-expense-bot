@@ -142,6 +142,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.emailInvite.sent': '✅ 邀請已寄出！',
     'settings.emailInvite.error': '寄送失敗',
 
+    // LINE 連動
+    'settings.lineLink': '💬 LINE 記帳連動',
+    'settings.lineLink.desc': '產生 6 位數連動碼，讓您的 LINE Bot 可以直接將花費記錄寫入此行程。',
+    'settings.lineLink.generate': '產生連動配對碼',
+    'settings.lineLink.step1': '1. 請先加入官方 LINE 機器人帳號為好友。',
+    'settings.lineLink.step2': '2. 在 LINE 對話框輸入以下指令（限時 15 分鐘）：',
+    'settings.lineLink.step3': '3. 連動完成後，即可直接在 LINE 對話中輸入「品項 金額 (幣種)」進行快速記帳！',
+
     // 預算進度
     'budget.spent': '已花費',
     'budget.remaining': '剩餘',
@@ -295,6 +303,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.emailInvite.sending': 'Sending...',
     'settings.emailInvite.sent': '✅ Invitation sent!',
     'settings.emailInvite.error': 'Failed to send',
+
+    // LINE Link
+    'settings.lineLink': '💬 LINE Expense Logging',
+    'settings.lineLink.desc': 'Generate a 6-digit link code to allow your LINE Bot to directly write expenses to this trip.',
+    'settings.lineLink.generate': 'Generate Link Code',
+    'settings.lineLink.step1': '1. Add the official LINE Bot as a friend first.',
+    'settings.lineLink.step2': '2. Send the following command in LINE (expires in 15 mins):',
+    'settings.lineLink.step3': '3. Once linked, you can log expenses directly in LINE by typing "item amount (currency)"!',
 
     // 預算進度
     'budget.spent': 'Spent',

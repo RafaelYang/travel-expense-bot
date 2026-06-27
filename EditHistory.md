@@ -242,3 +242,18 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 
 ### 新增的檔案
 - `.github/workflows/keep-alive.yml` — 每日自動執行 ping-db 的 workflow 檔案。
+
+## 2026-06-27 — 實作 LINE Bot 快速記帳與連動功能
+
+### 改動概述
+- 實作了 LINE Bot Webhook API，支援以 `/link [連動碼]` 綁定旅遊行程。
+- 實作了 LINE 快速記帳語法解析與自動分類，使用者可直接傳送如「拉麵 1500 JPY」或「捷運 35」進行多幣種自動記帳。
+- 在行程設定頁面加入 LINE 連動綁定 UI 與多語系對應詞條，提供詳細的三步連動教學。
+
+### 新增的檔案
+- `src/app/api/trips/[tripId]/line-link/route.ts` — 產生 LINE 行程連動碼 API
+- `src/app/api/line/webhook/route.ts` — LINE Messaging API Webhook 路由
+
+### 修改的檔案
+- `src/app/trips/[tripId]/settings/page.tsx` — 行程設定頁新增 LINE 連動 UI
+- `src/lib/i18n.ts` — 新增 LINE 相關翻譯詞條
