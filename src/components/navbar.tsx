@@ -759,7 +759,32 @@ export function Navbar() {
                     background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius)',
                     border: '1px solid var(--border-color)', lineHeight: 1.6
                   }}>
-                    <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step1')}</div>
+                    <div style={{ marginBottom: '0.25rem', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.375rem' }}>
+                      <span>{t('settings.lineLink.step1')}</span>
+                      {process.env.NEXT_PUBLIC_LINE_BOT_LINK && (
+                        <a 
+                          href={process.env.NEXT_PUBLIC_LINE_BOT_LINK}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: '0.125rem 0.5rem',
+                            background: '#06c755',
+                            color: '#fff',
+                            borderRadius: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                            transition: 'opacity 0.2s',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+                        >
+                          點此加好友 🚀
+                        </a>
+                      )}
+                    </div>
                     <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step2')}</div>
                     <div style={{
                       fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-primary-light)',
