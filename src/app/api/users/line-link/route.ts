@@ -1,10 +1,51 @@
 /**
- * 產生個人 LINE 帳號綁定配對碼 API
+ * 個人 LINE 帳號連動碼與連動狀態 API
  */
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
+// GET — 查詢當前登入使用者的 LINE 綁定狀態與當前預設行程
+export async function GET(req: NextRequest) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "未登入" }, { status: 401 })
+    }
+
+    const userId = session.user.id
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: "找不到使用者" }, { status: 404 })
+    }
+
+    let activeTripName: string | null = null
+    const botState = await prisma.lineBotState.findUnique({
+      where: { userId },
+    })
+
+    if (botState?.activeTripId) {
+      const trip = await prisma.trip.findUnique({
+        where: { id: botState.activeTripId },
+      })
+      activeTripName = trip?.name || null
+    }
+
+    return NextResponse.json({
+      hasLinkedLine: user.lineUserId !== null,
+      activeTripName,
+    })
+  } catch (error) {
+    console.error("[GET User LINE Link Status Error]", error)
+    return NextResponse.json({ error: "伺服器內部錯誤" }, { status: 500 })
+  }
+}
+
+// POST — 產生 15 分鐘有效的 6 位個人連動碼
 export async function POST(req: NextRequest) {
   try {
     const session = await auth()
@@ -54,7 +95,7 @@ export async function POST(req: NextRequest) {
       where: { identifier },
     })
 
-    // 4. 寫入 VerificationToken (用來做暫時性個人配對碼)
+    // 4. 寫入 VerificationToken
     const verification = await prisma.verificationToken.create({
       data: {
         identifier,

@@ -389,60 +389,22 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             {t('settings.lineLink')}
           </h3>
           
-          {/* 第一部分：個人帳號綁定狀態 */}
-          <div style={{ marginBottom: '1.25rem' }}>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-              {t('settings.lineLink.desc')}
-            </p>
-
-            {hasLinkedLine ? (
+          {!hasLinkedLine ? (
+            <div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                {t('settings.lineLink.desc')}
+              </p>
               <div style={{
                 fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
-                background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)',
-                color: 'var(--color-success)', fontWeight: 500
+                background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                color: '#f59e0b', fontWeight: 500, lineHeight: 1.6
               }}>
-                {t('settings.lineLink.user.linked')}
+                💡 您的帳號尚未連結 LINE 帳號。<br />
+                請點擊右上角**個人頭像選單**，選擇 **「連結 LINE 帳號」** 並依指示完成個人綁定。綁定後即可於此處將本行程設為 LINE 預設記帳行程！
               </div>
-            ) : lineCode ? (
-              <div style={{
-                fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)',
-                background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border-color)', lineHeight: 1.6
-              }}>
-                <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step1')}</div>
-                <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step2')}</div>
-                <div style={{
-                  fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-primary-light)',
-                  fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  marginTop: '0.5rem', marginBottom: '0.5rem',
-                  padding: '0.5rem', background: 'rgba(14, 165, 233, 0.08)', borderRadius: '6px'
-                }}>
-                  /link {lineCode}
-                  <button onClick={copyLineCommand} className="btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginLeft: 'auto' }}>
-                    {lineCodeCopied ? <><Check size={12} /> {t('settings.invite.copied')}</> : <><Copy size={12} /> {t('settings.invite.copy')}</>}
-                  </button>
-                </div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {t('settings.lineLink.step3')}
-                </div>
-              </div>
-            ) : (
-              <button onClick={generateLineCode} className="btn-primary" disabled={generatingLineCode} style={{ background: '#06c755', borderColor: '#06c755' }}>
-                {generatingLineCode ? (
-                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                ) : (
-                  <><PlusCircle size={16} /> {t('settings.lineLink.generate')}</>
-                )}
-              </button>
-            )}
-          </div>
-
-          {/* 第二部分：行程記帳預設狀態 (僅在已綁定 LINE 帳號時顯示) */}
-          {hasLinkedLine && (
-            <div style={{
-              borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem',
-              marginTop: '1.25rem'
-            }}>
+            </div>
+          ) : (
+            <div>
               <h4 style={{
                 fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem',
                 display: 'flex', alignItems: 'center', gap: '0.375rem'

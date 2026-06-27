@@ -25,6 +25,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     'menu.logout': '登出帳號',
     'menu.currency': '偏好幣種',
     'menu.user.fallback': '使用者',
+    'menu.lineLink': 'LINE 記帳連動',
+    'menu.lineLink.linked': 'LINE 已連結',
+    'menu.lineLink.activeTrip': '預設：{tripName}',
+    'menu.lineLink.notLinked': '連結 LINE 帳號',
 
     // 首頁
     'home.greeting': '哈囉，{name} 👋',
@@ -194,6 +198,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     'menu.logout': 'Sign Out',
     'menu.currency': 'Currency',
     'menu.user.fallback': 'User',
+    'menu.lineLink': 'LINE Link',
+    'menu.lineLink.linked': 'LINE Linked',
+    'menu.lineLink.activeTrip': 'Default: {tripName}',
+    'menu.lineLink.notLinked': 'Link LINE Account',
 
     // 首頁
     'home.greeting': 'Hello, {name} 👋',

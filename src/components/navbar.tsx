@@ -9,7 +9,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
-import { PlusCircle, Settings, LogOut, Menu, X, ChevronDown, ChevronRight, Sun, Moon, Monitor, Globe, Coins } from "lucide-react"
+import { PlusCircle, Settings, LogOut, Menu, X, ChevronDown, ChevronRight, Sun, Moon, Monitor, Globe, Coins, MessageSquare, Loader2 } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import { useTheme } from "./theme-provider"
 import { useLanguage } from "./language-provider"
@@ -35,6 +35,58 @@ export function Navbar() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const { theme, setTheme } = useTheme()
   const { locale, setLocale, t } = useLanguage()
+
+  // LINE 連動狀態
+  const [lineLinked, setLineLinked] = useState(false)
+  const [activeTripName, setActiveTripName] = useState<string | null>(null)
+  const [lineModalOpen, setLineModalOpen] = useState(false)
+  const [lineCode, setLineCode] = useState("")
+  const [lineCodeExpires, setLineCodeExpires] = useState<string | null>(null)
+  const [generatingLineCode, setGeneratingLineCode] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const fetchLineStatus = async () => {
+    try {
+      const res = await fetch('/api/users/line-link')
+      if (res.ok) {
+        const data = await res.json()
+        setLineLinked(data.hasLinkedLine)
+        setActiveTripName(data.activeTripName)
+      }
+    } catch (err) {
+      console.error("載入 LINE 狀態失敗", err)
+    }
+  }
+
+  useEffect(() => {
+    if (session) {
+      fetchLineStatus()
+    }
+  }, [session, pathname])
+
+  const generateLineCode = async () => {
+    setGeneratingLineCode(true)
+    try {
+      const res = await fetch("/api/users/line-link", { method: "POST" })
+      const data = await res.json()
+      if (res.ok) {
+        setLineCode(data.token)
+        setLineCodeExpires(data.expires)
+      } else {
+        alert(data.error || "產生連動碼失敗")
+      }
+    } catch {
+      alert("產生連動碼失敗")
+    } finally {
+      setGeneratingLineCode(false)
+    }
+  }
+
+  const copyCommand = () => {
+    navigator.clipboard.writeText(`/link ${lineCode}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   // 偏好幣種（存 localStorage）
   const [preferredCurrency, setPreferredCurrencyState] = useState('TWD')
@@ -301,6 +353,35 @@ export function Navbar() {
             </div>
           )}
         </div>
+
+        {/* LINE 記帳連動 */}
+        <button
+          onClick={() => { setUserMenuOpen(false); setLineModalOpen(true) }}
+          style={{
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: '0.5rem', padding: '0.5rem 0.625rem', borderRadius: '8px',
+            background: 'transparent', border: 'none', color: 'var(--text-primary)', fontSize: '0.85rem',
+            cursor: 'pointer', transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-card-hover)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+            <MessageSquare size={15} style={{ color: lineLinked ? '#06c755' : 'var(--text-secondary)' }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {lineLinked ? t('menu.lineLink.linked') : t('menu.lineLink.notLinked')}
+            </span>
+          </span>
+          {lineLinked && activeTripName && (
+            <span style={{
+              fontSize: '0.65rem', color: 'var(--text-muted)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: '80px', textAlign: 'right'
+            }}>
+              {activeTripName}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* 登出 */}
@@ -520,6 +601,33 @@ export function Navbar() {
               </div>
             </div>
 
+            {/* LINE 記帳連動 */}
+            <div style={{ paddingTop: '0.75rem' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '0 0.75rem', marginBottom: '0.375rem' }}>
+                💬 {t('menu.lineLink')}
+              </div>
+              <button
+                onClick={() => { setMobileMenuOpen(false); setLineModalOpen(true) }}
+                style={{
+                  width: 'calc(100% - 0.5rem)', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  gap: '0.5rem', padding: '0.625rem 0.75rem', borderRadius: '8px',
+                  background: 'var(--bg-input)', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem',
+                  cursor: 'pointer', margin: '0 0.25rem', transition: 'background 0.15s ease',
+                  textAlign: 'left'
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <MessageSquare size={14} style={{ color: lineLinked ? '#06c755' : 'var(--text-secondary)' }} />
+                  {lineLinked ? t('menu.lineLink.linked') : t('menu.lineLink.notLinked')}
+                </span>
+                {lineLinked && activeTripName && (
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '120px' }}>
+                    {activeTripName}
+                  </span>
+                )}
+              </button>
+            </div>
+
             {/* 使用者 + 登出 */}
             <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.75rem', paddingTop: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.5rem 0.75rem', marginBottom: '0.5rem' }}>
@@ -586,6 +694,102 @@ export function Navbar() {
           {t('nav.settings')}
         </Link>
       </div>
+
+      {/* === LINE 帳號連動對話框 (Modal) === */}
+      {lineModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem', background: 'rgba(0, 0, 0, 0.4)',
+          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div className="glass-card" style={{
+            width: '100%', maxWidth: '380px', padding: '1.5rem',
+            position: 'relative', border: '1px solid var(--border-color)',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+            animation: 'scaleIn 0.2s ease-out',
+            background: 'var(--dropdown-bg)',
+          }}>
+            {/* 關閉按鈕 */}
+            <button onClick={() => { setLineModalOpen(false); setLineCode("") }} style={{
+              position: 'absolute', top: '1rem', right: '1rem',
+              background: 'none', border: 'none', color: 'var(--text-muted)',
+              cursor: 'pointer', padding: '0.25rem'
+            }}>
+              <X size={18} />
+            </button>
+
+            <h3 style={{
+              fontSize: '0.95rem', fontWeight: 700, marginBottom: '1.25rem',
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              color: 'var(--text-primary)'
+            }}>
+              <MessageSquare size={18} style={{ color: '#06c755' }} />
+              {t('menu.lineLink')}
+            </h3>
+
+            {lineLinked ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{
+                  fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
+                  background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)',
+                  color: 'var(--color-success)', fontWeight: 500, lineHeight: 1.5
+                }}>
+                  {t('settings.lineLink.user.linked')}
+                  {activeTripName && (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      ⭐ {t('menu.lineLink.activeTrip').replace('{tripName}', activeTripName)}
+                    </div>
+                  )}
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  您已可以直接在 LINE 傳送「品項 金額」快速記帳。若要切換預設行程，請至各行程設定頁中點選「設為預設」，或於 LINE 中傳送 `/list` 進行切換！
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {t('settings.lineLink.desc')}
+                </p>
+
+                {lineCode ? (
+                  <div style={{
+                    fontSize: '0.8rem', color: 'var(--text-secondary)',
+                    background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border-color)', lineHeight: 1.6
+                  }}>
+                    <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step1')}</div>
+                    <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step2')}</div>
+                    <div style={{
+                      fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-primary-light)',
+                      fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      marginTop: '0.5rem', marginBottom: '0.5rem',
+                      padding: '0.5rem', background: 'rgba(14, 165, 233, 0.08)', borderRadius: '6px'
+                    }}>
+                      /link {lineCode}
+                      <button onClick={copyCommand} className="btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginLeft: 'auto' }}>
+                        {copied ? '已複製' : '複製'}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {t('settings.lineLink.step3')}
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={generateLineCode} className="btn-primary" disabled={generatingLineCode} style={{ background: '#06c755', borderColor: '#06c755', justifyContent: 'center' }}>
+                    {generatingLineCode ? (
+                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      t('settings.lineLink.generate')
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   )
 }
