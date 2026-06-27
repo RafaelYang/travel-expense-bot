@@ -1,13 +1,13 @@
 /**
  * LINE Messaging API Webhook
- * 用於處理 LINE Bot 記帳與行程連動
+ * 處理 LINE 帳號連動、多行程 Carousel 切換、以及時間提示警示記帳功能
  */
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 import crypto from "crypto"
 import { convertExpenseAmount } from "@/lib/exchange-rate"
 
-// LINE 回覆訊息的共用 Fetch 函數 (避免 Edge Runtime/Serverless 套件相容性問題)
+// LINE 回覆訊息的共用 Fetch 函數
 async function replyMessage(replyToken: string, messages: any[]) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
   if (!token) {
@@ -47,6 +47,51 @@ function verifySignature(body: string, signature: string, channelSecret: string)
   return hash === signature
 }
 
+// 計算行程天數進度與警示訊息
+function getTripDayInfo(startDateStr: string, endDateStr: string): {
+  status: "planning" | "active" | "completed"
+  message: string
+  dayText: string
+} {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  
+  const start = new Date(startDateStr)
+  const startDate = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime()
+  
+  const end = new Date(endDateStr)
+  const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate()).getTime()
+
+  const oneDayMs = 24 * 60 * 60 * 1000
+
+  const startFmt = startDateStr.split("T")[0].replace(/-/g, "/")
+  const endFmt = endDateStr.split("T")[0].replace(/-/g, "/")
+
+  if (today < startDate) {
+    const diffDays = Math.ceil((startDate - today) / oneDayMs)
+    return {
+      status: "planning",
+      dayText: "尚未開始",
+      message: `⚠️ 提示：此行程將於 ${diffDays} 天後 (${startFmt}) 開始。`,
+    }
+  } else if (today > endDate) {
+    const diffDays = Math.ceil((today - endDate) / oneDayMs)
+    return {
+      status: "completed",
+      dayText: "已結束",
+      message: `⚠️ 警告：此行程已於 ${diffDays} 天前 (${endFmt}) 結束。如果您要記錄新行程，請記得使用 /list 切換行程！`,
+    }
+  } else {
+    const totalDays = Math.ceil((endDate - startDate) / oneDayMs) + 1
+    const currentDay = Math.ceil((today - startDate) / oneDayMs) + 1
+    return {
+      status: "active",
+      dayText: `Day ${currentDay}/${totalDays}`,
+      message: `✨ 行程進行中：Day ${currentDay}/${totalDays}`,
+    }
+  }
+}
+
 export async function POST(req: NextRequest) {
   const channelSecret = process.env.LINE_CHANNEL_SECRET || ""
   const signature = req.headers.get("x-line-signature") || ""
@@ -54,7 +99,6 @@ export async function POST(req: NextRequest) {
   try {
     const bodyText = await req.text()
 
-    // 1. 驗證請求來源是否確實為 LINE
     if (!verifySignature(bodyText, signature, channelSecret)) {
       console.warn("[LINE Webhook] 簽章驗證失敗")
       return new Response("Unauthorized", { status: 401 })
@@ -64,9 +108,10 @@ export async function POST(req: NextRequest) {
     const events = payload.events || []
 
     for (const event of events) {
-      // 只處理文字訊息事件
       if (event.type === "message" && event.message.type === "text") {
         await handleTextMessage(event)
+      } else if (event.type === "postback") {
+        await handlePostbackEvent(event)
       }
     }
 
@@ -77,7 +122,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// 處理文字訊息事件
+// 處理文字訊息
 async function handleTextMessage(event: any) {
   const replyToken = event.replyToken
   const lineUserId = event.source.userId
@@ -91,49 +136,55 @@ async function handleTextMessage(event: any) {
     include: { lineBotState: true },
   })
 
-  // 2. 解析是否有連動指令：/link 6位配對碼
+  // 2. 解析個人帳號綁定指令：/link 6位配對碼
   const linkMatch = text.match(/^\/link\s+(\d{6})$/i)
-
   if (linkMatch) {
     const token = linkMatch[1]
-    await handleLinkCommand(replyToken, lineUserId, user, token)
+    await handleUserLinkCommand(replyToken, lineUserId, token)
     return
   }
 
-  // 3. 一般文字記帳流程
+  // 3. 處理行程清單與切換指令：/list 或 '切換' 或 '行程'
+  if (text === "/list" || text === "切換" || text === "行程") {
+    await handleListCommand(replyToken, user)
+    return
+  }
+
+  // 4. 處理目前狀態查詢：/status 或 '目前'
+  if (text === "/status" || text === "目前") {
+    await handleStatusCommand(replyToken, user)
+    return
+  }
+
+  // 5. 一般記帳流程
   if (!user) {
-    // 找不到使用者，提示綁定
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: "⚠️ 您的 LINE 帳號尚未與「小銘子記帳」網站連結。\n\n請先在網頁端使用 Google 登入後，到「行程設定」中產生配對碼，並在 LINE 傳送：\n/link [6位配對碼]\n\n即可完成帳號與行程的連動！",
+        text: "⚠️ 您的 LINE 帳號尚未與「小銘子記帳」網站連結。\n\n請先在網頁端使用 Google 登入後，至「個人設定」或「行程設定」中連結 LINE 帳號取得 6 位配對碼，並在 LINE 傳送：\n/link [6位配對碼]\n\n即可完成個人帳號綁定！",
       },
     ])
     return
   }
 
   const activeTripId = user.lineBotState?.activeTripId
-
   if (!activeTripId) {
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: "💡 您目前尚未選定或綁定任何活動行程。\n\n請先前往網頁端的「行程設定」取得 LINE 連動碼，並於 LINE 傳送：\n/link [6位配對碼]\n\n完成後即可直接在這裡打字記帳！",
+        text: "💡 您目前尚未選定或綁定任何預設記帳行程。\n\n請直接輸入 `/list` 指令來列出並切換您的行程；或是前往網頁端點選一鍵設定！",
       },
     ])
     return
   }
 
-  // 4. 解析記帳語法
-  // 正則支援：[品項] [金額] [可選三位英文字幣別]
-  // 例如：拉麵 1500 JPY、捷運 35
+  // 解析記帳語法 (品項 金額 幣別)
   const expenseMatch = text.match(/^(.+?)\s+(\d+(?:\.\d+)?)(?:\s+([a-zA-Z]{3}))?$/)
-
   if (!expenseMatch) {
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: "💡 LINE 快速記帳格式：\n[品項] [金額] [幣別(選填)]\n\n📝 範例：\n- 拉麵 1500 JPY\n- 捷運 35\n- 樂高 100 USD",
+        text: "💡 LINE 快速記帳格式：\n[品項] [金額] [幣別(選填)]\n\n📝 範例：\n- 拉麵 1500 JPY\n- 捷運 35\n- 樂高 100 USD\n\n📌 常用指令：\n- `/status`：查詢目前連動行程\n- `/list`：列出行程並一鍵切換",
       },
     ])
     return
@@ -144,7 +195,6 @@ async function handleTextMessage(event: any) {
   const currency = (expenseMatch[3] || "TWD").toUpperCase()
 
   try {
-    // 查詢行程資訊，確定基準幣種 (baseCurrency)
     const trip = await prisma.trip.findUnique({
       where: { id: activeTripId },
     })
@@ -153,13 +203,12 @@ async function handleTextMessage(event: any) {
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: "⚠️ 找不到您目前綁定的行程，可能該行程已被刪除。請重新至網頁端進行綁定。",
+          text: "⚠️ 找不到您目前綁定的行程，可能該行程已被刪除。請輸入 `/list` 重新選定行程。",
         },
       ])
       return
     }
 
-    // 自動分類判斷
     const category = getAutoCategory(item)
     const categoryNameMap: Record<string, string> = {
       food: "🍜 餐飲",
@@ -191,10 +240,19 @@ async function handleTextMessage(event: any) {
       },
     })
 
+    // 計算行程天數進度與警示
+    const dayInfo = getTripDayInfo(trip.startDate.toISOString(), trip.endDate.toISOString())
+
     // 回覆成功訊息
     let replyText = `✅ 記帳成功！\n\n📌 項目：${item}\n💰 金額：${amount} ${currency}\n📂 分類：${categoryNameMap[category]}`
     if (currency !== baseCurrency) {
       replyText += `\n💱 換算：${convertedAmount} ${baseCurrency} (匯率 ${exchangeRate})`
+    }
+    
+    // 加入行程時間提示與警示
+    replyText += `\n\n✈️ 行程：${trip.name}\n📅 狀態：${dayInfo.dayText}`
+    if (dayInfo.status !== "active") {
+      replyText += `\n${dayInfo.message}`
     }
 
     await replyMessage(replyToken, [
@@ -214,102 +272,316 @@ async function handleTextMessage(event: any) {
   }
 }
 
-// 處理連動指令
-async function handleLinkCommand(replyToken: string, lineUserId: string, user: any, token: string) {
+// 處理個人連動碼綁定 (/link 123456)
+async function handleUserLinkCommand(replyToken: string, lineUserId: string, token: string) {
   try {
-    // 1. 查詢配對碼是否存在且未過期
-    const link = await prisma.lineTripLink.findFirst({
+    const identifierPrefix = "line-link:"
+
+    // 1. 在 VerificationToken 中尋找配對碼
+    const linkToken = await prisma.verificationToken.findFirst({
       where: {
         token,
+        identifier: {
+          startsWith: identifierPrefix,
+        },
         expires: {
           gt: new Date(),
         },
       },
-      include: { trip: true },
     })
 
-    if (!link) {
+    if (!linkToken) {
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: "❌ 綁定失敗：連動碼無效或已過期 (限時 15 分鐘)。\n請在網頁端重新產生連動碼後再試一次！",
+          text: "❌ 綁定失敗：連動配對碼無效或已過期 (限時 15 分鐘)。\n請在網頁端「行程設定」中重新產生連動碼後再試一次！",
         },
       ])
       return
     }
 
-    const trip = link.trip
-    let targetUserId = user?.id
+    // 2. 解析出網頁端的 userId
+    const userId = linkToken.identifier.replace(identifierPrefix, "")
 
-    // 2. 如果目前此 LINE 使用者尚未綁定網頁端帳號，我們需要先進行綁定
-    // 為了安全起見，如果 user 不存在，但在 Prisma 中有某個 User 的連動碼剛好被這個 LINE 使用者輸入，
-    // 但因為 `LineTripLink` 沒記是哪個網頁使用者產生的，
-    // 因此在「無綁定帳號」的情況下，我們需要請使用者先登入網頁，在頁面觸發「綁定帳號」的機制。
-    // 不過！如果使用者目前沒有 User，我們可以依據 link.trip 內的擁有者或成員是誰來綁定？這不安全。
-    // 所以還是必須強制要求先有 User。
-    if (!targetUserId) {
+    // 3. 更新 User 紀錄
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lineUserId },
+    })
+
+    // 4. 清除配對碼
+    await prisma.verificationToken.delete({
+      where: { id: linkToken.id },
+    })
+
+    // 5. 尋找使用者名下的第一個行程，並預設綁定
+    const firstMember = await prisma.tripMember.findFirst({
+      where: { userId },
+      include: { trip: true },
+      orderBy: { joinedAt: "desc" },
+    })
+
+    let activeTripText = "\n\n💡 您目前名下沒有任何行程，請前往網頁端建立行程後，在 LINE 傳送 `/list` 來連動您的行程。"
+    if (firstMember) {
+      await prisma.lineBotState.upsert({
+        where: { userId },
+        update: { activeTripId: firstMember.tripId },
+        create: { userId, activeTripId: firstMember.tripId },
+      })
+      activeTripText = `\n\n✈️ 系統已自動將您連動至最近的行程：\n【${firstMember.trip.name}】`
+    }
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `🎉 帳號連結成功！\n\n您的 LINE 帳號已順利與網頁端帳號連動。${activeTripText}\n\n📌 常用功能指令：\n- 直接輸入「品項 金額」即可記帳！\n- 傳送 \`/status\` 查詢目前鎖定的記帳行程。\n- 傳送 \`/list\` 可切換其他行程。`,
+      },
+    ])
+  } catch (err: any) {
+    console.error("[LINE User Link Command Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 連動過程中發生錯誤：${err.message}`,
+      },
+    ])
+  }
+}
+
+// 處理 /list 輸出行程輪播選單
+async function handleListCommand(replyToken: string, user: any) {
+  if (!user) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "⚠️ 您的 LINE 尚未連結帳號！\n請至網頁端取得個人配對碼，並在 LINE 輸入：\n/link [6位配對碼]",
+      },
+    ])
+    return
+  }
+
+  try {
+    // 查詢使用者參與的所有行程
+    const members = await prisma.tripMember.findMany({
+      where: { userId: user.id },
+      include: { trip: true },
+      orderBy: { trip: { startDate: "desc" } },
+    })
+
+    if (members.length === 0) {
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: "⚠️ 帳號未連結：請先在手機或電腦瀏覽器打開「小銘子記帳」網站，使用 Google 登入後，到「行程設定」中連結 LINE 帳號，方可進行配對。",
+          text: "💡 您目前尚未加入任何行程。請先至網頁端建立或加入一個旅行記帳行程！",
         },
       ])
       return
     }
 
-    // 3. 驗證該使用者是否為該行程的成員
+    // LINE Carousel columns 陣列最多 10 個
+    const activeTripId = user.lineBotState?.activeTripId
+    const columns = members.slice(0, 10).map((m) => {
+      const trip = m.trip
+      const dayInfo = getTripDayInfo(trip.startDate.toISOString(), trip.endDate.toISOString())
+      
+      const startFmt = trip.startDate.toISOString().split("T")[0].replace(/-/g, "/")
+      const endFmt = trip.endDate.toISOString().split("T")[0].replace(/-/g, "/")
+
+      const title = trip.name.substring(0, 40) // 標題限制 40 字
+      const isActive = trip.id === activeTripId
+      
+      // 內文最多 60 字
+      let description = `${startFmt} - ${endFmt}\n狀態: ${dayInfo.dayText}`
+      if (isActive) {
+        description += ` (⭐ 目前預設)`
+      }
+
+      return {
+        title,
+        text: description.substring(0, 60),
+        actions: [
+          {
+            type: "postback",
+            label: isActive ? "⭐ 目前預設" : "設為預設記帳行程",
+            data: `action=switch_trip&tripId=${trip.id}`,
+            displayText: `將【${trip.name}】設為 LINE 預設記帳`,
+          },
+        ],
+      }
+    })
+
+    await replyMessage(replyToken, [
+      {
+        type: "template",
+        altText: "您的行程列表，點擊即可切換 LINE 預設記帳行程",
+        template: {
+          type: "carousel",
+          columns,
+        },
+      },
+    ])
+  } catch (err: any) {
+    console.error("[LINE List Command Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 查詢行程清單失敗：${err.message}`,
+      },
+    ])
+  }
+}
+
+// 處理 /status 狀態查詢指令
+async function handleStatusCommand(replyToken: string, user: any) {
+  if (!user) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "⚠️ 您的 LINE 尚未連結帳號！\n請至網頁端取得個人配對碼，並在 LINE 輸入：\n/link [6位配對碼]",
+      },
+    ])
+    return
+  }
+
+  const activeTripId = user.lineBotState?.activeTripId
+  if (!activeTripId) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "💡 您目前尚未綁定任何記帳行程。\n請在 LINE 傳送 `/list` 來選擇並切換您要記帳的行程。",
+      },
+    ])
+    return
+  }
+
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: activeTripId },
+    })
+
+    if (!trip) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "⚠️ 找不到您目前預設的記帳行程，可能該行程已被刪除。請輸入 `/list` 重新選取行程。",
+        },
+      ])
+      return
+    }
+
+    const dayInfo = getTripDayInfo(trip.startDate.toISOString(), trip.endDate.toISOString())
+    const startFmt = trip.startDate.toISOString().split("T")[0].replace(/-/g, "/")
+    const endFmt = trip.endDate.toISOString().split("T")[0].replace(/-/g, "/")
+
+    let replyText = `📌 目前預設 LINE 記帳行程：\n\n✈️【${trip.name}】\n📅 時間：${startFmt} - ${endFmt}\n🧭 狀態：${dayInfo.dayText}`
+    if (dayInfo.status !== "active") {
+      replyText += `\n\n${dayInfo.message}`
+    }
+
+    replyText += `\n\n💡 提示：可以直接在 LINE 中傳送「品項 金額」記帳；傳送 \`/list\` 則可以隨時切換行程！`
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: replyText,
+      },
+    ])
+  } catch (err: any) {
+    console.error("[LINE Status Command Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 查詢狀態失敗：${err.message}`,
+      },
+    ])
+  }
+}
+
+// 處理 Postback 行程切換事件
+async function handlePostbackEvent(event: any) {
+  const replyToken = event.replyToken
+  const lineUserId = event.source.userId
+  const data = event.postback.data // "action=switch_trip&tripId=xxx"
+
+  if (!lineUserId || !data) return
+
+  const params = new URLSearchParams(data)
+  const action = params.get("action")
+  const tripId = params.get("tripId")
+
+  if (action !== "switch_trip" || !tripId) return
+
+  try {
+    // 1. 查詢使用者
+    const user = await prisma.user.findUnique({
+      where: { lineUserId },
+    })
+
+    if (!user) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "⚠️ 帳號未連結，無法完成切換。",
+        },
+      ])
+      return
+    }
+
+    // 2. 驗證是否為該行程成員
     const tripMember = await prisma.tripMember.findUnique({
       where: {
         tripId_userId: {
-          tripId: trip.id,
-          userId: targetUserId,
+          tripId,
+          userId: user.id,
         },
       },
+      include: { trip: true },
     })
 
     if (!tripMember) {
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: `⚠️ 權限不足：您雖然已登入，但您似乎並不是行程【${trip.name}】的成員。請先請行程擁有者邀請您加入。`,
+          text: "⚠️ 權限不足，您並非此行程的成員，無法設定為預設記帳行程。",
         },
       ])
       return
     }
 
-    // 4. 更新或建立 LINE Bot 狀態
+    const trip = tripMember.trip
+
+    // 3. 更新 LINE Bot 鎖定行程
     await prisma.lineBotState.upsert({
-      where: { userId: targetUserId },
+      where: { userId: user.id },
       update: { activeTripId: trip.id },
       create: {
-        userId: targetUserId,
+        userId: user.id,
         activeTripId: trip.id,
       },
     })
 
-    // 5. 為了以防萬一，再次更新使用者的 lineUserId
-    await prisma.user.update({
-      where: { id: targetUserId },
-      data: { lineUserId },
-    })
+    // 4. 計算行程狀態與天數
+    const dayInfo = getTripDayInfo(trip.startDate.toISOString(), trip.endDate.toISOString())
+    const startFmt = trip.startDate.toISOString().split("T")[0].replace(/-/g, "/")
+    const endFmt = trip.endDate.toISOString().split("T")[0].replace(/-/g, "/")
 
-    // 6. 清除配對碼避免重複使用
-    await prisma.lineTripLink.delete({
-      where: { id: link.id },
-    })
+    let replyText = `🎉 記帳行程切換成功！\n\n📌 目前預設：【${trip.name}】\n📅 時間：${startFmt} - ${endFmt}\n🧭 狀態：${dayInfo.dayText}`
+    if (dayInfo.status !== "active") {
+      replyText += `\n\n${dayInfo.message}`
+    }
 
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `🎉 綁定成功！\n\n您已成功將此 LINE 帳號連動至行程：\n✈️【${trip.name}】\n\n現在您在此對話框中直接輸入：\n「品項 金額 (幣種)」\n（例如：拉麵 1500 JPY 或 捷運 35）\n\n系統就會自動幫您寫入帳本中囉！`,
+        text: replyText,
       },
     ])
   } catch (err: any) {
-    console.error("[LINE Link Error]", err)
+    console.error("[LINE Postback Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 連動處理失敗，伺服器錯誤：${err.message}`,
+        text: `❌ 切換行程失敗：${err.message}`,
       },
     ])
   }
@@ -319,7 +591,6 @@ async function handleLinkCommand(replyToken: string, lineUserId: string, user: a
 function getAutoCategory(item: string): string {
   const itemLower = item.toLowerCase()
 
-  // 1. 餐飲
   if (
     ["麵", "飯", "餐", "吃", "午餐", "晚餐", "早餐", "下午茶", "點心", "飲料", "咖啡", "水", "酒", "拉麵", "壽司", "燒肉", "牛排", "food", "eat", "drink", "coffee", "restaurant", "便當", "火鍋", "冰", "甜點", "宵夜"].some(
       (k) => itemLower.includes(k)
@@ -328,7 +599,6 @@ function getAutoCategory(item: string): string {
     return "food"
   }
 
-  // 2. 交通
   if (
     ["車", "捷運", "地鐵", "火車", "計程車", "ubike", "租車", "油", "機票", "公車", "巴士", "高鐵", "新幹線", "船", "悠遊卡", "suica", "icoca", "transport", "bus", "train", "flight", "taxi", "gas"].some(
       (k) => itemLower.includes(k)
@@ -337,7 +607,6 @@ function getAutoCategory(item: string): string {
     return "transport"
   }
 
-  // 3. 住宿
   if (
     ["飯店", "民宿", "住", "房", "旅館", "青旅", "hotel", "hostel", "airbnb", "stay", "住宿"].some(
       (k) => itemLower.includes(k)
@@ -346,7 +615,6 @@ function getAutoCategory(item: string): string {
     return "accommodation"
   }
 
-  // 4. 購物
   if (
     ["買", "藥妝", "購物", "衣服", "紀念品", "伴手禮", "免稅", "outlet", "商場", "百貨", "shopping", "gift", "鞋", "包", "特產", "超市"].some(
       (k) => itemLower.includes(k)
@@ -355,7 +623,6 @@ function getAutoCategory(item: string): string {
     return "shopping"
   }
 
-  // 5. 門票
   if (
     ["門票", "票", "入場", "環球影城", "迪士尼", "樂園", "觀光", "博物館", "展覽", "ticket", "pass", "纜車", "體驗"].some(
       (k) => itemLower.includes(k)

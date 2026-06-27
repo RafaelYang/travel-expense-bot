@@ -55,6 +55,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [lineCodeExpires, setLineCodeExpires] = useState<string | null>(null)
   const [generatingLineCode, setGeneratingLineCode] = useState(false)
   const [lineCodeCopied, setLineCodeCopied] = useState(false)
+  const [hasLinkedLine, setHasLinkedLine] = useState(false)
+  const [isLineActive, setIsLineActive] = useState(false)
+  const [lineDayText, setLineDayText] = useState("")
+  const [settingDefault, setSettingDefault] = useState(false)
   const { t } = useLanguage()
 
   const [editForm, setEditForm] = useState({
@@ -67,6 +71,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
 
   useEffect(() => {
     fetchTrip()
+    fetchLineLinkStatus()
   }, [tripId])
 
   const fetchTrip = async () => {
@@ -150,10 +155,25 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     }
   }
 
+  const fetchLineLinkStatus = async () => {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/line-link`)
+      if (res.ok) {
+        const data = await res.json()
+        setHasLinkedLine(data.hasLinkedLine)
+        setIsLineActive(data.isActive)
+        setLineDayText(data.dayText)
+      }
+    } catch (err) {
+      console.error("載入 LINE 連動狀態失敗", err)
+    }
+  }
+
   const generateLineCode = async () => {
     setGeneratingLineCode(true)
     try {
-      const res = await fetch(`/api/trips/${tripId}/line-link`, { method: "POST" })
+      // 產生個人帳號連動碼
+      const res = await fetch(`/api/users/line-link`, { method: "POST" })
       const data = await res.json()
       if (res.ok) {
         setLineCode(data.token)
@@ -172,6 +192,24 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     navigator.clipboard.writeText(`/link ${lineCode}`)
     setLineCodeCopied(true)
     setTimeout(() => setLineCodeCopied(false), 2000)
+  }
+
+  const setAsDefaultTrip = async () => {
+    setSettingDefault(true)
+    try {
+      const res = await fetch(`/api/trips/${tripId}/line-link`, { method: "PUT" })
+      if (res.ok) {
+        fetchLineLinkStatus()
+        alert(t('settings.lineLink.setAsDefault.success') || "設定成功！")
+      } else {
+        const data = await res.json()
+        alert(data.error || "設定失敗")
+      }
+    } catch {
+      alert("設定失敗")
+    } finally {
+      setSettingDefault(false)
+    }
   }
 
   if (loading || !trip) {
@@ -341,7 +379,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
           )}
         </div>
 
-        {/* LINE 記帳連動 */}
+        {/* LINE 快速記帳與連動 */}
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
           <h3 style={{
             fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
@@ -350,17 +388,26 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             <span style={{ fontSize: '1.1rem' }}>💬</span>
             {t('settings.lineLink')}
           </h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-            {t('settings.lineLink.desc')}
-          </p>
+          
+          {/* 第一部分：個人帳號綁定狀態 */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              {t('settings.lineLink.desc')}
+            </p>
 
-          {lineCode ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {hasLinkedLine ? (
+              <div style={{
+                fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
+                background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)',
+                color: 'var(--color-success)', fontWeight: 500
+              }}>
+                {t('settings.lineLink.user.linked')}
+              </div>
+            ) : lineCode ? (
               <div style={{
                 fontSize: '0.8rem', fontWeight: 500, color: 'var(--text-secondary)',
                 background: 'var(--bg-secondary)', padding: '0.75rem', borderRadius: 'var(--radius)',
-                border: '1px solid var(--border-color)',
-                lineHeight: 1.6,
+                border: '1px solid var(--border-color)', lineHeight: 1.6
               }}>
                 <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step1')}</div>
                 <div style={{ marginBottom: '0.25rem' }}>{t('settings.lineLink.step2')}</div>
@@ -379,15 +426,62 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                   {t('settings.lineLink.step3')}
                 </div>
               </div>
-            </div>
-          ) : (
-            <button onClick={generateLineCode} className="btn-primary" disabled={generatingLineCode} style={{ background: '#06c755', borderColor: '#06c755' }}>
-              {generatingLineCode ? (
-                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <button onClick={generateLineCode} className="btn-primary" disabled={generatingLineCode} style={{ background: '#06c755', borderColor: '#06c755' }}>
+                {generatingLineCode ? (
+                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <><PlusCircle size={16} /> {t('settings.lineLink.generate')}</>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* 第二部分：行程記帳預設狀態 (僅在已綁定 LINE 帳號時顯示) */}
+          {hasLinkedLine && (
+            <div style={{
+              borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem',
+              marginTop: '1.25rem'
+            }}>
+              <h4 style={{
+                fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem',
+                display: 'flex', alignItems: 'center', gap: '0.375rem'
+              }}>
+                {t('settings.lineLink.status.title')}
+              </h4>
+
+              {isLineActive ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div style={{
+                    fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
+                    background: 'rgba(14, 165, 233, 0.08)', border: '1px solid rgba(14, 165, 233, 0.2)',
+                    color: 'var(--color-primary-light)', fontWeight: 500
+                  }}>
+                    {t('settings.lineLink.status.active')}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
+                    {t('settings.lineLink.status.activeDay').replace('{dayText}', lineDayText)}
+                  </div>
+                </div>
               ) : (
-                <><PlusCircle size={16} /> {t('settings.lineLink.generate')}</>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div style={{
+                    fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
+                    background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
+                    color: '#f59e0b', fontWeight: 500
+                  }}>
+                    {t('settings.lineLink.status.inactive')}
+                  </div>
+                  <button onClick={setAsDefaultTrip} className="btn-primary" disabled={settingDefault} style={{ justifyContent: 'center' }}>
+                    {settingDefault ? (
+                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                    ) : (
+                      t('settings.lineLink.setAsDefault')
+                    )}
+                  </button>
+                </div>
               )}
-            </button>
+            </div>
           )}
         </div>
 

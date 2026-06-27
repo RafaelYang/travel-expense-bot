@@ -143,12 +143,19 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.emailInvite.error': '寄送失敗',
 
     // LINE 連動
-    'settings.lineLink': '💬 LINE 記帳連動',
-    'settings.lineLink.desc': '產生 6 位數連動碼，讓您的 LINE Bot 可以直接將花費記錄寫入此行程。',
-    'settings.lineLink.generate': '產生連動配對碼',
+    'settings.lineLink': '💬 LINE 快速記帳',
+    'settings.lineLink.desc': '將您的 LINE 帳號與此平台進行綁定。綁定後，您就可以在 LINE 直接輸入「品項 金額」快速記帳。',
+    'settings.lineLink.generate': '取得個人帳號連動碼',
     'settings.lineLink.step1': '1. 請先加入官方 LINE 機器人帳號為好友。',
-    'settings.lineLink.step2': '2. 在 LINE 對話框輸入以下指令（限時 15 分鐘）：',
-    'settings.lineLink.step3': '3. 連動完成後，即可直接在 LINE 對話中輸入「品項 金額 (幣種)」進行快速記帳！',
+    'settings.lineLink.step2': '2. 在 LINE 對話框輸入以下綁定指令（限時 15 分鐘）：',
+    'settings.lineLink.step3': '3. 綁定成功後，即可直接在 LINE 對話中輸入「品項 金額 (幣種)」進行快速記帳！',
+    'settings.lineLink.user.linked': '✅ 您的帳號已成功連動 LINE (已取得 User ID)。',
+    'settings.lineLink.status.title': '🧭 目前連動行程狀態',
+    'settings.lineLink.status.active': '⭐ 本行程目前是您在 LINE 中的預設記帳行程。',
+    'settings.lineLink.status.inactive': '⚠️ 本行程目前不是您的 LINE 預設記帳行程。',
+    'settings.lineLink.status.activeDay': '（狀態：{dayText}）',
+    'settings.lineLink.setAsDefault': '設為 LINE 預設記帳行程',
+    'settings.lineLink.setAsDefault.success': '已成功將此行程設定為 LINE 預設記帳行程！',
 
     // 預算進度
     'budget.spent': '已花費',
@@ -305,12 +312,19 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.emailInvite.error': 'Failed to send',
 
     // LINE Link
-    'settings.lineLink': '💬 LINE Expense Logging',
-    'settings.lineLink.desc': 'Generate a 6-digit link code to allow your LINE Bot to directly write expenses to this trip.',
-    'settings.lineLink.generate': 'Generate Link Code',
+    'settings.lineLink': '💬 LINE Quick Logging',
+    'settings.lineLink.desc': 'Link your LINE account with this platform. Once linked, you can log expenses directly in LINE by typing "item amount".',
+    'settings.lineLink.generate': 'Get Account Link Code',
     'settings.lineLink.step1': '1. Add the official LINE Bot as a friend first.',
     'settings.lineLink.step2': '2. Send the following command in LINE (expires in 15 mins):',
     'settings.lineLink.step3': '3. Once linked, you can log expenses directly in LINE by typing "item amount (currency)"!',
+    'settings.lineLink.user.linked': '✅ Your account is successfully linked to LINE (User ID bound).',
+    'settings.lineLink.status.title': '🧭 Current Link Status',
+    'settings.lineLink.status.active': '⭐ This trip is currently your default LINE logging destination.',
+    'settings.lineLink.status.inactive': '⚠️ This trip is not your default LINE logging destination.',
+    'settings.lineLink.status.activeDay': ' (Status: {dayText})',
+    'settings.lineLink.setAsDefault': 'Set as Default LINE Destination',
+    'settings.lineLink.setAsDefault.success': 'Successfully set this trip as your default LINE destination!',
 
     // 預算進度
     'budget.spent': 'Spent',

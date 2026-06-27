@@ -257,3 +257,22 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 ### 修改的檔案
 - `src/app/trips/[tripId]/settings/page.tsx` — 行程設定頁新增 LINE 連動 UI
 - `src/lib/i18n.ts` — 新增 LINE 相關翻譯詞條
+
+## 2026-06-27 — LINE 個人帳號綁定、Carousel 輪播切換與記帳狀態提示
+
+### 改動概述
+- 將 LINE 綁定重構為「個人帳號永久綁定」，使用 `VerificationToken` 機制提供 15 分鐘有效的 6 位數個人配對碼，免去資料庫 Migration 變更。
+- 重構 LINE Webhook，支援在 LINE 傳送 `/link [個人配對碼]` 完成綁定。
+- LINE Webhook 支援 `/list`、`切換`、`行程` 指令，以 LINE Carousel Template 輸出使用者名下的所有行程輪播卡片，點選卡片按鈕透過 Postback Event 一鍵切換預設記帳行程。
+- 記帳與狀態查詢時自動推算行程天數進度 (`Day X/Y`)。針對「未開始」或「已結束」的過期行程，自動在 LINE 記帳回應中跳出警示提示以防呆。
+- 行程設定頁 UI 重構：改為雙層 LINE 綁定狀態顯示。第一部分為個人帳號綁定狀態；第二部分為本行程是否為 LINE 預設記帳行程，並提供網頁端「一鍵設為 LINE 預設記帳行程」按鈕。
+
+### 新增的檔案
+- `src/app/api/users/line-link/route.ts` — 產生個人 LINE 帳號連動碼 API
+
+### 修改的檔案
+- `src/app/api/trips/[tripId]/line-link/route.ts` — 擴充支援 GET (查詢狀態) 與 PUT (網頁端一鍵切換預設)
+- `src/app/api/line/webhook/route.ts` — 重構支援個人綁定、輪播卡片、Postback 切換與行程天數警告提示
+- `src/app/trips/[tripId]/settings/page.tsx` — 重構連動 UI，整合個人綁定與網頁一鍵切換按鈕
+- `src/lib/i18n.ts` — 擴充多語系翻譯詞條
+
