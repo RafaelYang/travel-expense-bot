@@ -88,6 +88,7 @@ model Trip {
   expenses      Expense[]
   deposits      Deposit[]
   inviteCodes   InviteCode[]
+  emailInvites  EmailInvite[]
   lineTripLinks LineTripLink[]
 
   @@index([status])
@@ -124,6 +125,7 @@ model Expense {
   exchangeRate    Float?   // 當時匯率
   date            DateTime @default(now()) // 花費日期
   note            String?  // 備註
+  images          Json     @default("[]") // 圖片 data URL 陣列，最多 3 張
   source          String   @default("web") // web, line
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -161,6 +163,24 @@ model InviteCode {
   createdAt DateTime @default(now())
 
   @@index([code])
+}
+
+// ======= Email 邀請 =======
+
+model EmailInvite {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  email     String   // 受邀人 email
+  token     String   @unique // UUID token，用於邀請連結
+  role      String   @default("member")
+  invitedBy String   // 邀請人 userId
+  status    String   @default("pending") // pending, accepted, expired
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([tripId, email])
 }
 
 // ======= LINE Bot =======

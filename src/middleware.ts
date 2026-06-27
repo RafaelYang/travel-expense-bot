@@ -8,6 +8,7 @@ import type { NextRequest } from "next/server"
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const isAuthPage = pathname.startsWith('/login')
+  const isInvitePage = pathname.startsWith('/invite')
 
   // 檢查 NextAuth session token（JWT 模式）
   // NextAuth v5 在 HTTPS 下使用 __Secure- 前綴
@@ -23,8 +24,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/', req.url))
   }
 
-  // 未登入 → 導向登入頁
-  if (!isLoggedIn && !isAuthPage) {
+  // 未登入 → 導向登入頁（邀請頁例外，邀請頁自己處理登入引導）
+  if (!isLoggedIn && !isAuthPage && !isInvitePage) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 

@@ -16,6 +16,7 @@ const expenseSchema = z.object({
   exchangeRate: z.number().optional(),
   date: z.string().optional(),
   note: z.string().optional(),
+  images: z.array(z.string()).max(3).default([]),
   source: z.string().default("web"),
 })
 
@@ -121,6 +122,7 @@ export async function POST(
         exchangeRate,
         date: data.date ? new Date(data.date) : new Date(),
         note: data.note,
+        images: data.images,
         source: data.source,
       },
       include: {

@@ -97,6 +97,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     'trip.avgDaily': '💡 平均每日',
     'trip.burnRate': '按此速度剩 {days} 天',
     'trip.days': '天',
+    'trip.invite': '邀請朋友加入',
+    'trip.invite.gmailPlaceholder': '輸入帳號',
 
     // 記帳表單
     'form.tab.expense': '✏️ 支出',
@@ -130,6 +132,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.delete': '刪除行程',
     'settings.delete.confirm': '確定刪除',
     'settings.delete.cancel': '取消',
+
+    // Email 邀請
+    'settings.emailInvite': '📧 Email 邀請',
+    'settings.emailInvite.desc': '輸入對方的 Email，系統會寄送邀請信，對方點連結即可加入。',
+    'settings.emailInvite.placeholder': '對方的 Email',
+    'settings.emailInvite.send': '發送邀請',
+    'settings.emailInvite.sending': '寄送中...',
+    'settings.emailInvite.sent': '✅ 邀請已寄出！',
+    'settings.emailInvite.error': '寄送失敗',
 
     // 預算進度
     'budget.spent': '已花費',
@@ -240,6 +251,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     'trip.avgDaily': '💡 Avg. daily',
     'trip.burnRate': '{days} days left at this pace',
     'trip.days': 'days',
+    'trip.invite': 'Invite friend',
+    'trip.invite.gmailPlaceholder': 'username',
 
     // 記帳表單
     'form.tab.expense': '✏️ Expense',
@@ -273,6 +286,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     'settings.delete': 'Delete Trip',
     'settings.delete.confirm': 'Confirm Delete',
     'settings.delete.cancel': 'Cancel',
+
+    // Email Invite
+    'settings.emailInvite': '📧 Email Invite',
+    'settings.emailInvite.desc': 'Enter their email to send an invitation. They can join by clicking the link.',
+    'settings.emailInvite.placeholder': 'Their email address',
+    'settings.emailInvite.send': 'Send',
+    'settings.emailInvite.sending': 'Sending...',
+    'settings.emailInvite.sent': '✅ Invitation sent!',
+    'settings.emailInvite.error': 'Failed to send',
 
     // 預算進度
     'budget.spent': 'Spent',

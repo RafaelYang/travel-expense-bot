@@ -1,0 +1,42 @@
+name: Keep Database Alive
+
+on:
+  schedule:
+    # 每天 UTC 00:00 (台灣時間早上 08:00) 執行一次
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  ping-db:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: npm install pg dotenv
+
+      - name: Ping PostgreSQL
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          node -e "
+            const { Client } = require('pg');
+            const url = process.env.DIRECT_URL || process.env.DATABASE_URL;
+            if (!url) {
+              console.error('未設定連線字串！請至 GitHub 專案設定 Secrets.DIRECT_URL 或 Secrets.DATABASE_URL');
+              process.exit(1);
+            }
+            const client = new Client({ connectionString: url });
+            client.connect()
+              .then(() => client.query('SELECT NOW()'))
+              .then((res) => {
+                console.log('連線成功！資料庫時間：', res.rows[0].now);
+                process.exit(0);
+              })
+              .catch(err => {
+                console.error('連線失敗：', err.message);
+                process.exit(1);
+              });
+          "

@@ -9,7 +9,7 @@
  */
 "use client"
 
-import { useEffect, useState, use } from "react"
+import { useEffect, useState, useRef, useCallback, use } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
@@ -17,6 +17,7 @@ import { BudgetProgress } from "@/components/budget-progress"
 import {
   ArrowLeft, PlusCircle, Wallet, Users, Calendar, Settings,
   ChevronDown, ChevronUp, Loader2, Trash2, X, Copy, Check,
+  Send, Share2, ImagePlus, BarChart3, Pencil, Plane,
 } from "lucide-react"
 import Link from "next/link"
 import { format, isToday, differenceInDays } from "date-fns"
@@ -57,6 +58,7 @@ interface TripData {
     exchangeRate?: number
     date: string
     note?: string
+    images?: string[]
     source: string
     user: { id: string; name: string }
   }[]
@@ -79,6 +81,49 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showAllExpenses, setShowAllExpenses] = useState(false)
   const [showMemberList, setShowMemberList] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [showStatsModal, setShowStatsModal] = useState(false)
+  const [editingExpense, setEditingExpense] = useState<TripData['expenses'][0] | null>(null)
+  const [gmailPrefix, setGmailPrefix] = useState('')
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteStatus, setInviteStatus] = useState<'idle' | 'sent' | 'error'>('idle')
+  const [inviteError, setInviteError] = useState('')
+  // autocomplete 建議
+  const [suggestions, setSuggestions] = useState<{id:string;name:string|null;email:string|null;image:string|null}[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const suggestionsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const inputWrapperRef = useRef<HTMLDivElement>(null)
+
+  // debounce 搜尋使用者
+  const searchUsers = useCallback((prefix: string) => {
+    if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current)
+    if (prefix.length < 2) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+    suggestionsTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/search?q=${encodeURIComponent(prefix)}`)
+        const data = await res.json()
+        setSuggestions(data.users || [])
+        setShowSuggestions((data.users || []).length > 0)
+      } catch {
+        setSuggestions([])
+      }
+    }, 300)
+  }, [])
+
+  // 點擊外部關閉建議
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (inputWrapperRef.current && !inputWrapperRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
   const { t, locale } = useLanguage()
   const dateLocale = locale === 'en' ? enUS : zhTW
 
@@ -106,8 +151,22 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     return (
       <div style={{
         minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--bg-primary)',
       }}>
-        <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', color: 'var(--color-primary)' }} />
+        <Plane
+          size={48}
+          style={{
+            color: 'var(--color-primary)',
+            animation: 'planeFly 2s ease-in-out infinite',
+            filter: 'drop-shadow(0 4px 12px rgba(14,165,233,0.3))',
+          }}
+        />
+        <style>{`
+          @keyframes planeFly {
+            0%, 100% { transform: translateY(0) rotate(-5deg); }
+            50% { transform: translateY(-12px) rotate(-5deg); }
+          }
+        `}</style>
       </div>
     )
   }
@@ -144,19 +203,13 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           marginBottom: '1.5rem',
         }}>
-          <Link href="/" style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
-            color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.85rem',
-          }}>
-            <ArrowLeft size={16} />
+          <Link href="/" className="btn-nav">
+            <ArrowLeft size={15} />
             {t('trip.back')}
           </Link>
           {trip.userRole === 'owner' && (
-            <Link href={`/trips/${tripId}/settings`} style={{
-              display: 'flex', alignItems: 'center', gap: '0.375rem',
-              color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.85rem',
-            }}>
-              <Settings size={16} />
+            <Link href={`/trips/${tripId}/settings`} className="btn-nav">
+              <Settings size={15} />
               {t('trip.settings')}
             </Link>
           )}
@@ -173,7 +226,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
             display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
             marginBottom: '0.5rem',
           }}>
-            <div>
+            <div style={{ flex: 1 }}>
               <h1 style={{
                 fontSize: 'clamp(1.25rem, 4vw, 1.75rem)',
                 fontWeight: 800,
@@ -185,6 +238,38 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                   {trip.description}
                 </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+              <button
+                onClick={() => setShowStatsModal(true)}
+                style={{
+                  padding: '0.5rem', borderRadius: '10px',
+                  border: '1px solid var(--border-color)',
+                  background: 'rgba(14, 165, 233, 0.06)',
+                  color: 'var(--color-primary)',
+                  cursor: 'pointer', transition: 'all 0.2s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+                title="統計"
+              >
+                <BarChart3 size={18} />
+              </button>
+              {canEdit && (
+                <button
+                  onClick={() => { setShowShareModal(true); setInviteStatus('idle'); setGmailPrefix('') }}
+                  style={{
+                    padding: '0.5rem', borderRadius: '10px',
+                    border: '1px solid var(--border-color)',
+                    background: 'rgba(14, 165, 233, 0.06)',
+                    color: 'var(--color-primary)',
+                    cursor: 'pointer', transition: 'all 0.2s',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  title={t('trip.invite')}
+                >
+                  <Share2 size={18} />
+                </button>
               )}
             </div>
           </div>
@@ -278,37 +363,251 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           </div>
         </div>
 
-        {/* 預算進度條 */}
-        {budget > 0 && (
-          <div className="glass-card animate-fade-in-up animate-delay-100" style={{
-            padding: '1.5rem',
-            marginBottom: '1rem',
-          }}>
-            <BudgetProgress
-              totalBudget={budget}
-              totalSpent={trip.totalSpent}
-              currency={trip.defaultCurrency}
-              size="lg"
-            />
-            {trip.totalSpent > 0 && totalDays > 0 && (
+        {/* 分享邀請 Modal */}
+        {showShareModal && (
+          <div
+            onClick={() => setShowShareModal(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 999,
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '1.5rem',
+              animation: 'fadeIn 0.15s ease-out',
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="glass-card"
+              style={{
+                width: '100%', maxWidth: '380px', padding: '1.75rem',
+                animation: 'fadeInDown 0.2s ease-out',
+              }}
+            >
+              {/* Header */}
               <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)',
-                flexWrap: 'wrap', gap: '0.5rem',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: '1.25rem',
               }}>
-                <span>
-                  {t('trip.avgDaily')} {getCurrencySymbol(trip.defaultCurrency)}
-                  {Math.round(trip.totalSpent / Math.max(daysPassed, 1)).toLocaleString()}
-                </span>
-                {budget - trip.totalSpent > 0 && (
-                  <span>
-                    {t('trip.burnRate', { days: ((budget - trip.totalSpent) / (trip.totalSpent / Math.max(daysPassed, 1))).toFixed(1) })}
-                  </span>
-                )}
+                <h3 style={{
+                  fontSize: '1rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}>
+                  <Share2 size={18} style={{ color: 'var(--color-primary)' }} />
+                  {t('trip.invite')}
+                </h3>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  style={{
+                    padding: '0.25rem', borderRadius: '6px', border: 'none',
+                    background: 'transparent', color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={18} />
+                </button>
               </div>
-            )}
+
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                {t('settings.emailInvite.desc')}
+              </p>
+
+              {/* Gmail 輸入表單 */}
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                const prefix = gmailPrefix.trim()
+                if (!prefix) return
+                const fullEmail = `${prefix}@gmail.com`
+                setInviteSending(true)
+                setInviteStatus('idle')
+                setInviteError('')
+                try {
+                  const res = await fetch(`/api/trips/${tripId}/invite-email`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: fullEmail }),
+                  })
+                  const data = await res.json()
+                  if (res.ok) {
+                    setInviteStatus('sent')
+                    setGmailPrefix('')
+                  } else {
+                    setInviteStatus('error')
+                    setInviteError(data.error || '寄送失敗')
+                  }
+                } catch {
+                  setInviteStatus('error')
+                  setInviteError('寄送失敗')
+                } finally {
+                  setInviteSending(false)
+                }
+              }}>
+                <div ref={inputWrapperRef} style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center',
+                    borderRadius: showSuggestions ? 'var(--radius) var(--radius) 0 0' : 'var(--radius)',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-secondary)',
+                    overflow: 'hidden',
+                  }}>
+                    <input
+                      type="text"
+                      value={gmailPrefix}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^a-zA-Z0-9._+-]/g, '')
+                        setGmailPrefix(v)
+                        setInviteStatus('idle')
+                        searchUsers(v)
+                      }}
+                      onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true) }}
+                      placeholder={t('trip.invite.gmailPlaceholder')}
+                      required
+                      autoFocus
+                      autoComplete="off"
+                      style={{
+                        flex: 1, padding: '0.75rem 0.875rem',
+                        border: 'none', outline: 'none',
+                        background: 'transparent',
+                        color: 'var(--text-primary)',
+                        fontSize: '0.95rem',
+                        fontFamily: 'monospace',
+                      }}
+                    />
+                    <span style={{
+                      padding: '0.75rem 0.875rem 0.75rem 0',
+                      fontSize: '0.95rem', fontFamily: 'monospace',
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap', userSelect: 'none',
+                    }}>
+                      @gmail.com
+                    </span>
+                  </div>
+
+                  {/* Autocomplete 建議列表 */}
+                  {showSuggestions && suggestions.length > 0 && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0,
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)',
+                      borderTop: 'none',
+                      borderRadius: '0 0 var(--radius) var(--radius)',
+                      overflow: 'hidden',
+                      zIndex: 50,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }}>
+                      {suggestions.map((user) => {
+                        const emailPrefix = user.email?.split('@')[0] || ''
+                        return (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => {
+                              setGmailPrefix(emailPrefix)
+                              setShowSuggestions(false)
+                              setSuggestions([])
+                            }}
+                            style={{
+                              width: '100%', display: 'flex', alignItems: 'center', gap: '0.625rem',
+                              padding: '0.625rem 0.875rem',
+                              border: 'none', background: 'transparent',
+                              cursor: 'pointer', textAlign: 'left',
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover, rgba(0,0,0,0.04))'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            {/* 頭像 */}
+                            {user.image ? (
+                              <img
+                                src={user.image}
+                                alt=""
+                                style={{
+                                  width: 32, height: 32, borderRadius: '50%',
+                                  objectFit: 'cover',
+                                }}
+                              />
+                            ) : (
+                              <div style={{
+                                width: 32, height: 32, borderRadius: '50%',
+                                background: 'var(--color-primary)',
+                                color: '#fff', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.75rem', fontWeight: 700,
+                              }}>
+                                {(user.name || user.email || '?')[0].toUpperCase()}
+                              </div>
+                            )}
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              {user.name && (
+                                <div style={{
+                                  fontSize: '0.85rem', fontWeight: 600,
+                                  color: 'var(--text-primary)',
+                                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                }}>{user.name}</div>
+                              )}
+                              <div style={{
+                                fontSize: '0.75rem', color: 'var(--text-muted)',
+                                fontFamily: 'monospace',
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>{user.email}</div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={inviteSending || !gmailPrefix.trim()}
+                  style={{
+                    width: '100%', justifyContent: 'center',
+                    opacity: (inviteSending || !gmailPrefix.trim()) ? 0.6 : 1,
+                    padding: '0.75rem',
+                  }}
+                >
+                  {inviteSending ? (
+                    <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                  ) : (
+                    <><Send size={16} /> {t('settings.emailInvite.send')}</>
+                  )}
+                </button>
+              </form>
+
+              {/* 成功/錯誤提示 */}
+              {inviteStatus === 'sent' && (
+                <div style={{
+                  marginTop: '0.75rem', padding: '0.625rem 0.875rem',
+                  borderRadius: 'var(--radius)',
+                  background: 'rgba(34, 197, 94, 0.1)',
+                  border: '1px solid rgba(34, 197, 94, 0.2)',
+                  color: 'var(--color-success)',
+                  fontSize: '0.8rem', fontWeight: 500,
+                  display: 'flex', alignItems: 'center', gap: '0.375rem',
+                }}>
+                  <Check size={16} />
+                  {t('settings.emailInvite.sent')}
+                </div>
+              )}
+              {inviteStatus === 'error' && (
+                <div style={{
+                  marginTop: '0.75rem', padding: '0.625rem 0.875rem',
+                  borderRadius: 'var(--radius)',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  color: 'var(--color-danger)',
+                  fontSize: '0.8rem', fontWeight: 500,
+                }}>
+                  {inviteError}
+                </div>
+              )}
+            </div>
           </div>
         )}
+
+        {/* 預算進度條已移至統計 Modal */}
 
         {/* 快速記帳按鈕 */}
         {canEdit && (
@@ -341,76 +640,162 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           />
         )}
 
-        {/* 今日花費 */}
-        {todayExpenses.length > 0 && (
-          <div className="glass-card animate-fade-in-up animate-delay-300" style={{
-            padding: '1.25rem',
-            marginBottom: '1rem',
-          }}>
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '0.75rem',
-            }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>
-                {t('trip.today')}
-              </h3>
-              <span style={{
-                fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary-light)',
+        {/* 統計 Modal */}
+        {showStatsModal && (
+          <div
+            onClick={() => setShowStatsModal(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 999,
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '1.5rem',
+              animation: 'fadeIn 0.15s ease-out',
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="glass-card"
+              style={{
+                width: '100%', maxWidth: '420px', padding: '1.75rem',
+                animation: 'fadeInDown 0.2s ease-out',
+                maxHeight: '80vh', overflowY: 'auto',
+              }}
+            >
+              {/* Header */}
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                marginBottom: '1.25rem',
               }}>
-                {getCurrencySymbol(trip.defaultCurrency)}{todayTotal.toLocaleString()}
-              </span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {todayExpenses.map(expense => (
-                <ExpenseRow key={expense.id} expense={expense} currency={trip.defaultCurrency} />
-              ))}
-            </div>
-          </div>
-        )}
+                <h3 style={{
+                  fontSize: '1rem', fontWeight: 700,
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}>
+                  <BarChart3 size={18} style={{ color: 'var(--color-primary)' }} />
+                  花費統計
+                </h3>
+                <button
+                  onClick={() => setShowStatsModal(false)}
+                  style={{
+                    padding: '0.25rem', borderRadius: '6px', border: 'none',
+                    background: 'transparent', color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-        {/* 分類統計 */}
-        {categoryStats.length > 0 && (
-          <div className="glass-card animate-fade-in-up animate-delay-300" style={{
-            padding: '1.25rem',
-            marginBottom: '1rem',
-          }}>
-            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-              {t('trip.categories')}
-            </h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {categoryStats.map(cat => {
-                const percent = trip.totalSpent > 0 ? (cat.total / trip.totalSpent) * 100 : 0
-                return (
-                  <div key={cat.value} style={{
-                    display: 'flex', alignItems: 'center', gap: '0.75rem',
-                  }}>
-                    <span style={{ fontSize: '0.85rem', width: '80px' }}>{cat.label}</span>
+              {/* 預算進度 */}
+              {budget > 0 && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <BudgetProgress
+                    totalBudget={budget}
+                    totalSpent={trip.totalSpent}
+                    currency={trip.baseCurrency}
+                    size="lg"
+                  />
+                  {trip.totalSpent > 0 && totalDays > 0 && (
                     <div style={{
-                      flex: 1, height: '8px', borderRadius: '4px',
-                      background: 'var(--bg-card-hover)',
-                      overflow: 'hidden',
+                      display: 'flex', justifyContent: 'space-between',
+                      marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)',
+                      flexWrap: 'wrap', gap: '0.5rem',
                     }}>
-                      <div style={{
-                        height: '100%', borderRadius: '4px',
-                        background: cat.color,
-                        width: `${percent}%`,
-                        transition: 'width 1s ease',
-                      }} />
+                      <span>
+                        {t('trip.avgDaily')} {getCurrencySymbol(trip.baseCurrency)}
+                        {Math.round(trip.totalSpent / Math.max(daysPassed, 1)).toLocaleString()}
+                      </span>
+                      {budget - trip.totalSpent > 0 && (
+                        <span>
+                          {t('trip.burnRate', { days: ((budget - trip.totalSpent) / (trip.totalSpent / Math.max(daysPassed, 1))).toFixed(1) })}
+                        </span>
+                      )}
                     </div>
+                  )}
+                </div>
+              )}
+
+              {/* 今日花費 */}
+              {todayExpenses.length > 0 && (
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginBottom: '0.75rem',
+                  }}>
+                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700 }}>
+                      {t('trip.today')}
+                    </h4>
                     <span style={{
-                      fontSize: '0.8rem', fontWeight: 600,
-                      color: 'var(--text-primary)', minWidth: '80px', textAlign: 'right',
+                      fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary-light)',
                     }}>
-                      {getCurrencySymbol(trip.defaultCurrency)}{cat.total.toLocaleString()}
-                    </span>
-                    <span style={{
-                      fontSize: '0.7rem', color: 'var(--text-muted)', minWidth: '32px',
-                    }}>
-                      {t('trip.allExpenses.count', { count: String(cat.count) })}
+                      {getCurrencySymbol(trip.baseCurrency)}{todayTotal.toLocaleString()}
                     </span>
                   </div>
-                )
-              })}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {todayExpenses.map(expense => (
+                      <ExpenseRow key={expense.id} expense={expense} currency={trip.baseCurrency} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 分類統計 */}
+              {categoryStats.length > 0 && (
+                <div>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem' }}>
+                    {t('trip.categories')}
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {categoryStats.map(cat => {
+                      const percent = trip.totalSpent > 0 ? (cat.total / trip.totalSpent) * 100 : 0
+                      return (
+                        <div key={cat.value} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.75rem',
+                        }}>
+                          <span style={{ fontSize: '0.85rem', width: '80px' }}>{cat.label}</span>
+                          <div style={{
+                            flex: 1, height: '8px', borderRadius: '4px',
+                            background: 'var(--bg-card-hover)',
+                            overflow: 'hidden',
+                          }}>
+                            <div style={{
+                              height: '100%', borderRadius: '4px',
+                              background: cat.color,
+                              width: `${percent}%`,
+                              transition: 'width 1s ease',
+                            }} />
+                          </div>
+                          <span style={{
+                            fontSize: '0.8rem', fontWeight: 600,
+                            color: 'var(--text-primary)', minWidth: '80px', textAlign: 'right',
+                          }}>
+                            {getCurrencySymbol(trip.baseCurrency)}{cat.total.toLocaleString()}
+                          </span>
+                          <span style={{
+                            fontSize: '0.7rem', color: 'var(--text-muted)', minWidth: '32px',
+                          }}>
+                            {t('trip.allExpenses.count', { count: String(cat.count) })}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 總計 */}
+              <div style={{
+                marginTop: '1.25rem', paddingTop: '1rem',
+                borderTop: '1px solid var(--border-color)',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>總花費（{trip.expenses.length} 筆）</span>
+                <span style={{
+                  fontSize: '1.1rem', fontWeight: 700, color: 'var(--color-primary-light)',
+                }}>
+                  {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -431,12 +816,17 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
               <span style={{
                 fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary-light)',
               }}>
-                {getCurrencySymbol(trip.defaultCurrency)}{trip.totalSpent.toLocaleString()}
+                {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {displayExpenses.map(expense => (
-                <ExpenseRow key={expense.id} expense={expense} currency={trip.defaultCurrency} />
+                <ExpenseRow
+                  key={expense.id}
+                  expense={expense}
+                  currency={trip.baseCurrency}
+                  onEdit={canEdit ? () => setEditingExpense(expense) : undefined}
+                />
               ))}
             </div>
             {trip.expenses.length > 10 && (
@@ -461,26 +851,45 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
         )}
 
 
+        {/* 編輯花費 Modal */}
+        {editingExpense && (
+          <EditExpenseModal
+            expense={editingExpense}
+            tripId={tripId}
+            defaultCurrency={trip.defaultCurrency}
+            countries={trip.countries}
+            onClose={() => setEditingExpense(null)}
+            onSave={() => { setEditingExpense(null); fetchTrip() }}
+          />
+        )}
+
       </main>
     </div>
   )
 }
 
 // === 花費列表行 ===
-function ExpenseRow({ expense, currency }: {
+function ExpenseRow({ expense, currency, onEdit }: {
   expense: TripData['expenses'][0]
   currency: string
+  onEdit?: () => void
 }) {
   const cat = getCategoryInfo(expense.category)
   const { t } = useLanguage()
+  // 使用實際幣種而非行程預設幣種
+  const displayCurrency = expense.currency || currency
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0.5rem 0.75rem',
-      borderRadius: 'var(--radius)',
-      background: 'var(--bg-card-hover)',
-      transition: 'background 0.2s',
-    }}>
+    <div
+      onClick={onEdit}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0.75rem',
+        borderRadius: 'var(--radius)',
+        background: 'var(--bg-card-hover)',
+        transition: 'all 0.2s',
+        cursor: onEdit ? 'pointer' : 'default',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
         <span className="category-badge" style={{
           background: `${cat.color}18`,
@@ -502,20 +911,17 @@ function ExpenseRow({ expense, currency }: {
           </div>
         </div>
       </div>
-      <div style={{ flexShrink: 0, marginLeft: '0.5rem', textAlign: 'right' }}>
-        <span style={{
-          fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)',
-        }}>
-          {getCurrencySymbol(currency)}{expense.amount.toLocaleString()}
-        </span>
-        {expense.convertedAmount && expense.currency !== 'TWD' && (
-          <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '1px' }}>
-            ≈ NT${expense.convertedAmount.toLocaleString()}
-            {expense.exchangeRate && (
-              <span> · ×{expense.exchangeRate}</span>
-            )}
-          </div>
-        )}
+      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+          <span style={{
+            fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)',
+          }}>
+            {getCurrencySymbol(displayCurrency)}{expense.amount.toLocaleString()}
+          </span>
+          {expense.convertedAmount && expense.currency !== currency && (
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '1px' }}>
+              ≈ {getCurrencySymbol(currency)}{expense.convertedAmount.toLocaleString()}
+            </div>
+          )}
       </div>
     </div>
   )
@@ -549,7 +955,51 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
     currency: tripCurrencies[0] || defaultCurrency,
     note: '',
   })
+  const [images, setImages] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 壓縮圖片為 base64（最大寬度 800px，品質 0.6）
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new window.Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const maxW = 800
+          let w = img.width, h = img.height
+          if (w > maxW) { h = (h * maxW) / w; w = maxW }
+          canvas.width = w
+          canvas.height = h
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, 0, 0, w, h)
+          resolve(canvas.toDataURL('image/jpeg', 0.6))
+        }
+        img.onerror = reject
+        img.src = e.target?.result as string
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const remaining = 3 - images.length
+    const toProcess = files.slice(0, remaining)
+    try {
+      const compressed = await Promise.all(toProcess.map(compressImage))
+      setImages(prev => [...prev, ...compressed].slice(0, 3))
+    } catch { /* ignore */ }
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const removeImage = (idx: number) => {
+    setImages(prev => prev.filter((_, i) => i !== idx))
+  }
 
   // 即時匯率預覽
   const [previewRate, setPreviewRate] = useState<number | null>(null)
@@ -607,14 +1057,17 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
         ? `/api/trips/${tripId}/expenses`
         : `/api/trips/${tripId}/deposits`
       const body = mode === 'expense'
-        ? { ...form, amount: parseFloat(form.amount) }
+        ? { ...form, amount: parseFloat(form.amount), images }
         : { amount: parseFloat(form.amount), currency: form.currency, note: form.note || form.item }
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (res.ok) onSubmit()
+      if (res.ok) {
+        setImages([])
+        onSubmit()
+      }
     } finally {
       setLoading(false)
     }
@@ -776,12 +1229,110 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
 
         {/* 備註（僅支出模式）*/}
         {isExpense && (
+          <>
           <input
             className="input-field"
             value={form.note}
             onChange={(e) => setForm({ ...form, note: e.target.value })}
             placeholder={t('form.note')}
           />
+
+          {/* 圖片備註（最多 3 張） */}
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelect}
+              style={{ display: 'none' }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {images.map((src, idx) => (
+                <div key={idx} style={{
+                  position: 'relative',
+                  borderRadius: '10px', overflow: 'hidden',
+                  border: '1px solid var(--border-color)',
+                  cursor: 'pointer',
+                }}>
+                  <img
+                    src={src} alt=""
+                    onClick={() => setLightboxSrc(src)}
+                    style={{
+                      width: '100%', maxHeight: '200px',
+                      objectFit: 'cover', display: 'block',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); removeImage(idx) }}
+                    style={{
+                      position: 'absolute', top: 6, right: 6,
+                      width: 24, height: 24, borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.55)', color: '#fff',
+                      border: 'none', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '12px', lineHeight: 1,
+                      backdropFilter: 'blur(4px)',
+                    }}
+                  >✕</button>
+                </div>
+              ))}
+              {images.length < 3 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-nav"
+                  style={{
+                    width: '100%', padding: '0.625rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: '0.375rem', fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  <ImagePlus size={16} />
+                  {images.length === 0 ? '加圖片備註（最多 3 張）' : `繼續加圖片（${images.length}/3）`}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Lightbox 全螢幕查看 */}
+          {lightboxSrc && (
+            <div
+              onClick={() => setLightboxSrc(null)}
+              style={{
+                position: 'fixed', inset: 0,
+                background: 'rgba(0,0,0,0.85)',
+                zIndex: 9999,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'zoom-out',
+                padding: '1rem',
+              }}
+            >
+              <img
+                src={lightboxSrc} alt=""
+                style={{
+                  maxWidth: '100%', maxHeight: '90vh',
+                  objectFit: 'contain', borderRadius: '8px',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setLightboxSrc(null)}
+                style={{
+                  position: 'absolute', top: 16, right: 16,
+                  width: 36, height: 36, borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.15)', color: '#fff',
+                  border: 'none', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '18px',
+                  backdropFilter: 'blur(4px)',
+                }}
+              >✕</button>
+            </div>
+          )}
+          </>
         )}
 
         <button
@@ -816,3 +1367,496 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
     </div>
   )
 }
+
+// === 花費詳情 / 編輯 Modal ===
+function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose, onSave }: {
+  expense: TripData['expenses'][0]
+  tripId: string
+  defaultCurrency: string
+  countries: string[]
+  onClose: () => void
+  onSave: () => void
+}) {
+  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [form, setForm] = useState({
+    category: expense.category,
+    item: expense.item,
+    amount: String(expense.amount),
+    currency: expense.currency,
+    note: expense.note || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [editImages, setEditImages] = useState<string[]>(expense.images || [])
+  const editFileRef = useRef<HTMLInputElement>(null)
+  const { t } = useLanguage()
+
+  const cat = getCategoryInfo(expense.category)
+
+  // 壓縮圖片
+  const compressImg = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const img = new window.Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const maxW = 800
+          let w = img.width, h = img.height
+          if (w > maxW) { h = (h * maxW) / w; w = maxW }
+          canvas.width = w; canvas.height = h
+          const ctx = canvas.getContext('2d')!
+          ctx.drawImage(img, 0, 0, w, h)
+          resolve(canvas.toDataURL('image/jpeg', 0.6))
+        }
+        img.onerror = reject
+        img.src = ev.target?.result as string
+      }
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const handleEditImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    const remaining = 3 - editImages.length
+    const toProcess = files.slice(0, remaining)
+    try {
+      const compressed = await Promise.all(toProcess.map(compressImg))
+      setEditImages(prev => [...prev, ...compressed].slice(0, 3))
+    } catch { /* ignore */ }
+    if (editFileRef.current) editFileRef.current.value = ''
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/trips/${tripId}/expenses/${expense.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          category: form.category,
+          item: form.item,
+          amount: parseFloat(form.amount),
+          currency: form.currency,
+          note: form.note || null,
+          images: editImages,
+        }),
+      })
+      if (res.ok) onSave()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('確定要刪除這筆花費嗎？')) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/trips/${tripId}/expenses/${expense.id}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) onSave()
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // 幣種 chips（僅編輯模式用）
+  const tripCurrencies = getCurrenciesFromCountries(countries)
+  const chipCurrencies = [...tripCurrencies]
+  if (!chipCurrencies.includes('TWD')) chipCurrencies.push('TWD')
+  if (!chipCurrencies.includes(defaultCurrency)) chipCurrencies.push(defaultCurrency)
+
+  const isBusy = saving || deleting
+
+  return (
+    <>
+    <div
+      onClick={() => { if (!isBusy) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 999,
+        background: 'rgba(0, 0, 0, 0.5)',
+        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '1.5rem',
+        animation: 'fadeIn 0.15s ease-out',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="glass-card"
+        style={{
+          width: '100%', maxWidth: '420px', padding: '1.75rem',
+          animation: 'fadeInDown 0.2s ease-out',
+          maxHeight: '85vh', overflowY: 'auto',
+        }}
+      >
+        {mode === 'view' ? (
+          /* ===== 詳情模式 ===== */
+          <>
+            {/* Header */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: '1.25rem',
+            }}>
+              <span style={{
+                padding: '0.3rem 0.75rem', borderRadius: '9999px',
+                fontSize: '0.8rem', fontWeight: 600,
+                background: `${cat.color}20`, color: cat.color,
+              }}>
+                {t(`cat.${expense.category}`)}
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => setMode('edit')}
+                  className="btn-nav"
+                  style={{
+                    padding: '0.4rem', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                  title="編輯"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
+                  onClick={() => { if (!isBusy) onClose() }}
+                  className="btn-nav"
+                  style={{
+                    padding: '0.4rem', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* 項目名稱 */}
+            <h2 style={{
+              fontSize: '1.25rem', fontWeight: 700,
+              marginBottom: '0.5rem', letterSpacing: '-0.01em',
+            }}>
+              {expense.item}
+            </h2>
+
+            {/* 金額 */}
+            <div style={{
+              fontSize: '1.5rem', fontWeight: 800,
+              color: 'var(--color-primary)',
+              marginBottom: '0.25rem',
+            }}>
+              {getCurrencySymbol(expense.currency)}{expense.amount.toLocaleString()}
+            </div>
+            {expense.convertedAmount && expense.currency !== defaultCurrency && (
+              <div style={{
+                fontSize: '0.8rem', color: 'var(--text-muted)',
+                marginBottom: '1rem',
+              }}>
+                ≈ {getCurrencySymbol(defaultCurrency)}{expense.convertedAmount.toLocaleString()}
+              </div>
+            )}
+
+            {/* 資訊列 */}
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: '0.625rem',
+              padding: '0.875rem', borderRadius: 'var(--radius)',
+              background: 'var(--bg-card-hover)', marginBottom: '1rem',
+              fontSize: '0.8rem',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>記帳人</span>
+                <span style={{ fontWeight: 500 }}>{expense.user.name}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>時間</span>
+                <span style={{ fontWeight: 500 }}>
+                  {format(new Date(expense.date), 'yyyy/M/d HH:mm')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>幣種</span>
+                <span style={{ fontWeight: 500 }}>
+                  {getCurrencyChipLabel(expense.currency, countries)}
+                </span>
+              </div>
+              {expense.note && (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>備註</span>
+                  <span style={{ fontWeight: 500, textAlign: 'right', maxWidth: '65%', wordBreak: 'break-word' }}>
+                    {expense.note}
+                  </span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>來源</span>
+                <span style={{ fontWeight: 500 }}>
+                  {expense.source === 'line' ? '📱 LINE' : '🌐 網頁'}
+                </span>
+              </div>
+            </div>
+
+            {/* 圖片（完整顯示） */}
+            {expense.images && expense.images.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {expense.images.map((src, idx) => (
+                  <div key={idx} style={{
+                    borderRadius: '10px', overflow: 'hidden',
+                    border: '1px solid var(--border-color)',
+                    cursor: 'pointer',
+                  }}>
+                    <img
+                      src={src} alt={`附圖 ${idx + 1}`}
+                      onClick={() => setLightboxSrc(src)}
+                      style={{
+                        width: '100%', display: 'block',
+                        maxHeight: '300px', objectFit: 'cover',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          /* ===== 編輯模式 ===== */
+          <>
+            {/* Header */}
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              marginBottom: '1.25rem',
+            }}>
+              <h3 style={{
+                fontSize: '1rem', fontWeight: 700,
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+              }}>
+                <Pencil size={16} style={{ color: 'var(--color-primary)' }} />
+                編輯花費
+              </h3>
+              <button
+                onClick={() => { if (!isBusy) setMode('view') }}
+                disabled={isBusy}
+                className="btn-nav"
+                style={{
+                  padding: '0.4rem', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* 分類 */}
+            <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              {EXPENSE_CATEGORIES.map(c => (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setForm({ ...form, category: c.value })}
+                  style={{
+                    padding: '0.3rem 0.625rem', borderRadius: '9999px',
+                    fontSize: '0.75rem', cursor: 'pointer',
+                    border: form.category === c.value ? `1.5px solid ${c.color}` : '1.5px solid transparent',
+                    fontWeight: form.category === c.value ? 600 : 500,
+                    background: form.category === c.value ? `${c.color}25` : 'var(--bg-card-hover)',
+                    color: form.category === c.value ? c.color : 'var(--text-secondary)',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {t(`cat.${c.value}`)}
+                </button>
+              ))}
+            </div>
+
+            {/* 品名 + 金額 */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <input
+                className="input-field"
+                value={form.item}
+                onChange={(e) => setForm({ ...form, item: e.target.value })}
+                placeholder="項目名稱"
+              />
+              <input
+                type="number"
+                className="input-field"
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                placeholder="金額"
+                style={{ fontWeight: 700, textAlign: 'right' }}
+              />
+            </div>
+
+            {/* 幣種 */}
+            <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              {chipCurrencies.map(cur => (
+                <button
+                  key={cur}
+                  type="button"
+                  onClick={() => setForm({ ...form, currency: cur })}
+                  style={{
+                    padding: '0.3rem 0.625rem', borderRadius: '9999px',
+                    border: form.currency === cur
+                      ? '1px solid var(--color-primary)'
+                      : '1px solid var(--border-color)',
+                    fontSize: '0.75rem',
+                    fontWeight: form.currency === cur ? 600 : 400,
+                    cursor: 'pointer',
+                    background: form.currency === cur ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
+                    color: form.currency === cur ? 'var(--color-primary)' : 'var(--text-secondary)',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {getCurrencyChipLabel(cur, countries)}
+                </button>
+              ))}
+            </div>
+
+            {/* 備註 */}
+            <input
+              className="input-field"
+              value={form.note}
+              onChange={(e) => setForm({ ...form, note: e.target.value })}
+              placeholder="備註（選填）"
+              style={{ marginBottom: '0.75rem' }}
+            />
+
+            {/* 圖片編輯 */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{
+                display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)',
+                marginBottom: '0.375rem',
+              }}>
+                附圖（最多 3 張）
+              </label>
+              {editImages.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                  {editImages.map((src, idx) => (
+                    <div key={idx} style={{ position: 'relative' }}>
+                      <img src={src} alt="" style={{
+                        width: 72, height: 72, objectFit: 'cover',
+                        borderRadius: '8px', border: '1px solid var(--border-color)',
+                      }} />
+                      <button
+                        type="button"
+                        onClick={() => setEditImages(prev => prev.filter((_, i) => i !== idx))}
+                        style={{
+                          position: 'absolute', top: -6, right: -6,
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: '#ef4444', color: '#fff',
+                          border: '2px solid white', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '10px', fontWeight: 700, lineHeight: 1,
+                        }}
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {editImages.length < 3 && (
+                <>
+                  <input
+                    ref={editFileRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleEditImageSelect}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => editFileRef.current?.click()}
+                    className="btn-nav"
+                    style={{
+                      padding: '0.4rem 0.75rem', fontSize: '0.75rem',
+                      display: 'flex', alignItems: 'center', gap: '0.375rem',
+                    }}
+                  >
+                    <ImagePlus size={14} /> 新增圖片
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* 操作按鈕 */}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="btn-nav"
+                style={{
+                  padding: '0.625rem', color: '#ef4444',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: '0.375rem', fontSize: '0.8rem',
+                }}
+              >
+                <Trash2 size={14} />
+                {deleting ? '刪除中...' : '刪除'}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !form.item || !form.amount}
+                className="btn-primary"
+                style={{
+                  flex: 1, justifyContent: 'center', padding: '0.625rem',
+                  opacity: saving ? 0.7 : 1,
+                }}
+              >
+                {saving ? (
+                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <>
+                    <Check size={16} /> 儲存修改
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+
+    {/* Lightbox 全螢幕查看圖片 */}
+    {lightboxSrc && (
+      <div
+        onClick={() => setLightboxSrc(null)}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.9)',
+          zIndex: 10000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'zoom-out',
+          padding: '1rem',
+        }}
+      >
+        <img
+          src={lightboxSrc} alt=""
+          style={{
+            maxWidth: '100%', maxHeight: '90vh',
+            objectFit: 'contain', borderRadius: '8px',
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => setLightboxSrc(null)}
+          style={{
+            position: 'absolute', top: 16, right: 16,
+            width: 36, height: 36, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.15)', color: '#fff',
+            border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '18px',
+            backdropFilter: 'blur(4px)',
+          }}
+        >✕</button>
+      </div>
+    )}
+    </>
+  )
+}
+
+
+
+
+

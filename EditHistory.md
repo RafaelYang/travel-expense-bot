@@ -192,3 +192,53 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 行程標題卡片加上 `position: relative` + 動態 `zIndex`（展開成員列表時提高為 10）
   - 成員列表 popup 的 `zIndex` 從 30 提高到 60
   - popup 的 `boxShadow` 加深，視覺上更明確浮在上層
+
+## 2026-05-29 — Email 邀請加入行程
+
+### 改動概述
+新增 Email 邀請功能：在行程設定頁輸入對方 Email → 系統自動寄送精美邀請信 → 對方點連結一鍵加入行程。
+未註冊的使用者會被引導 Google 登入（自動註冊），登入後自動加入。
+
+### 新增的檔案
+- `src/app/api/trips/[tripId]/invite-email/route.ts` — Email 邀請 API（Resend 寄信 + HTML 模板）
+- `src/app/api/invite/accept/route.ts` — 接受邀請 API（GET 查詢邀請資訊 + POST 加入行程）
+- `src/app/invite/accept/page.tsx` — 邀請接受頁面（已登入自動加入 / 未登入引導 Google 登入）
+
+### 修改的檔案
+- `prisma/schema.prisma` — 新增 EmailInvite model + Trip relation
+- `src/app/trips/[tripId]/settings/page.tsx` — 加入 Email 邀請卡片（輸入框 + 發送按鈕 + 成功/錯誤提示）
+- `src/lib/i18n.ts` — 新增 Email 邀請相關翻譯（中/英）
+- `src/middleware.ts` — 將 `/invite` 路徑加入白名單（允許未登入存取）
+- `.env` — 新增 RESEND_API_KEY
+
+### 新增的依賴
+- `resend` — Email 寄送服務（免費方案 100 封/天）
+
+### 技術細節
+- 邀請 token 為 UUID，7 天有效
+- 重複邀請同一 Email 會重用既有 token（不重複建立）
+- Email HTML 模板：深色漸層風格，含行程資訊卡片 + CTA 按鈕
+- 寄件人：`小銘子記帳 <onboarding@resend.dev>`（Resend 免費方案）
+- Vercel 環境變數已設定 RESEND_API_KEY
+
+## 2026-06-12 — 專案清理：移除不必要檔案
+
+### 刪除的檔案
+- `過場動畫.mp4` — 與 `public/loading.mp4` 完全相同（MD5 一致），根目錄的是多餘複本
+- `.DS_Store` — macOS 系統產生的隱藏檔
+- `public/file.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/globe.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/next.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/vercel.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/window.svg` — Next.js 範本預設檔，程式碼中未引用
+- `.vscode/settings.json` — 內容為空物件 `{}`，無任何設定（整個 `.vscode` 目錄移除）
+- `CLAUDE.md` — 僅一行 `@AGENTS.md`，功能已由 AGENTS.md 覆蓋
+- `.next/` — 構建快取目錄（494MB），`npm run build` 可重新產生
+
+## 2026-06-27 — 新增防止 Supabase 暫停之自動化工作流
+
+### 改動概述
+- 新增 GitHub Actions 自動化工作流，定時（每天早上 8 點）自動連線並查詢資料庫一次，以防止 Supabase 免費版專案因無活動而被自動暫停。
+
+### 新增的檔案
+- `.github/workflows/keep-alive.yml` — 每日自動執行 ping-db 的 workflow 檔案。

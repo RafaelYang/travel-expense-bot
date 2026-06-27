@@ -9,7 +9,8 @@ import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import {
   ArrowLeft, Copy, Check, PlusCircle, Trash2,
-  Loader2, Settings, Users, Share2, AlertTriangle,
+  Loader2, Settings, Users, Share2, AlertTriangle, Mail, Send,
+  UserMinus,
 } from "lucide-react"
 import Link from "next/link"
 import { TRIP_STATUS, CURRENCIES } from "@/lib/utils"
@@ -29,7 +30,7 @@ interface TripSettings {
   members: {
     id: string
     role: string
-    user: { id: string; name: string; email: string }
+    user: { id: string; name: string; email: string; image?: string }
   }[]
 }
 
@@ -45,6 +46,11 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailError, setEmailError] = useState("")
+  const [removingMember, setRemovingMember] = useState<string | null>(null)
   const { t } = useLanguage()
 
   const [editForm, setEditForm] = useState({
@@ -120,6 +126,26 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     }
   }
 
+  const removeMember = async (memberId: string) => {
+    if (!confirm('確定要移除這位成員嗎？')) return
+    setRemovingMember(memberId)
+    try {
+      const res = await fetch(`/api/trips/${tripId}/members/${memberId}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        fetchTrip()
+      } else {
+        const data = await res.json()
+        alert(data.error || '移除失敗')
+      }
+    } catch {
+      alert('移除失敗')
+    } finally {
+      setRemovingMember(null)
+    }
+  }
+
   if (loading || !trip) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -136,12 +162,8 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         maxWidth: '600px', margin: '0 auto', padding: '1.5rem',
         position: 'relative', zIndex: 1,
       }}>
-        <Link href={`/trips/${tripId}`} style={{
-          display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
-          color: 'var(--text-muted)', textDecoration: 'none', fontSize: '0.85rem',
-          marginBottom: '1.5rem',
-        }}>
-          <ArrowLeft size={16} />
+        <Link href={`/trips/${tripId}`} className="btn-nav" style={{ marginBottom: '1.5rem' }}>
+          <ArrowLeft size={15} />
           {t('settings.back')}
         </Link>
 
@@ -196,6 +218,101 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
           )}
         </div>
 
+        {/* Email 邀請 */}
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+          <h3 style={{
+            fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            <Mail size={16} />
+            {t('settings.emailInvite')}
+          </h3>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+            {t('settings.emailInvite.desc')}
+          </p>
+
+          <form onSubmit={async (e) => {
+            e.preventDefault()
+            if (!inviteEmail.trim()) return
+            setEmailSending(true)
+            setEmailError("")
+            setEmailSent(false)
+            try {
+              const res = await fetch(`/api/trips/${tripId}/invite-email`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: inviteEmail.trim() }),
+              })
+              const data = await res.json()
+              if (res.ok) {
+                setEmailSent(true)
+                setInviteEmail("")
+                setTimeout(() => setEmailSent(false), 4000)
+              } else {
+                setEmailError(data.error || t('settings.emailInvite.error'))
+              }
+            } catch {
+              setEmailError(t('settings.emailInvite.error'))
+            } finally {
+              setEmailSending(false)
+            }
+          }} style={{ display: 'flex', gap: '0.5rem' }}>
+            <input
+              type="email"
+              className="input-field"
+              value={inviteEmail}
+              onChange={(e) => { setInviteEmail(e.target.value); setEmailError("") }}
+              placeholder={t('settings.emailInvite.placeholder')}
+              required
+              style={{ flex: 1 }}
+            />
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={emailSending}
+              style={{
+                padding: '0.625rem 1rem',
+                whiteSpace: 'nowrap',
+                opacity: emailSending ? 0.7 : 1,
+              }}
+            >
+              {emailSending ? (
+                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <><Send size={16} /> {t('settings.emailInvite.send')}</>
+              )}
+            </button>
+          </form>
+
+          {emailSent && (
+            <div style={{
+              marginTop: '0.75rem', padding: '0.625rem 0.875rem',
+              borderRadius: 'var(--radius)',
+              background: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.2)',
+              color: 'var(--color-success)',
+              fontSize: '0.8rem', fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: '0.375rem',
+            }}>
+              <Check size={16} />
+              {t('settings.emailInvite.sent')}
+            </div>
+          )}
+
+          {emailError && (
+            <div style={{
+              marginTop: '0.75rem', padding: '0.625rem 0.875rem',
+              borderRadius: 'var(--radius)',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+              color: 'var(--color-danger)',
+              fontSize: '0.8rem', fontWeight: 500,
+            }}>
+              {emailError}
+            </div>
+          )}
+        </div>
+
         {/* 基本設定 */}
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
           <h3 style={{
@@ -235,6 +352,96 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
               style={{ justifyContent: 'center', opacity: saving ? 0.7 : 1 }}>
               {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : t('settings.save')}
             </button>
+          </div>
+        </div>
+
+        {/* 成員管理 */}
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+          <h3 style={{
+            fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            <Users size={16} />
+            成員管理
+          </h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {trip.members.map((m) => {
+              const isOwner = m.role === 'owner'
+              const isRemoving = removingMember === m.id
+              return (
+                <div
+                  key={m.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '0.75rem',
+                    borderRadius: 'var(--radius)',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minWidth: 0 }}>
+                    {m.user.image ? (
+                      <img
+                        src={m.user.image}
+                        alt=""
+                        style={{
+                          width: 34, height: 34, borderRadius: '50%',
+                          objectFit: 'cover', flexShrink: 0,
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: 34, height: 34, borderRadius: '50%',
+                        background: isOwner ? 'var(--color-primary)' : 'var(--bg-tertiary, #e2e8f0)',
+                        color: isOwner ? '#fff' : 'var(--text-muted)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
+                      }}>
+                        {(m.user.name || m.user.email || '?')[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{
+                        fontSize: '0.85rem', fontWeight: 600,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {m.user.name || m.user.email}
+                      </div>
+                      <div style={{
+                        fontSize: '0.7rem', color: 'var(--text-muted)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {m.user.email}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                    {isOwner ? (
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 600,
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '6px',
+                        background: 'rgba(14, 165, 233, 0.12)',
+                        color: 'var(--color-primary)',
+                      }}>擁有者</span>
+                    ) : (
+                      <button
+                        onClick={() => removeMember(m.id)}
+                        disabled={isRemoving}
+                        className="btn-danger-sm"
+                      >
+                        {isRemoving ? (
+                          <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                        ) : (
+                          <><UserMinus size={13} /> 移除</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
