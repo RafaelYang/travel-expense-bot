@@ -148,7 +148,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     // LINE 連動
     'settings.lineLink': '💬 LINE 快速記帳',
-    'settings.lineLink.desc': '將您的 LINE 帳號與此平台進行綁定。綁定後，您就可以在 LINE 直接輸入「品項 金額」快速記帳。',
+    'settings.lineLink.desc': '將您的 LINE 帳號與此平台進行綁定，綁定後您將可以在 LINE 直接快速記帳',
     'settings.lineLink.generate': '取得個人帳號連動碼',
     'settings.lineLink.step1': '1. 請先加入官方 LINE 機器人帳號為好友。',
     'settings.lineLink.step2': '2. 在 LINE 對話框輸入以下綁定指令（限時 15 分鐘）：',
