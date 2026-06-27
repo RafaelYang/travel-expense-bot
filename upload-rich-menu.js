@@ -48,10 +48,10 @@ async function run() {
       process.exit(1);
     }
 
-    const halfW = Math.floor(width / 2);
-    const halfH = Math.floor(height / 2);
+    const splitX = Math.round(width * 2 / 3); // 2/3 寬度
+    const splitY = Math.round(height / 2);    // 1/2 高度
 
-    // 2. 定義 Rich Menu 結構與 4 個 Action 區塊
+    // 2. 定義 Rich Menu 結構與 3 個 Action 區塊 (一左二右結構)
     const richMenuData = {
       size: {
         width,
@@ -62,35 +62,12 @@ async function run() {
       chatBarText: "✈️ 點此展開記帳選單 📊",
       areas: [
         {
+          // 左側大格 — 首頁
           bounds: {
             x: 0,
             y: 0,
-            width: halfW,
-            height: halfH
-          },
-          action: {
-            type: "message",
-            text: "/list"
-          }
-        },
-        {
-          bounds: {
-            x: halfW,
-            y: 0,
-            width: width - halfW,
-            height: halfH
-          },
-          action: {
-            type: "message",
-            text: "/status"
-          }
-        },
-        {
-          bounds: {
-            x: 0,
-            y: halfH,
-            width: halfW,
-            height: height - halfH
+            width: splitX,
+            height
           },
           action: {
             type: "uri",
@@ -98,15 +75,29 @@ async function run() {
           }
         },
         {
+          // 右上格 — 切換行程 / 行程清單
           bounds: {
-            x: halfW,
-            y: halfH,
-            width: width - halfW,
-            height: height - halfH
+            x: splitX,
+            y: 0,
+            width: width - splitX,
+            height: splitY
           },
           action: {
             type: "message",
-            text: "說明"
+            text: "/list"
+          }
+        },
+        {
+          // 右下格 — 目前行程
+          bounds: {
+            x: splitX,
+            y: splitY,
+            width: width - splitX,
+            height: height - splitY
+          },
+          action: {
+            type: "message",
+            text: "/status"
           }
         }
       ]
