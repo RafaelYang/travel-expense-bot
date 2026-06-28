@@ -207,12 +207,35 @@ const COUNTRY_COVER_IMAGES: Record<string, string> = {
 const DEFAULT_COVER = 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80'
 
 /**
+ * 遞迴解包與淨化目的地國家 (防止滾雪球式嵌套髒資料)
+ */
+function extractCleanCountries(input: string[] | null | undefined): string[] {
+  if (!input || input.length === 0) return []
+  
+  const first = input[0]
+  if (first && typeof first === "string" && first.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(first)
+      if (parsed && typeof parsed === "object") {
+        if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
+          return extractCleanCountries(parsed.list)
+        }
+        return (parsed.list || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+      }
+    } catch {}
+  }
+  return input.filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+}
+
+/**
  * 根據行程的國家代碼取得封面圖片 URL
  */
-export function getCountryCoverImage(countryCodes: string[]): string {
-  for (const code of countryCodes) {
-    if (COUNTRY_COVER_IMAGES[code]) {
-      return COUNTRY_COVER_IMAGES[code]
+export function getCountryCoverImage(countryCodes: string[] | null | undefined): string {
+  const cleanCodes = extractCleanCountries(countryCodes)
+  for (const code of cleanCodes) {
+    const upperCode = code.toUpperCase()
+    if (COUNTRY_COVER_IMAGES[upperCode]) {
+      return COUNTRY_COVER_IMAGES[upperCode]
     }
   }
   return DEFAULT_COVER
@@ -221,9 +244,10 @@ export function getCountryCoverImage(countryCodes: string[]): string {
 /**
  * 取得國家旗幟 emoji 列表
  */
-export function getCountryFlags(countryCodes: string[]): string {
-  return countryCodes
-    .map(code => COUNTRIES.find(c => c.code === code)?.flag || '')
+export function getCountryFlags(countryCodes: string[] | null | undefined): string {
+  const cleanCodes = extractCleanCountries(countryCodes)
+  return cleanCodes
+    .map(code => COUNTRIES.find(c => c.code === code.toUpperCase())?.flag || '')
     .filter(Boolean)
     .join(' ')
 }
