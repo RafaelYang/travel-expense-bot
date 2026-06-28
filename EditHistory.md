@@ -361,7 +361,12 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 新增「🔙 返回常用」按鈕可隨時切回原本的目的地+常用幣別選單。
   - 在說明文字中，強烈提示使用者「若選單中依然沒有您需要的幣別，您也可以直接手動輸入指令來設定（例如：輸入 /currency GBP 即可設定為英鎊）！」，完美解決手動設定的指引。
 
+- **常用幣別選單極簡與動態去重 (Default Currencies Simplification & Deduplication)**：
+  - 應使用者要求，精簡第一頁常用幣別快速選單（Quick Reply）。
+  - 第一頁預設常用選單**僅會顯示「行程基準/偏好幣別 (trip.baseCurrency || 'TWD')」+「該此旅行的目的地國家法定幣別」+「當前鎖定幣別」+「🔍 其他」**，其餘非此行程關聯的常用幣別不再顯示。
+  - 在「🔍 其他」第二頁中，會**動態計算並自動過濾掉已在第一頁顯示的偏好與目的地幣別**，確保兩頁之間完全不重複，達到極致清爽的 UI 體驗。
+
 ### 修改的檔案
 - `upload-rich-menu.js` — 修改左下角按鈕對應的 Action 動作為發送 `/currency` 文字訊息。
 - `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流 the API 圖片代理端點。
-- `src/app/api/line/webhook/route.ts` — 新增 `/currency_other` 更多常見幣別選單及 handler 邏輯，並於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
+- `src/app/api/line/webhook/route.ts` — 重構 `getQuickReply` 以精簡預設選單至僅有偏好與目的地幣種，重構 `getOtherQuickReply` 新增動態去重過濾機制；新增 `/currency_other` 更多常見幣別選單及 handler 邏輯，並於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
