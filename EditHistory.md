@@ -344,6 +344,11 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 新增 `CATEGORY_IMAGE_MAP`，定義了餐飲（food，美食照）、交通（transport，飛機雲海照）、住宿（accommodation，精品房照）、購物（shopping，血拼照）、門票/景點（ticket，古堡教堂照）的主題示意圖。
   - 重構卡片渲染的圖片優先級：優先使用使用者自行上傳的照片；其次，若無上傳照，則根據消費的分類 (Category) 自動套用對應的主題精美圖；最後，若分類為 `other` 或是沒匹配到，才 Fallback 顯示該天的目的地國家風景照。
 
+- **卡片編輯支援修改消費幣別 (Currency Edit Support in Cards)**：
+  - 於消費卡片下方的 `✏️ 編輯` 按鈕中，新增 **`💱 修改消費幣別`** 選項。
+  - 當使用者點選後，系統會自動查找該行程所屬國家的幣別以及常用四種幣別，並以 Quick Reply 按鈕呈現。
+  - 使用者點選新幣別後，系統會**自動對該筆花費重新進行匯率換算與 TWD 台幣金額重算**，並保存至資料庫中。
+
 ### 修改的檔案
 - `src/app/trips/new/page.tsx` — 新增 `dailyCountries` 狀態與監聽 useEffect，並在基準幣種選單下方置入每日目的地設定 UI。
 - `src/app/api/trips/route.ts` — 在 POST 新增行程 API 中，根據行程起訖日數，將所有天數的 dailyCountries 預設初始化為第一個目的地國家，完全停用自動均分。
