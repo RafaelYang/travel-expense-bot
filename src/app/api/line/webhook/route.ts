@@ -207,6 +207,12 @@ async function handleTextMessage(event: any) {
     return
   }
 
+  // 4.1a 處理更多幣別查詢：/currency_other
+  if (text === "/currency_other") {
+    await handleCurrencyOtherCommand(replyToken, user)
+    return
+  }
+
   // 4.2 處理目前花費查詢：/expenses 或 '目前花費' 或 '花費'
   if (text === "/expenses" || text === "目前花費" || text === "花費") {
     await handleExpensesCommand(replyToken, user)
@@ -1101,11 +1107,92 @@ async function getQuickReply(trip: any, userActiveCurrency: string | null) {
     action: {
       type: "message",
       label: "🔍 其他",
+      text: "/currency_other",
+    },
+  })
+
+  return { items }
+}
+
+// 額外常見幣別對照
+const ALTERNATIVE_CURRENCIES = [
+  { currency: "KRW", name: "韓元" },
+  { currency: "THB", name: "泰銖" },
+  { currency: "CNY", name: "人民幣" },
+  { currency: "GBP", name: "英鎊" },
+  { currency: "CAD", name: "加幣" },
+  { currency: "AUD", name: "澳幣" },
+  { currency: "SGD", name: "新加坡幣" },
+  { currency: "MYR", name: "馬來西亞幣" },
+  { currency: "CHF", name: "瑞士法郎" },
+  { currency: "NZD", name: "紐西蘭元" },
+]
+
+// 獲取更多幣別的快速選單
+async function getOtherQuickReply(trip: any, userActiveCurrency: string | null) {
+  const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || "TWD"
+  
+  const items = ALTERNATIVE_CURRENCIES.map((c) => {
+    const isActive = c.currency === activeCurrencyCode
+    return {
+      type: "action",
+      action: {
+        type: "message",
+        label: `${isActive ? "⭐ " : ""}${c.name} ${c.currency}`,
+        text: `/currency ${c.currency}`,
+      },
+    }
+  })
+
+  // 加入返回常用按鈕
+  items.push({
+    type: "action",
+    action: {
+      type: "message",
+      label: "🔙 返回常用",
       text: "/currency",
     },
   })
 
   return { items }
+}
+
+// 處理點選「其他」顯示更多常見幣別的指令
+async function handleCurrencyOtherCommand(replyToken: string, user: any) {
+  if (!user) return
+
+  const activeTripState = user.lineBotState?.activeTripId
+  let activeTripId = null
+  let userActiveCurrency = null
+
+  if (activeTripState) {
+    if (activeTripState.includes(":")) {
+      const parts = activeTripState.split(":")
+      activeTripId = parts[0]
+      userActiveCurrency = parts[1]
+    } else {
+      activeTripId = activeTripState
+    }
+  }
+
+  if (!activeTripId) return
+
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: activeTripId },
+    })
+    if (!trip) return
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "💱 更多常見幣別選單\n\n請直接點選下方按鈕切換，帶有 ⭐ 即代表目前鎖定的幣別。\n\n💡 若選單中依然沒有您需要的幣別，您也可以直接手動輸入指令來設定（例如：輸入 /currency GBP 即可設定為英鎊）！",
+        quickReply: await getOtherQuickReply(trip, userActiveCurrency),
+      },
+    ])
+  } catch (err: any) {
+    console.error("[handleCurrencyOtherCommand Error]", err)
+  }
 }
 
 // 處理 /currency 指令
