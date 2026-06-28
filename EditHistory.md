@@ -369,4 +369,6 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 ### 修改的檔案
 - `upload-rich-menu.js` — 修改左下角按鈕對應的 Action 動作為發送 `/currency` 文字訊息。
 - `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流 the API 圖片代理端點。
-- `src/app/api/line/webhook/route.ts` — 修正 `getQuickReply` 和 `getOtherQuickReply` 中的目的地國家獲取方式，改用 `parseTripCountries` 解析以正確讀取 JSON 格式目的地列表；重構 `getQuickReply` 以精簡預設選單至僅有偏好與目的地幣種，重構 `getOtherQuickReply` 新增動態去重過濾機制；新增 `/currency_other` 更多常見幣別選單及 handler 邏輯，並於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
+- `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中對 `countries` 欄位進行防禦性類型轉換，若前端傳送裸字串時自動包裝為陣列，符合 `String[]` 規格。
+- `src/app/trips/[tripId]/settings/page.tsx` — 實作安全遞迴解碼 `cleanExtractCountries` 函數，在讀取資料庫時自動過濾與解開可能存在的多層嵌套 JSON 髒資料，並在儲存時改以標準的單一字串陣列 `[string]` 送出，阻斷再次嵌套。
+- `src/app/api/line/webhook/route.ts` — 將 `parseTripCountries` 重構為遞迴安全解包版本，防止被歷史嵌套髒資料干擾，完美抓出目的地代碼；修正 `getQuickReply` 和 `getOtherQuickReply` 中的目的地國家獲取方式；重構 `getQuickReply` 以精簡預設選單至僅有偏好與目的地幣種，重構 `getOtherQuickReply` 新增動態去重過濾機制；新增 `/currency_other` 更多常見幣別選單及 handler 邏輯，並於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式，解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
