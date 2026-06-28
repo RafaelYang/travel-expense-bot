@@ -354,4 +354,4 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 
 ### 修改的檔案
 - `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流的 API 圖片代理端點。
-- `src/app/api/line/webhook/route.ts` — 修改 `handleDateExpensesQuery` 圖片提取決策鏈，串接圖片 Proxy API 並智慧辨識機票與車票子類別主題圖；移除所有的 Markdown 雙星號及反引號標記。
+- `src/app/api/line/webhook/route.ts` — 修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
