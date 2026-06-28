@@ -138,17 +138,18 @@ export const ALL_CURRENCIES: Record<string, { label: string; symbol: string; nam
  * 例如：getCurrencyChipLabel('EUR', ['AT','CZ','HU']) → '歐元(奧地利)'
  * 例如：getCurrencyChipLabel('CZK', ['AT','CZ','HU']) → '克朗(捷克)'
  */
-export function getCurrencyChipLabel(currencyCode: string, countryCodes: string[]): string {
+export function getCurrencyChipLabel(currencyCode: string, countryCodes: string[], locale: string = 'zh-TW'): string {
   const info = ALL_CURRENCIES[currencyCode]
-  const nameCn = info?.nameCn || currencyCode
+  const name = locale === 'en' ? currencyCode : (info?.nameCn || currencyCode)
   // 找出用這個幣種的國家
   const matchingCountry = COUNTRIES.find(
     c => c.currency === currencyCode && countryCodes.includes(c.code)
   )
   if (matchingCountry) {
-    return `${nameCn}(${matchingCountry.name})`
+    const countryName = locale === 'en' ? (matchingCountry.nameEn || matchingCountry.name) : matchingCountry.name
+    return `${name} (${countryName})`
   }
-  return nameCn
+  return name
 }
 
 /**

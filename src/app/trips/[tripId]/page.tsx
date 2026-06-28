@@ -945,7 +945,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
   }
   // 非 chip 的其他幣種
   const otherCurrencies = Object.keys(ALL_CURRENCIES).filter(c => !chipCurrencies.includes(c))
-  const { t } = useLanguage()
+  const { locale, t } = useLanguage()
 
   const [mode, setMode] = useState<'expense' | 'deposit'>('expense')
   const [form, setForm] = useState({
@@ -957,7 +957,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
   })
   const [images, setImages] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // 壓縮圖片為 base64（最大寬度 800px，品質 0.6）
@@ -1205,7 +1205,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
                   transition: 'all 0.15s',
                 }}
               >
-                {getCurrencyChipLabel(cur, countries)}
+                {getCurrencyChipLabel(cur, countries, locale)}
               </button>
             ))}
             <select
@@ -1257,7 +1257,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
                 }}>
                   <img
                     src={src} alt=""
-                    onClick={() => setLightboxSrc(src)}
+                    onClick={() => setLightboxIndex(idx)}
                     style={{
                       width: '100%', maxHeight: '200px',
                       objectFit: 'cover', display: 'block',
@@ -1298,38 +1298,120 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
           </div>
 
           {/* Lightbox 全螢幕查看 */}
-          {lightboxSrc && (
+          {lightboxIndex !== null && images[lightboxIndex] && (
             <div
-              onClick={() => setLightboxSrc(null)}
+              onClick={() => setLightboxIndex(null)}
               style={{
                 position: 'fixed', inset: 0,
-                background: 'rgba(0,0,0,0.85)',
+                background: 'rgba(0,0,0,0.95)',
                 zIndex: 9999,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'zoom-out',
                 padding: '1rem',
               }}
             >
-              <img
-                src={lightboxSrc} alt=""
-                style={{
-                  maxWidth: '100%', maxHeight: '90vh',
-                  objectFit: 'contain', borderRadius: '8px',
-                }}
-              />
+              {/* 注入 CSS 隱藏手機版底部導覽列 */}
+              <style>{`
+                .mobile-bottom-nav {
+                  display: none !important;
+                }
+              `}</style>
+
+              {/* 關閉按鈕 */}
               <button
                 type="button"
-                onClick={() => setLightboxSrc(null)}
+                onClick={() => setLightboxIndex(null)}
                 style={{
-                  position: 'absolute', top: 16, right: 16,
-                  width: 36, height: 36, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.15)', color: '#fff',
+                  position: 'absolute', top: '16px', right: '16px',
+                  width: '40px', height: '40px', borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.2)', color: '#fff',
                   border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '18px',
-                  backdropFilter: 'blur(4px)',
+                  zIndex: 10010,
+                  backdropFilter: 'blur(8px)',
+                  transition: 'background 0.2s',
                 }}
-              >✕</button>
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.3)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
+              >
+                <X size={20} />
+              </button>
+
+              {/* 圖片 Slider 容器 */}
+              <div 
+                onClick={(e) => e.stopPropagation()} // 阻止點擊圖片本身時關閉 lightbox
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  maxWidth: '900px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {/* 左箭頭 */}
+                {images.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxIndex(prev => prev !== null ? (prev - 1 + images.length) % images.length : 0)}
+                    style={{
+                      position: 'absolute', left: '16px',
+                      width: '44px', height: '44px', borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.5)', color: '#fff',
+                      border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      zIndex: 10005,
+                      backdropFilter: 'blur(4px)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <ArrowLeft size={20} />
+                  </button>
+                )}
+
+                <img
+                  src={images[lightboxIndex]} alt=""
+                  style={{
+                    maxWidth: '100%', maxHeight: '85vh',
+                    objectFit: 'contain', borderRadius: '8px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+                  }}
+                />
+
+                {/* 右箭頭 */}
+                {images.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxIndex(prev => prev !== null ? (prev + 1) % images.length : 0)}
+                    style={{
+                      position: 'absolute', right: '16px',
+                      width: '44px', height: '44px', borderRadius: '50%',
+                      background: 'rgba(0,0,0,0.5)', color: '#fff',
+                      border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      zIndex: 10005,
+                      backdropFilter: 'blur(4px)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <div style={{ transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ArrowLeft size={20} />
+                    </div>
+                  </button>
+                )}
+
+                {/* 圖片頁數指示標籤 */}
+                {images.length > 1 && (
+                  <div style={{
+                    position: 'absolute', bottom: '-40px',
+                    background: 'rgba(0,0,0,0.6)', color: '#fff',
+                    padding: '4px 12px', borderRadius: '12px',
+                    fontSize: '0.8rem', fontWeight: 500,
+                  }}>
+                    {lightboxIndex + 1} / {images.length}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           </>
@@ -1387,10 +1469,10 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [editImages, setEditImages] = useState<string[]>(expense.images || [])
   const editFileRef = useRef<HTMLInputElement>(null)
-  const { t } = useLanguage()
+  const { locale, t } = useLanguage()
 
   const cat = getCategoryInfo(expense.category)
 
@@ -1567,33 +1649,33 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
               fontSize: '0.8rem',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>記帳人</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('expense.detail.recordedBy')}</span>
                 <span style={{ fontWeight: 500 }}>{expense.user.name}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>時間</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('expense.detail.time')}</span>
                 <span style={{ fontWeight: 500 }}>
                   {format(new Date(expense.date), 'yyyy/M/d HH:mm')}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>幣種</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('expense.detail.currency')}</span>
                 <span style={{ fontWeight: 500 }}>
-                  {getCurrencyChipLabel(expense.currency, countries)}
+                  {getCurrencyChipLabel(expense.currency, countries, locale)}
                 </span>
               </div>
               {expense.note && (
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>備註</span>
+                  <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{t('expense.detail.note')}</span>
                   <span style={{ fontWeight: 500, textAlign: 'right', maxWidth: '65%', wordBreak: 'break-word' }}>
                     {expense.note}
                   </span>
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>來源</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('expense.detail.source')}</span>
                 <span style={{ fontWeight: 500 }}>
-                  {expense.source === 'line' ? '📱 LINE' : '🌐 網頁'}
+                  {expense.source === 'line' ? t('expense.detail.source.line') : t('expense.detail.source.web')}
                 </span>
               </div>
             </div>
@@ -1609,7 +1691,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
                   }}>
                     <img
                       src={src} alt={`附圖 ${idx + 1}`}
-                      onClick={() => setLightboxSrc(src)}
+                      onClick={() => setLightboxIndex(idx)}
                       style={{
                         width: '100%', display: 'block',
                         maxHeight: '300px', objectFit: 'cover',
@@ -1708,7 +1790,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
                     transition: 'all 0.15s',
                   }}
                 >
-                  {getCurrencyChipLabel(cur, countries)}
+                  {getCurrencyChipLabel(cur, countries, locale)}
                 </button>
               ))}
             </div>
@@ -1818,38 +1900,120 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
     </div>
 
     {/* Lightbox 全螢幕查看圖片 */}
-    {lightboxSrc && (
+    {lightboxIndex !== null && editImages[lightboxIndex] && (
       <div
-        onClick={() => setLightboxSrc(null)}
+        onClick={() => setLightboxIndex(null)}
         style={{
           position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.9)',
+          background: 'rgba(0,0,0,0.95)',
           zIndex: 10000,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'zoom-out',
           padding: '1rem',
         }}
       >
-        <img
-          src={lightboxSrc} alt=""
-          style={{
-            maxWidth: '100%', maxHeight: '90vh',
-            objectFit: 'contain', borderRadius: '8px',
-          }}
-        />
+        {/* 注入 CSS 隱藏手機版底部導覽列 */}
+        <style>{`
+          .mobile-bottom-nav {
+            display: none !important;
+          }
+        `}</style>
+
+        {/* 關閉按鈕 */}
         <button
           type="button"
-          onClick={() => setLightboxSrc(null)}
+          onClick={() => setLightboxIndex(null)}
           style={{
-            position: 'absolute', top: 16, right: 16,
-            width: 36, height: 36, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.15)', color: '#fff',
+            position: 'absolute', top: '16px', right: '16px',
+            width: '40px', height: '40px', borderRadius: '50%',
+            background: 'rgba(255,255,255,0.2)', color: '#fff',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '18px',
-            backdropFilter: 'blur(4px)',
+            zIndex: 10010,
+            backdropFilter: 'blur(8px)',
+            transition: 'background 0.2s',
           }}
-        >✕</button>
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.3)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.2)' }}
+        >
+          <X size={20} />
+        </button>
+
+        {/* 圖片 Slider 容器 */}
+        <div 
+          onClick={(e) => e.stopPropagation()} // 阻止點擊圖片本身時關閉 lightbox
+          style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: '900px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {/* 左箭頭 */}
+          {editImages.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(prev => prev !== null ? (prev - 1 + editImages.length) % editImages.length : 0)}
+              style={{
+                position: 'absolute', left: '16px',
+                width: '44px', height: '44px', borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)', color: '#fff',
+                border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 10005,
+                backdropFilter: 'blur(4px)',
+                transition: 'all 0.2s',
+              }}
+            >
+              <ArrowLeft size={20} />
+            </button>
+          )}
+
+          <img
+            src={editImages[lightboxIndex]} alt=""
+            style={{
+              maxWidth: '100%', maxHeight: '85vh',
+              objectFit: 'contain', borderRadius: '8px',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
+            }}
+          />
+
+          {/* 右箭頭 (把 ArrowLeft 旋轉 180 度當成右箭頭) */}
+          {editImages.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(prev => prev !== null ? (prev + 1) % editImages.length : 0)}
+              style={{
+                position: 'absolute', right: '16px',
+                width: '44px', height: '44px', borderRadius: '50%',
+                background: 'rgba(0,0,0,0.5)', color: '#fff',
+                border: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 10005,
+                backdropFilter: 'blur(4px)',
+                transition: 'all 0.2s',
+              }}
+            >
+              <div style={{ transform: 'rotate(180deg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ArrowLeft size={20} />
+              </div>
+            </button>
+          )}
+
+          {/* 圖片頁數指示標籤 */}
+          {editImages.length > 1 && (
+            <div style={{
+              position: 'absolute', bottom: '-40px',
+              background: 'rgba(0,0,0,0.6)', color: '#fff',
+              padding: '4px 12px', borderRadius: '12px',
+              fontSize: '0.8rem', fontWeight: 500,
+            }}>
+              {lightboxIndex + 1} / {editImages.length}
+            </div>
+          )}
+        </div>
       </div>
     )}
     </>

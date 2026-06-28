@@ -664,36 +664,7 @@ export function Navbar() {
         )}
       </nav>
 
-      {/* === 手機版底部 Tab Bar === */}
-      <div className="hide-desktop" style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
-        background: 'var(--nav-bg-solid)',
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        borderTop: '1px solid var(--border-color)',
-        display: 'flex', justifyContent: 'space-around',
-        padding: '0.5rem 0 calc(0.5rem + env(safe-area-inset-bottom))',
-      }}>
-        {navItems.map(item => (
-          <Link key={item.href} href={item.href} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem',
-            padding: '0.375rem 1rem', textDecoration: 'none',
-            color: isActive(item.href) ? 'var(--color-primary)' : 'var(--text-muted)',
-            fontSize: '0.7rem', fontWeight: isActive(item.href) ? 600 : 400, transition: 'color 0.2s',
-          }}>
-            {item.href === "/" ? <PlaneIcon size={20} /> : <item.icon size={20} />}
-            {item.label}
-          </Link>
-        ))}
-        <Link href="/settings" style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem',
-          padding: '0.375rem 1rem', textDecoration: 'none',
-          color: isActive('/settings') ? 'var(--color-primary)' : 'var(--text-muted)',
-          fontSize: '0.7rem', fontWeight: isActive('/settings') ? 600 : 400, transition: 'color 0.2s',
-        }}>
-          <Settings size={20} />
-          {t('nav.settings')}
-        </Link>
-      </div>
+
 
       {/* === LINE 帳號連動對話框 (Modal) === */}
       {lineModalOpen && (

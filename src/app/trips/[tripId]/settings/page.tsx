@@ -15,6 +15,7 @@ import {
 import Link from "next/link"
 import { TRIP_STATUS, CURRENCIES } from "@/lib/utils"
 import { useLanguage } from "@/components/language-provider"
+import { getCountryCoverImage } from "@/lib/countries"
 
 interface TripSettings {
   id: string
@@ -26,6 +27,7 @@ interface TripSettings {
   baseCurrency: string
   budgetAmount?: number
   status: string
+  coverImage?: string | null
   userRole: string
   countries?: string[]
   members: {
@@ -195,6 +197,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     startDate: "",
     endDate: "",
     baseCurrency: "",
+    coverImage: "",
   })
 
   useEffect(() => {
@@ -239,6 +242,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         startDate: data.startDate.split("T")[0],
         endDate: data.endDate.split("T")[0],
         baseCurrency: data.baseCurrency,
+        coverImage: data.coverImage || "",
       })
 
       // 遞迴解包與淨化目的地國家 (防止滾雪球式嵌套髒資料)
@@ -448,6 +452,240 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
           {t('settings.title')}
         </h1>
 
+        {/* 基本設定 */}
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+          <h3 style={{
+            fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            {t('settings.basic')}
+          </h3>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
+                {t('settings.tripName')}
+              </label>
+              <input className="input-field" value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
+                  {t('settings.startDate')}
+                </label>
+                <input type="date" className="input-field date-input" value={editForm.startDate}
+                  onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
+                  {t('settings.endDate')}
+                </label>
+                <input type="date" className="input-field date-input" value={editForm.endDate}
+                  onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+              </div>
+            </div>
+
+            {/* 每日目的地設定 */}
+            {dailyCountries.length > 0 && (
+              <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                  🗺️ 每日目的地國家設定 (LINE 機器人風景圖與時區依據)
+                </label>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
+                  如果您的行程橫跨多個國家，可以在此為每一天設定主要的國家。機器人會以此為依據來套用該國時區，並自動配置當天的精美風景底圖唷！
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                  {dailyCountries.map((countryCode, idx) => {
+                    const dayNum = idx + 1
+                    let dateLabel = ""
+                    try {
+                      const start = new Date(editForm.startDate)
+                      const d = new Date(start.getTime() + idx * 24 * 60 * 60 * 1000)
+                      dateLabel = `${d.getMonth() + 1}/${d.getDate()}`
+                    } catch {}
+
+                    return (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
+                        background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary-light)' }}>
+                            Day {dayNum}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            ({dateLabel})
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {countriesList.map((c) => {
+                            const info = COUNTRY_INFO_MAP[c.toUpperCase()] || { flag: "🌐", name: c }
+                            const isSelected = countryCode.toUpperCase() === c.toUpperCase()
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => {
+                                  setDailyCountries(prev => {
+                                    const next = [...prev]
+                                    next[idx] = c
+                                    return next
+                                  })
+                                }}
+                                style={{
+                                  padding: '0.25rem 0.5rem', borderRadius: '8px',
+                                  fontSize: '0.65rem', fontWeight: isSelected ? 600 : 400,
+                                  background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.02)',
+                                  border: isSelected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                                  color: isSelected ? '#3b82f6' : 'var(--text-secondary)',
+                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.15rem',
+                                  transition: 'all 0.15s',
+                                  minHeight: 'auto'
+                                }}
+                              >
+                                <span>{info.flag}</span>
+                                <span>{info.name}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 行程封面照設定 */}
+            <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                🖼️ {t('settings.coverImage') || '行程封面照'}
+              </label>
+              
+              {/* 目前封面照預覽 */}
+              <div style={{
+                width: '100%',
+                height: '130px',
+                borderRadius: '8px',
+                backgroundImage: `url(${editForm.coverImage || getCountryCoverImage(countriesList)})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '0.75rem',
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'flex-end',
+                padding: '0.5rem',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{
+                  background: 'rgba(0,0,0,0.6)',
+                  color: '#fff',
+                  fontSize: '0.7rem',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  backdropFilter: 'blur(4px)'
+                }}>
+                  {editForm.coverImage ? '自訂封面' : '預設目的地封面'}
+                </div>
+              </div>
+
+              {/* 圖片連結輸入 */}
+              <div style={{ marginBottom: '0.75rem' }}>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="請輸入自訂圖片 URL (例如 https://...)"
+                  value={editForm.coverImage}
+                  onChange={(e) => setEditForm({ ...editForm, coverImage: e.target.value })}
+                  style={{ fontSize: '0.8rem' }}
+                />
+              </div>
+
+              {/* 精選預設封面圖列表 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  或點擊下方精選照片快速套用：
+                </div>
+                <div style={{
+                  display: 'flex',
+                  gap: '0.375rem',
+                  overflowX: 'auto',
+                  paddingBottom: '0.25rem',
+                  scrollbarWidth: 'none',
+                  WebkitOverflowScrolling: 'touch'
+                }}>
+                  {/* 清除封面回到預設目的地封面 */}
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, coverImage: "" })}
+                    style={{
+                      flexShrink: 0,
+                      padding: '0.375rem 0.75rem',
+                      borderRadius: '6px',
+                      fontSize: '0.7rem',
+                      background: !editForm.coverImage ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.02)',
+                      border: !editForm.coverImage ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                      color: !editForm.coverImage ? '#3b82f6' : 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    🎯 目的地預設
+                  </button>
+
+                  {/* 列出一些熱門國家的美圖 */}
+                  {[
+                    { name: '日本京都', url: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80' },
+                    { name: '首爾夜景', url: 'https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=800&q=80' },
+                    { name: '泰國寺廟', url: 'https://images.unsplash.com/photo-1528181304800-259b08848526?w=800&q=80' },
+                    { name: '新加坡金沙', url: 'https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=800&q=80' },
+                    { name: '奧地利湖畔', url: 'https://images.unsplash.com/photo-1516550893923-42d28e5677af?w=800&q=80' },
+                    { name: '法國巴黎', url: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80' },
+                    { name: '義大利威尼斯', url: 'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80' },
+                    { name: '英國倫敦', url: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80' },
+                    { name: '澳洲雪梨', url: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&q=80' },
+                    { name: '紐西蘭湖泊', url: 'https://images.unsplash.com/photo-1469521669194-babb45599def?w=800&q=80' },
+                    { name: '美國紐約', url: 'https://images.unsplash.com/photo-1485738422979-f5c462d49f04?w=800&q=80' }
+                  ].map(item => {
+                    const isSelected = editForm.coverImage === item.url
+                    return (
+                      <button
+                        key={item.name}
+                        type="button"
+                        onClick={() => setEditForm({ ...editForm, coverImage: item.url })}
+                        style={{
+                          flexShrink: 0,
+                          padding: '0.375rem 0.75rem',
+                          borderRadius: '6px',
+                          fontSize: '0.7rem',
+                          background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.02)',
+                          border: isSelected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                          color: isSelected ? '#3b82f6' : 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        {item.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <button onClick={saveSettings} className="btn-primary" disabled={saving}
+              style={{ justifyContent: 'center', opacity: saving ? 0.7 : 1 }}>
+              {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : t('settings.save')}
+            </button>
+          </div>
+        </div>
+
         {/* 邀請碼區塊 */}
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
           <h3 style={{
@@ -584,229 +822,6 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
               {emailError}
             </div>
           )}
-        </div>
-
-        {/* LINE 快速記帳與連動 */}
-        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-          <h3 style={{
-            fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-          }}>
-            <span style={{ fontSize: '1.1rem' }}>💬</span>
-            {t('settings.lineLink')}
-          </h3>
-          
-          {!hasLinkedLine ? (
-            <div>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-                {t('settings.lineLink.desc')}
-              </p>
-              <div style={{
-                fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
-                background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
-                color: '#f59e0b', fontWeight: 500, lineHeight: 1.6
-              }}>
-                💡 您的帳號尚未連結 LINE 帳號。<br />
-                請點擊右上角**個人頭像選單**，選擇 **「連結 LINE 帳號」** 並依指示完成個人綁定。綁定後即可於此處將本行程設為 LINE 預設記帳行程！
-              </div>
-            </div>
-          ) : (
-            <div>
-              <h4 style={{
-                fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem',
-                display: 'flex', alignItems: 'center', gap: '0.375rem'
-              }}>
-                {t('settings.lineLink.status.title')}
-              </h4>
-
-              {isLineActive ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <div style={{
-                    fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
-                    background: 'rgba(14, 165, 233, 0.08)', border: '1px solid rgba(14, 165, 233, 0.2)',
-                    color: 'var(--color-primary-light)', fontWeight: 500
-                  }}>
-                    {t('settings.lineLink.status.active')}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
-                    {t('settings.lineLink.status.activeDay').replace('{dayText}', lineDayText)}
-                  </div>
-
-                  {/* 網頁端快速設定與預設幣值顯示 */}
-                  <div style={{ 
-                    marginTop: '0.75rem', 
-                    borderTop: '1px solid rgba(255,255,255,0.08)', 
-                    paddingTop: '0.75rem' 
-                  }}>
-                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500 }}>
-                      💱 LINE 預設記帳幣別：<span style={{ color: 'var(--color-primary-light)', fontWeight: 700 }}>{lineCurrency || "TWD"}</span>
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
-                      {getTripCurrencies().map((cur) => {
-                        const isActiveCur = lineCurrency === cur.code
-                        return (
-                          <button
-                            key={cur.code}
-                            onClick={() => updateLineCurrency(cur.code)}
-                            style={{ 
-                              fontSize: '0.7rem', 
-                              padding: '0.25rem 0.5rem', 
-                              borderRadius: '20px', 
-                              minHeight: 'auto',
-                              background: isActiveCur ? 'var(--color-primary)' : 'rgba(255,255,255,0.05)',
-                              border: isActiveCur ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                              color: isActiveCur ? '#fff' : 'var(--text-secondary)',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              fontWeight: isActiveCur ? 600 : 400
-                            }}
-                          >
-                            {cur.name} ({cur.code})
-                          </button>
-                        )
-                      })}
-                    </div>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', lineHeight: 1.4 }}>
-                      💡 提示：您也可以在 LINE 傳送 <code>/currency [幣別]</code> 或直接點選聊天室鍵盤上方的快速按鈕隨時進行切換唷！
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  <div style={{
-                    fontSize: '0.8rem', padding: '0.75rem', borderRadius: 'var(--radius)',
-                    background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)',
-                    color: '#f59e0b', fontWeight: 500
-                  }}>
-                    {t('settings.lineLink.status.inactive')}
-                  </div>
-                  <button onClick={setAsDefaultTrip} className="btn-primary" disabled={settingDefault} style={{ justifyContent: 'center' }}>
-                    {settingDefault ? (
-                      <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-                    ) : (
-                      t('settings.lineLink.setAsDefault')
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 基本設定 */}
-        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-          <h3 style={{
-            fontSize: '0.9rem', fontWeight: 700, marginBottom: '1rem',
-            display: 'flex', alignItems: 'center', gap: '0.5rem',
-          }}>
-            {t('settings.basic')}
-          </h3>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                {t('settings.tripName')}
-              </label>
-              <input className="input-field" value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                  {t('settings.startDate')}
-                </label>
-                <input type="date" className="input-field date-input" value={editForm.startDate}
-                  onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
-                  {t('settings.endDate')}
-                </label>
-                <input type="date" className="input-field date-input" value={editForm.endDate}
-                  onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
-              </div>
-            </div>
-
-            {/* 每日目的地設定 */}
-            {dailyCountries.length > 0 && (
-              <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
-                  🗺️ 每日目的地國家設定 (LINE 機器人風景圖與時區依據)
-                </label>
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
-                  如果您的行程橫跨多個國家，可以在此為每一天設定主要的國家。機器人會以此為依據來套用該國時區，並自動配置當天的精美風景底圖唷！
-                </p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                  {dailyCountries.map((countryCode, idx) => {
-                    const dayNum = idx + 1
-                    let dateLabel = ""
-                    try {
-                      const start = new Date(editForm.startDate)
-                      const d = new Date(start.getTime() + idx * 24 * 60 * 60 * 1000)
-                      dateLabel = `${d.getMonth() + 1}/${d.getDate()}`
-                    } catch {}
-
-                    return (
-                      <div key={idx} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
-                        background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary-light)' }}>
-                            Day {dayNum}
-                          </span>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                            ({dateLabel})
-                          </span>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          {countriesList.map((c) => {
-                            const info = COUNTRY_INFO_MAP[c.toUpperCase()] || { flag: "🌐", name: c }
-                            const isSelected = countryCode.toUpperCase() === c.toUpperCase()
-                            return (
-                              <button
-                                key={c}
-                                type="button"
-                                onClick={() => {
-                                  setDailyCountries(prev => {
-                                    const next = [...prev]
-                                    next[idx] = c
-                                    return next
-                                  })
-                                }}
-                                style={{
-                                  padding: '0.25rem 0.5rem', borderRadius: '8px',
-                                  fontSize: '0.65rem', fontWeight: isSelected ? 600 : 400,
-                                  background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.02)',
-                                  border: isSelected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.05)',
-                                  color: isSelected ? '#3b82f6' : 'var(--text-secondary)',
-                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.15rem',
-                                  transition: 'all 0.15s',
-                                  minHeight: 'auto'
-                                }}
-                              >
-                                <span>{info.flag}</span>
-                                <span>{info.name}</span>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            <button onClick={saveSettings} className="btn-primary" disabled={saving}
-              style={{ justifyContent: 'center', opacity: saving ? 0.7 : 1 }}>
-              {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : t('settings.save')}
-            </button>
-          </div>
         </div>
 
         {/* 成員管理 */}

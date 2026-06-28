@@ -100,6 +100,7 @@ export async function PUT(
       budgetAmount: body.budgetAmount,
       status: body.status,
       countries: countriesPayload,
+      coverImage: body.coverImage === "" ? null : body.coverImage,
     },
   })
 

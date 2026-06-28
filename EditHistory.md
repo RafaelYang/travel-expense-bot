@@ -376,3 +376,24 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中對 `countries` 欄位進行防禦性類型轉換，若前端傳送裸字串時自動包裝為陣列，符合 `String[]` 規格。
 - `src/app/trips/[tripId]/settings/page.tsx` — 實作安全遞迴解碼 `cleanExtractCountries` 函數，在讀取資料庫時自動過濾與解開可能存在的多層嵌套 JSON 髒資料，並在儲存時改以標準的單一字串陣列 `[string]` 送出，阻斷再次嵌套。
 - `src/app/api/line/webhook/route.ts` — 修正 `handleUpdateField` (分類與幣別)、`handleDirectTextUpdate` (品項名稱與金額) 和 `handleDeleteExpense` (一鍵刪除) 的成功回覆，在發送成功訊息時同時調用 `getExpenseDateQueryMessages` 將對應日期的花費卡片一併附帶回傳；將 `handleDateExpensesQuery` 的卡片產生邏輯重構拆分為獨立的 `buildDateExpensesMessages` 輔助函數以供多處拼裝；將 `parseTripCountries` 重構為遞迴安全解包版本，防止被歷史嵌套髒資料干擾，完美抓出目的地國家二碼；重構 `getQuickReply` 以精簡預設選單至僅有偏好與目的地幣種，重構 `getOtherQuickReply` 新增動態去重過濾機制；新增 `/currency_other` 更多常見幣別選單及 handler 邏輯；修正自傳 Base64 圖片代理的 URL 格式，解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
+
+- **行程封面照自訂與自動 Fallback 機制 (Trip Cover Image Customization & Fallback)**：
+  - 網頁端主頁行程卡片新增支援優先讀取 `trip.coverImage` 欄位，若未設定自訂封面，則自動 fallback 使用目的地國家對應的 Unsplash 精美城市風景照，若目的地無預設照片則使用預設地圖。
+  - 行程更新 `PUT /api/trips/[tripId]` API 新增對 `coverImage` 欄位的接收與資料庫儲存。
+  - 在「行程設定」頁面中，新增了高質感的「行程封面照」編輯區塊，包含：
+    - 即時封面照預覽（可即時展示輸入 URL 或點按精選風景照的效果）。
+    - 提供 Input 框供使用者直接填入自訂的 HTTPS 圖片網址。
+    - 提供精選風景照滾動清單（日本京都、首爾夜景、泰國寺廟、法國巴黎、歐洲鐵道等），點按即可秒切換，亦提供「🎯 目的地預設」按鈕，點擊可清空自訂網址並回歸目的地預設照片。
+
+### 修改的檔案 (追加)
+- `src/app/page.tsx` — 擴充 `Trip` 介面，並將 `TripCard` 卡片封面改為優先使用自訂封面，無自訂封面時自動 fallback 目的地國家預設封面。
+- `src/app/api/trips/[tripId]/route.ts` — 在 `PUT` 更新 API 中新增對 `coverImage` 欄位的接收與儲存以支援行程封面照更新。
+- `src/app/trips/[tripId]/settings/page.tsx` — 引入 `getCountryCoverImage` 並在 TripSettings 介面、狀態與 payload 中加入 `coverImage` 欄位，同時在 UI 中新增封面預覽、自訂網址與精選美圖滾動選取元件。
+
+- **精選封面圖新增奧地利風景 (Recommended Covers Add Austria)**：
+  - 在「行程設定」頁面的推薦封面圖滾動選單中，新增了「奧地利湖畔」精選風景照選項（對應奧地利 Hallstatt 的經典湖畔美景）。
+
+- **設定頁面區塊重組與移除 LINE 記帳狀態區塊 (Settings Sections Reordering & LINE Link Removal)**：
+  - 應使用者要求，在「行程設定」頁面中，將原本頗佔版面的「💬 LINE 快速記帳與連動」設定 Card 完全拿掉，精簡設定介面。
+  - 將「基本設定」區塊（包含行程名稱、日期設定、每日目的地國家設定、以及全新實作的行程封面照預覽與選取元件）整體移到最頂端（放置於「邀請碼區塊」之前）。
+  - 這解決了原本基本設定與封面照設定因版面過長而被擠到最下方、導致使用者「找不到可以設定圖片的地方」之體驗痛點，現在一進設定頁就能立刻在最上方進行封面照自訂。

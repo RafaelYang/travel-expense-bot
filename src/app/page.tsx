@@ -27,6 +27,7 @@ interface Trip {
   budgetAmount?: number
   status: string
   countries: string[]
+  coverImage?: string | null
   totalSpent: number
   members: { user: { id: string; name: string; image?: string } }[]
   _count: { expenses: number }
@@ -312,7 +313,7 @@ export default function HomePage() {
 function TripCard({ trip, featured }: { trip: Trip; featured?: boolean }) {
   const { t, locale } = useLanguage()
   const dateLocale = locale === 'en' ? enUS : zhTW
-  const coverImage = getCountryCoverImage(trip.countries || [])
+  const coverImage = trip.coverImage || getCountryCoverImage(trip.countries || [])
   const flags = getCountryFlags(trip.countries || [])
 
   return (

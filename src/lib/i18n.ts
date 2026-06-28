@@ -174,6 +174,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     'cat.ticket': '🎫 門票',
     'cat.other': '📦 其他',
 
+    // 支出詳情
+    'expense.detail.recordedBy': '記帳人',
+    'expense.detail.time': '時間',
+    'expense.detail.currency': '幣種',
+    'expense.detail.note': '備註',
+    'expense.detail.source': '來源',
+    'expense.detail.source.line': '📱 LINE',
+    'expense.detail.source.web': '🌐 網頁',
+
     // 網頁標題
     'meta.title': '小銘子旅行用記帳 — 旅遊記帳好幫手',
     'meta.description': '出門旅遊的記帳好夥伴，支援多人共用行程、即時預算追蹤、匯率轉換、LINE 機器人記帳',
@@ -346,6 +355,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     'cat.shopping': '🛍️ Shopping',
     'cat.ticket': '🎫 Tickets',
     'cat.other': '📦 Other',
+
+    // Expense Detail
+    'expense.detail.recordedBy': 'Created By',
+    'expense.detail.time': 'Time',
+    'expense.detail.currency': 'Currency',
+    'expense.detail.note': 'Note',
+    'expense.detail.source': 'Source',
+    'expense.detail.source.line': '📱 LINE',
+    'expense.detail.source.web': '🌐 Web',
 
     // 網頁標題
     'meta.title': "Ming's Travel Expense — Your Trip Companion",
