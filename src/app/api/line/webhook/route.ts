@@ -1713,7 +1713,7 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
       // 卡片圖片安全判定 (LINE 不支援 Base64)
       let imageUrl = countrySceneryUrl
       const images = Array.isArray(exp.images) ? (exp.images as string[]) : []
-      if (images.length > 0 && images[0].startsWith("http")) {
+      if (images.length > 0 && typeof images[0] === "string" && images[0].startsWith("http")) {
         imageUrl = images[0]
       }
 
@@ -1784,6 +1784,14 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
     ])
   } catch (err: any) {
     console.error("[LINE Date Expenses Error]", err)
+    try {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `❌ 載入消費卡片失敗，請稍候重試。錯誤詳情：${err.message || err}`,
+        },
+      ])
+    } catch (e) {}
   }
 }
 
