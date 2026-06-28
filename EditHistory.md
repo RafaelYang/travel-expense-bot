@@ -353,5 +353,6 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 移除了連結帳號成功提示、幣別切換成功提示、幣別手動設定範例、金額修改提示中的所有星號 `**` 及反引號 `` ` `` 標記，改以 LINE 能完美原生呈現的乾淨純文字與引號替代。
 
 ### 修改的檔案
+- `upload-rich-menu.js` — 修改左下角按鈕對應的 Action 動作為發送 `/currency` 文字訊息。
 - `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流的 API 圖片代理端點。
 - `src/app/api/line/webhook/route.ts` — 修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
