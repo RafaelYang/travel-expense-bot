@@ -178,6 +178,9 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   // 產生每日花費折線圖數據
   const chartDays: { label: string; dateStr: string; amount: number }[] = []
   try {
+    const dateSet = new Set<string>()
+    
+    // 1. 放入行程期間的每一天
     const start = new Date(trip.startDate)
     const end = new Date(trip.endDate)
     let current = new Date(start)
@@ -186,8 +189,31 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       const yyyy = current.getFullYear()
       const mm = String(current.getMonth() + 1).padStart(2, '0')
       const dd = String(current.getDate()).padStart(2, '0')
-      const dateStr = `${yyyy}-${mm}-${dd}`
-      const label = `${current.getMonth() + 1}/${current.getDate()}`
+      dateSet.add(`${yyyy}-${mm}-${dd}`)
+      current.setDate(current.getDate() + 1)
+      count++
+    }
+
+    // 2. 放入行程外有記帳消費的日期 (例如提前訂的機票)
+    trip.expenses.forEach(e => {
+      try {
+        const eDate = new Date(e.date)
+        const yyyy = eDate.getFullYear()
+        const mm = String(eDate.getMonth() + 1).padStart(2, '0')
+        const dd = String(eDate.getDate()).padStart(2, '0')
+        dateSet.add(`${yyyy}-${mm}-${dd}`)
+      } catch {}
+    })
+
+    // 3. 排序日期字串 (保證時間軸從小到大)
+    const sortedDateStrs = Array.from(dateSet).sort()
+
+    // 4. 計算每日消費總額
+    sortedDateStrs.forEach(dateStr => {
+      const parts = dateStr.split('-')
+      const m = parseInt(parts[1])
+      const d = parseInt(parts[2])
+      const label = `${m}/${d}`
       
       const dayAmount = trip.expenses
         .filter(e => {
@@ -198,11 +224,9 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           return `${ey}-${em}-${ed}` === dateStr
         })
         .reduce((sum, e) => sum + (e.convertedAmount ?? e.amount ?? 0), 0)
-        
+
       chartDays.push({ label, dateStr, amount: Math.round(dayAmount) })
-      current.setDate(current.getDate() + 1)
-      count++
-    }
+    })
   } catch (err) {
     console.error("Chart data error:", err)
   }
@@ -225,7 +249,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   // 分類統計
   const categoryStats = EXPENSE_CATEGORIES.map(cat => {
     const expenses = trip.expenses.filter(e => e.category === cat.value)
-    const total = expenses.reduce((sum, e) => sum + e.amount, 0)
+    const total = expenses.reduce((sum, e) => sum + (e.convertedAmount ?? e.amount ?? 0), 0)
     return { ...cat, label: t(`cat.${cat.value}`), total, count: expenses.length }
   }).filter(c => c.count > 0).sort((a, b) => b.total - a.total)
 
