@@ -355,7 +355,13 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - **幣種設定選單說明優化 (Currency Selector Instructions Optimization)**：
   - 為了在使用者開啟「幣種設定」時提供更明確的 UI 指引，於 `/currency` 的手動切換說明文字中，新增「請選擇下方快速選單進行切換，帶有 ⭐ 的按鈕即代表目前的記帳幣別」的溫馨說明。
 
+- **更多常見幣別選單與手動引導強化 (Alternative Currencies Quick Reply & Flow)**：
+  - 於常用幣別選單中，當使用者點選「🔍 其他」時，不再發送無意義的重複指令，而是發送 `/currency_other` 指令。
+  - Webhook 攔截該指令並回傳全新的「更多常見幣別選單」 (包含韓元 KRW、泰銖 THB、人民幣 CNY、英鎊 GBP、加幣 CAD、澳幣 AUD、新加坡幣 SGD、馬幣 MYR、瑞士法郎 CHF、紐元 NZD 等 10 種常見旅遊貨幣)。
+  - 新增「🔙 返回常用」按鈕可隨時切回原本的目的地+常用幣別選單。
+  - 在說明文字中，強烈提示使用者「若選單中依然沒有您需要的幣別，您也可以直接手動輸入指令來設定（例如：輸入 /currency GBP 即可設定為英鎊）！」，完美解決手動設定的指引。
+
 ### 修改的檔案
 - `upload-rich-menu.js` — 修改左下角按鈕對應的 Action 動作為發送 `/currency` 文字訊息。
 - `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流 the API 圖片代理端點。
-- `src/app/api/line/webhook/route.ts` — 於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
+- `src/app/api/line/webhook/route.ts` — 新增 `/currency_other` 更多常見幣別選單及 handler 邏輯，並於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
