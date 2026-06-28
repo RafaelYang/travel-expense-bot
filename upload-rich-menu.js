@@ -88,7 +88,7 @@ async function run() {
           }
         },
         {
-          // 左下格 — 目前行程
+          // 左下格 — 幣種設定
           bounds: {
             x: 0,
             y: halfH,
@@ -97,7 +97,7 @@ async function run() {
           },
           action: {
             type: "message",
-            text: "/status"
+            text: "/currency"
           }
         },
         {
