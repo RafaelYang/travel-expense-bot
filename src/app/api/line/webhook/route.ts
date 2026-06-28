@@ -1235,55 +1235,103 @@ const COUNTRY_SCENERY_MAP: Record<string, string> = {
   SG: "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=800&q=80", // 新加坡
   MY: "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=800&q=80", // 馬來西亞
   PH: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=800&q=80", // 菲律賓
-  ID: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&q=80", // 印尼
   AU: "https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&q=80", // 澳洲
   NZ: "https://images.unsplash.com/photo-1469521669194-babb45599def?w=800&q=80", // 紐西蘭
   CA: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&q=80", // 加拿大
 }
 
-// 根據記帳紀錄，動態生成行程日期 Quick Reply 項目
+// 國家與時區偏移量 (UTC+) 對照表
+const COUNTRY_TIMEZONE_MAP: Record<string, number> = {
+  TW: 8, // 台灣 UTC+8
+  JP: 9, // 日本 UTC+9
+  KR: 9, // 韓國 UTC+9
+  AT: 2, // 奧地利 UTC+2 (夏令)
+  DE: 2, // 德國 UTC+2
+  FR: 2, // 法國 UTC+2
+  IT: 2, // 義大利 UTC+2
+  ES: 2, // 西班牙 UTC+2
+  NL: 2, // 荷蘭 UTC+2
+  PT: 1, // 葡萄牙 UTC+1
+  GR: 3, // 希臘 UTC+3
+  CZ: 2, // 捷克 UTC+2
+  HU: 2, // 匈牙利 UTC+2
+  PL: 2, // 波蘭 UTC+2
+  CH: 2, // 瑞士 UTC+2
+  GB: 1, // 英國 UTC+1
+  SE: 2, // 瑞典 UTC+2
+  NO: 2, // 挪威 UTC+2
+  DK: 2, // 丹麥 UTC+2
+  IS: 0, // 冰島 UTC+0
+  HR: 2, // 克羅埃西亞 UTC+2
+  TR: 3, // 土耳其 UTC+3
+  CN: 8, // 中國 UTC+8
+  HK: 8, // 香港 UTC+8
+  MO: 8, // 澳門 UTC+8
+  TH: 7, // 泰國 UTC+7
+  VN: 7, // 越南 UTC+7
+  SG: 8, // 新加坡 UTC+8
+  MY: 8, // 馬來西亞 UTC+8
+  PH: 8, // 菲律賓 UTC+8
+  ID: 7, // 印尼 UTC+7
+  AU: 10, // 澳洲雪梨 UTC+10
+  NZ: 12, // 紐西蘭 UTC+12
+  CA: -4, // 加拿大東部 UTC-4
+}
+
+// 根據記帳紀錄，動態生成行程日期 Quick Reply 項目 (考慮行程目的地當地時區)
 async function getExpensesDatesQuickReply(activeTripId: string, userId: string, trip: any) {
   try {
-    // 1. 查詢該行程下該使用者有記帳的日期
+    // 1. 取得行程主要目的地國家的時區偏移量 (預設台北 UTC+8)
+    let activeCountry = "TW"
+    const tripCountries = trip?.countries || []
+    if (tripCountries.length > 0) {
+      activeCountry = tripCountries[0]
+    }
+    const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
+
+    // 2. 查詢該行程下該使用者有記帳的日期
     const expenses = await prisma.expense.findMany({
       where: { tripId: activeTripId, userId },
       select: { date: true },
       orderBy: { date: "asc" }
     })
 
-    // 2. 取出唯一日期字串 (YYYY-MM-DD)
+    // 3. 轉為當地時區的唯一日期字串 (YYYY-MM-DD)
     const uniqueDateStrs: string[] = []
     const seenDates = new Set<string>()
 
     expenses.forEach((e) => {
       if (e.date) {
         try {
-          const dStr = e.date.toISOString().split("T")[0]
+          // 將 UTC Date 加上目的地時區偏移
+          const localTime = new Date(e.date.getTime() + tzOffsetHours * 60 * 60 * 1000)
+          const dStr = localTime.toISOString().split("T")[0]
           if (!seenDates.has(dStr)) {
             seenDates.add(dStr)
             uniqueDateStrs.push(dStr)
           }
         } catch (err) {
-          // 忽略單筆日期的異常
+          // 忽略單筆異常
         }
       }
     })
 
-    // 3. 確保「今天」也有在列表裡 (方便隨時查看今天)
+    // 4. 確保「目的地當天的今天」也有在列表裡 (方便隨時查看今天)
     let todayStr = ""
     try {
-      todayStr = new Date().toISOString().split("T")[0]
+      const localToday = new Date(Date.now() + tzOffsetHours * 60 * 60 * 1000)
+      todayStr = localToday.toISOString().split("T")[0]
       if (!uniqueDateStrs.includes(todayStr)) {
         uniqueDateStrs.push(todayStr)
       }
     } catch (e) {
-      // 忽略今天日期的異常
+      // 忽略異常
     }
 
-    // 4. 排序日期 (升序：舊到新)
+    // 5. 排序日期 (升序：舊到新)
     uniqueDateStrs.sort()
 
-    // 5. 如果還是沒有任何日期，則 fallback 為行程的前 11 天
+    // 6. 如果還是沒有任何日期，則 fallback 為行程的前 11 天
     if (uniqueDateStrs.length === 0 && trip) {
       try {
         const start = trip.startDate ? new Date(trip.startDate) : new Date()
@@ -1299,11 +1347,11 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
           }
         }
       } catch (e) {
-        // 忽略 fallback 的異常
+        // 忽略異常
       }
     }
 
-    // 6. 如果到這裡還是空，強行塞入今天
+    // 7. 若仍空，以今天兜底
     if (uniqueDateStrs.length === 0 && todayStr) {
       uniqueDateStrs.push(todayStr)
     }
@@ -1498,11 +1546,33 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
     })
     if (!trip) return
 
-    // 1. 取得當天起迄區間
-    const startOfDay = new Date(`${queryDateStr}T00:00:00.000Z`)
-    const endOfDay = new Date(`${queryDateStr}T23:59:59.999Z`)
+    // 1. 智慧目的地國家與時區計算
+    const start = new Date(trip.startDate)
+    const end = new Date(trip.endDate)
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+    const queryDate = new Date(queryDateStr)
+    const currentDay = Math.ceil((queryDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
 
-    // 2. 查詢當天消費
+    let activeCountry = "TW"
+    const tripCountries = trip.countries || []
+    if (tripCountries.length === 1) {
+      activeCountry = tripCountries[0]
+    } else if (tripCountries.length > 1) {
+      const interval = totalDays / tripCountries.length
+      const countryIndex = Math.min(
+        Math.floor((currentDay - 1) / interval),
+        tripCountries.length - 1
+      )
+      activeCountry = tripCountries[countryIndex]
+    }
+
+    const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
+
+    // 2. 取得目的地當地當天的 UTC 物理時間區間
+    const startOfDay = new Date(new Date(`${queryDateStr}T00:00:00.000Z`).getTime() - tzOffsetHours * 60 * 60 * 1000)
+    const endOfDay = new Date(new Date(`${queryDateStr}T23:59:59.999Z`).getTime() - tzOffsetHours * 60 * 60 * 1000)
+
+    // 3. 查詢當天消費
     const expenses = await prisma.expense.findMany({
       where: {
         tripId: activeTripId,
@@ -1525,26 +1595,6 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
         },
       ])
       return
-    }
-
-    // 3. 智慧目的地國家風景照演算法
-    const start = new Date(trip.startDate)
-    const end = new Date(trip.endDate)
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-    const queryDate = new Date(queryDateStr)
-    const currentDay = Math.ceil((queryDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-
-    let activeCountry = "TW"
-    const tripCountries = trip.countries || []
-    if (tripCountries.length === 1) {
-      activeCountry = tripCountries[0]
-    } else if (tripCountries.length > 1) {
-      const interval = totalDays / tripCountries.length
-      const countryIndex = Math.min(
-        Math.floor((currentDay - 1) / interval),
-        tripCountries.length - 1
-      )
-      activeCountry = tripCountries[countryIndex]
     }
 
     const defaultCover = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80"
