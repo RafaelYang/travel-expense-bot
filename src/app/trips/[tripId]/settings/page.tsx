@@ -63,6 +63,47 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [lineCurrency, setLineCurrency] = useState<string | null>(null)
   const { t } = useLanguage()
 
+  const [countriesList, setCountriesList] = useState<string[]>([])
+  const [dailyCountries, setDailyCountries] = useState<string[]>([])
+
+  const COUNTRY_INFO_MAP: Record<string, { flag: string; name: string }> = {
+    TW: { flag: "🇹🇼", name: "台灣" },
+    JP: { flag: "🇯🇵", name: "日本" },
+    KR: { flag: "🇰🇷", name: "韓國" },
+    AT: { flag: "🇦🇹", name: "奧地利" },
+    DE: { flag: "🇩🇪", name: "德國" },
+    FR: { flag: "🇫🇷", name: "法國" },
+    IT: { flag: "🇮🇹", name: "義大利" },
+    ES: { flag: "🇪🇸", name: "西班牙" },
+    NL: { flag: "🇳🇱", name: "荷蘭" },
+    PT: { flag: "🇵🇹", name: "葡萄牙" },
+    GR: { flag: "🇬🇷", name: "希臘" },
+    FI: { flag: "🇫🇮", name: "芬蘭" },
+    CZ: { flag: "🇨🇿", name: "捷克" },
+    HU: { flag: "🇭🇺", name: "匈牙利" },
+    PL: { flag: "🇵🇱", name: "波蘭" },
+    CH: { flag: "🇨🇭", name: "瑞士" },
+    GB: { flag: "🇬🇧", name: "英國" },
+    SE: { flag: "🇸🇪", name: "瑞典" },
+    NO: { flag: "🇳🇴", name: "挪威" },
+    DK: { flag: "🇩🇰", name: "丹麥" },
+    IS: { flag: "🇮🇸", name: "冰島" },
+    HR: { flag: "🇭🇷", name: "克羅埃西亞" },
+    TR: { flag: "🇹🇷", name: "土耳其" },
+    CN: { flag: "🇨🇳", name: "中國" },
+    HK: { flag: "🇭🇰", name: "香港" },
+    MO: { flag: "🇲🇴", name: "澳門" },
+    TH: { flag: "🇹🇭", name: "泰國" },
+    VN: { flag: "🇻🇳", name: "越南" },
+    SG: { flag: "🇸🇬", name: "新加坡" },
+    MY: { flag: "🇲🇾", name: "馬來西亞" },
+    PH: { flag: "🇵🇭", name: "菲律賓" },
+    ID: { flag: "🇮🇩", name: "印尼" },
+    AU: { flag: "🇦🇺", name: "澳洲" },
+    NZ: { flag: "🇳🇿", name: "紐西蘭" },
+    CA: { flag: "🇨🇦", name: "加拿大" },
+  }
+
   const COUNTRY_CURRENCY_MAP: Record<string, { code: string; name: string }> = {
     TW: { code: "TWD", name: "台幣" },
     JP: { code: "JPY", name: "日圓" },
@@ -161,6 +202,31 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     fetchLineLinkStatus()
   }, [tripId])
 
+  // 自動根據 startDate / endDate 天數增減來補齊/裁切每日國家分配陣列
+  useEffect(() => {
+    if (!editForm.startDate || !editForm.endDate) return
+    const start = new Date(editForm.startDate)
+    const end = new Date(editForm.endDate)
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return
+
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+    if (totalDays <= 0) return
+
+    setDailyCountries((prev) => {
+      const next = [...prev]
+      if (next.length < totalDays) {
+        const fallback = countriesList[0] || "TW"
+        const lastVal = next[next.length - 1] || fallback
+        while (next.length < totalDays) {
+          next.push(lastVal)
+        }
+      } else if (next.length > totalDays) {
+        return next.slice(0, totalDays)
+      }
+      return next
+    })
+  }, [editForm.startDate, editForm.endDate, countriesList])
+
   const fetchTrip = async () => {
     try {
       const res = await fetch(`/api/trips/${tripId}`)
@@ -174,6 +240,37 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         endDate: data.endDate.split("T")[0],
         baseCurrency: data.baseCurrency,
       })
+
+      // 解析目的地國家 JSON
+      try {
+        const parsed = JSON.parse(data.countries || "[]")
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          setCountriesList(parsed.list || [])
+          setDailyCountries(parsed.daily || [])
+        } else if (Array.isArray(parsed)) {
+          setCountriesList(parsed)
+          // 均分配套
+          const start = new Date(data.startDate)
+          const end = new Date(data.endDate)
+          const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+          const daily: string[] = []
+          for (let i = 0; i < totalDays; i++) {
+            if (parsed.length === 1) {
+              daily.push(parsed[0])
+            } else if (parsed.length > 1) {
+              const interval = totalDays / parsed.length
+              const countryIdx = Math.min(Math.floor(i / interval), parsed.length - 1)
+              daily.push(parsed[countryIdx])
+            } else {
+              daily.push("TW")
+            }
+          }
+          setDailyCountries(daily)
+        }
+      } catch (e) {
+        setCountriesList([])
+        setDailyCountries([])
+      }
     } catch {
       router.push("/")
     } finally {
@@ -201,10 +298,17 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const saveSettings = async () => {
     setSaving(true)
     try {
+      const payload = {
+        ...editForm,
+        countries: JSON.stringify({
+          list: countriesList,
+          daily: dailyCountries,
+        })
+      }
       await fetch(`/api/trips/${tripId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       })
       fetchTrip()
     } finally {
@@ -607,6 +711,80 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                   onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
               </div>
             </div>
+
+            {/* 每日目的地設定 */}
+            {dailyCountries.length > 0 && (
+              <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                  🗺️ 每日目的地國家設定 (LINE 機器人風景圖與時區依據)
+                </label>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
+                  如果您的行程橫跨多個國家，可以在此為每一天設定主要的國家。機器人會以此為依據來套用該國時區，並自動配置當天的精美風景底圖唷！
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                  {dailyCountries.map((countryCode, idx) => {
+                    const dayNum = idx + 1
+                    let dateLabel = ""
+                    try {
+                      const start = new Date(editForm.startDate)
+                      const d = new Date(start.getTime() + idx * 24 * 60 * 60 * 1000)
+                      dateLabel = `${d.getMonth() + 1}/${d.getDate()}`
+                    } catch {}
+
+                    return (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
+                        background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary-light)' }}>
+                            Day {dayNum}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            ({dateLabel})
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {countriesList.map((c) => {
+                            const info = COUNTRY_INFO_MAP[c.toUpperCase()] || { flag: "🌐", name: c }
+                            const isSelected = countryCode.toUpperCase() === c.toUpperCase()
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => {
+                                  setDailyCountries(prev => {
+                                    const next = [...prev]
+                                    next[idx] = c
+                                    return next
+                                  })
+                                }}
+                                style={{
+                                  padding: '0.25rem 0.5rem', borderRadius: '8px',
+                                  fontSize: '0.65rem', fontWeight: isSelected ? 600 : 400,
+                                  background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.02)',
+                                  border: isSelected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                                  color: isSelected ? '#3b82f6' : 'var(--text-secondary)',
+                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.15rem',
+                                  transition: 'all 0.15s',
+                                  minHeight: 'auto'
+                                }}
+                              >
+                                <span>{info.flag}</span>
+                                <span>{info.name}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             <button onClick={saveSettings} className="btn-primary" disabled={saving}
               style={{ justifyContent: 'center', opacity: saving ? 0.7 : 1 }}>

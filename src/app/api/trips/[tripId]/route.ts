@@ -94,6 +94,7 @@ export async function PUT(
       baseCurrency: body.baseCurrency,
       budgetAmount: body.budgetAmount,
       status: body.status,
+      countries: body.countries,
     },
   })
 

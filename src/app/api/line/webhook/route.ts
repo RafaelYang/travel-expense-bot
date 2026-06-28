@@ -1278,15 +1278,59 @@ const COUNTRY_TIMEZONE_MAP: Record<string, number> = {
   CA: -4, // 加拿大東部 UTC-4
 }
 
+// 智慧解析行程目的地國家與特定當天所屬國家 (支援物件/陣列等新舊格式相容)
+function parseTripCountries(countriesInput: string[] | null | undefined, currentDay: number, totalDays: number): { list: string[], active: string } {
+  try {
+    if (!countriesInput || countriesInput.length === 0) {
+      return { list: [], active: "TW" }
+    }
+
+    // 支援物件格式: {"list": ["AT", "CZ"], "daily": ["AT", "AT", "CZ"]} 封裝在單一元素的陣列中
+    if (countriesInput.length === 1 && countriesInput[0].startsWith("{")) {
+      const parsed = JSON.parse(countriesInput[0])
+      if (parsed && typeof parsed === "object") {
+        const list = parsed.list || []
+        let active = list[0] || "TW"
+        if (parsed.daily && Array.isArray(parsed.daily)) {
+          const dayIdx = currentDay - 1
+          if (dayIdx >= 0 && dayIdx < parsed.daily.length) {
+            active = parsed.daily[dayIdx]
+          } else {
+            active = parsed.daily[parsed.daily.length - 1] || active
+          }
+        }
+        return { list, active }
+      }
+    }
+
+    // 支援舊有陣列格式: ["AT", "CZ", "HU"]
+    const list = countriesInput
+    let active = "TW"
+    if (list.length === 1) {
+      active = list[0]
+    } else if (list.length > 1) {
+      const interval = totalDays / list.length
+      const countryIndex = Math.min(
+        Math.floor((currentDay - 1) / interval),
+        list.length - 1
+      )
+      active = list[countryIndex]
+    }
+    return { list, active }
+  } catch (err) {
+    return { list: countriesInput || [], active: "TW" }
+  }
+}
+
 // 根據記帳紀錄，動態生成行程日期 Quick Reply 項目 (考慮行程目的地當地時區)
 async function getExpensesDatesQuickReply(activeTripId: string, userId: string, trip: any) {
   try {
     // 1. 取得行程主要目的地國家的時區偏移量 (預設台北 UTC+8)
     let activeCountry = "TW"
-    const tripCountries = trip?.countries || []
-    if (tripCountries.length > 0) {
-      activeCountry = tripCountries[0]
-    }
+    try {
+      const { active } = parseTripCountries(trip?.countries, 1, 1)
+      activeCountry = active
+    } catch (e) {}
     const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
 
     // 2. 查詢該行程下該使用者有記帳的日期
@@ -1486,6 +1530,17 @@ async function handleOtherDatesCommand(replyToken: string, user: any) {
   if (!activeTripId) return
 
   try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: activeTripId },
+    })
+
+    let activeCountry = "TW"
+    try {
+      const { active } = parseTripCountries(trip?.countries, 1, 1)
+      activeCountry = active
+    } catch (e) {}
+    const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
+
     // 查詢有記帳記錄的日期
     const expenses = await prisma.expense.findMany({
       where: { tripId: activeTripId, userId: user.id },
@@ -1493,7 +1548,22 @@ async function handleOtherDatesCommand(replyToken: string, user: any) {
       orderBy: { date: "asc" },
     })
 
-    const uniqueDates = Array.from(new Set(expenses.map(e => e.date.toISOString().split("T")[0])))
+    const uniqueDates: string[] = []
+    const seenDates = new Set<string>()
+
+    expenses.forEach((e) => {
+      if (e.date) {
+        try {
+          const localTime = new Date(e.date.getTime() + tzOffsetHours * 60 * 60 * 1000)
+          const dStr = localTime.toISOString().split("T")[0]
+          if (!seenDates.has(dStr)) {
+            seenDates.add(dStr)
+            uniqueDates.push(dStr)
+          }
+        } catch (err) {}
+      }
+    })
+
     if (uniqueDates.length === 0) {
       await replyMessage(replyToken, [
         {
@@ -1553,18 +1623,7 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
     const queryDate = new Date(queryDateStr)
     const currentDay = Math.ceil((queryDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
 
-    let activeCountry = "TW"
-    const tripCountries = trip.countries || []
-    if (tripCountries.length === 1) {
-      activeCountry = tripCountries[0]
-    } else if (tripCountries.length > 1) {
-      const interval = totalDays / tripCountries.length
-      const countryIndex = Math.min(
-        Math.floor((currentDay - 1) / interval),
-        tripCountries.length - 1
-      )
-      activeCountry = tripCountries[countryIndex]
-    }
+    const { list: tripCountries, active: activeCountry } = parseTripCountries(trip.countries, currentDay, totalDays)
 
     const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
 
