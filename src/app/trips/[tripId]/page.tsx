@@ -830,9 +830,9 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
                             {p.amount > 0 && (
                               <text
                                 x={p.x}
-                                y={p.y - 8}
+                                y={p.y - 10}
                                 textAnchor="middle"
-                                fontSize="8"
+                                fontSize="11"
                                 fill="#38bdf8"
                                 fontWeight="700"
                               >
@@ -856,7 +856,7 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
                                 x={p.x}
                                 y="112"
                                 textAnchor="middle"
-                                fontSize="8.5"
+                                fontSize="11"
                                 fill="var(--text-muted)"
                               >
                                 {p.label}
