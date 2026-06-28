@@ -340,3 +340,18 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中新增支援 `countries` 欄位的更新與保存。
 - `src/app/trips/[tripId]/settings/page.tsx` — 新增 countriesList 與 dailyCountries 狀態，實作 useEffect 日期監聽補齊，並在設定 Form 中繪製每日目的地國家設定 UI 與發送 payload。
 - `src/app/api/line/webhook/route.ts` — 統一 Carousel 所有卡片的 `actions` 數量為 2 個（補上「查詢其他日期」按鈕），於記帳錯誤提示與 `handleDirectTextUpdate` 編輯成功回覆中引入 `quickReply` 機制，強化 `handleDateExpensesQuery` 的圖片欄位 `startsWith` 字串防禦，補上出錯回報 `catch` 回覆塊，新增 `getTripTimezoneOffset` 時區檢查機制，定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
+
+- **實作自傳 Base64 圖片代理路由 (Proxy Endpoint for Uploaded Images)**：
+  - 由於 LINE 官方 Carousel 卡片中 `thumbnailImageUrl` 限制必須是 HTTPS 實體圖鏈，若直接帶入儲存於資料庫的 `data:image/...` Base64 資料會導致 LINE API 回報 400 錯。
+  - 新建 `src/app/api/trips/expenses/images/[expenseId]/route.ts` 路由，接受 `index` 參數並讀取資料庫。如果是 Base64 圖片，則自動解碼以二進位流回傳，並自適應設定 `Content-Type` 和 1 天的 `Cache-Control` 快取。
+  - 重構 `handleDateExpensesQuery` 的圖片決策鏈，若有上傳的 Base64 圖片，動態產出代理 HTTPS 網址，徹底解決了「有上傳圖片卻在 LINE 卡片上無法顯示」的 Bug。
+
+- **交通工具細緻意圖匹配 (Transportation Sub-category Matching)**：
+  - 為使記帳品項與圖片背景更加貼合，當花費歸類在 `transport` (交通) 時，新增品項文字智慧偵測：若包含「機票/飛機/航空/flight/plane」等關鍵字，就使用飛機雲海圖；若是其他字樣（如車票、火車、巴士、地鐵等），則自動配發極具質感的「歐洲紅色鐵道風景照」，使用體驗大幅躍升。
+
+- **移除 LINE 不支援的 Markdown 標記格式修正 (Markdown Symbols Cleanup)**：
+  - 移除了連結帳號成功提示、幣別切換成功提示、幣別手動設定範例、金額修改提示中的所有星號 `**` 及反引號 `` ` `` 標記，改以 LINE 能完美原生呈現的乾淨純文字與引號替代。
+
+### 修改的檔案
+- `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流的 API 圖片代理端點。
+- `src/app/api/line/webhook/route.ts` — 修改 `handleDateExpensesQuery` 圖片提取決策鏈，串接圖片 Proxy API 並智慧辨識機票與車票子類別主題圖；移除所有的 Markdown 雙星號及反引號標記。
