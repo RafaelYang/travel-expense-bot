@@ -406,3 +406,19 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 在 `src/lib/i18n.ts` 中分別為中文和英文補齊了 `settings.coverImage.*` 相關的標籤、占位符及提示翻譯字典項目，完美解決原本在畫面上直接裸露顯示 key 的問題。
   - 在「行程設定」頁面中，實作了隱藏的 file input 及本機 FileReader 圖片讀取機制（限制 1.5MB 以內以維護資料庫載入效能）。上傳的圖片會自動編碼為 Base64 寫入 `editForm.coverImage`，並在前端即時呈現預覽，在點選儲存後即可寫入資料庫並於首頁展示。
   - 改善輸入框體驗：若當前設定為上傳圖片（以 `data:` 開頭之 Base64），輸入框會自動防禦性顯示「已選擇本機上傳圖片 (Base64) / [Local Upload Image (Base64)]」並將輸入框設為唯讀狀態，若點按其他精選風景照或預設目的地封面即可清除並重置輸入框，體驗非常滑順。
+
+- **消費花費日期調整功能 (Expense Date Editing on Web & LINE Bot)**：
+  - **後端 API**：修改 `src/app/api/trips/[tripId]/expenses/[expenseId]/route.ts` 中的 updateSchema (Zod) 加上 `date: z.string().optional()`，並在 PATCH 處理中將 data.date 轉為 JavaScript Date 物件更新入庫。
+  - **網頁端 (Web)**：將「所有花費」清單的時間格式由原本的 `M/d HH:mm` 修改為 `yyyy/M/d HH:mm` 以呈現完整年份。在 `EditExpenseModal` 編輯模式中新增了 `<input type="datetime-local">` 消費時間選擇器，並於儲存時經由 PATCH API 將更新日期送出。
+  - **LINE 機器人 (LINE Bot)**：
+    - 在 `handleEditExpenseMenu` 內新增「📅 修改消費日期」按鈕。
+    - 點選後於 `handleEditField` 內動態計算該行程 `startDate` 與 `endDate` 之間的所有天數，產生快速回覆 (Quick Reply) 日期按鈕（例如 6/29），並同時啟動對話式 `VerificationToken` 的 5 分鐘欄位鎖定。
+    - 點選日期 Quick Reply 後會發送 Postback `action=update_field&field=date&value=2026-06-29`，經由 `handleUpdateField` 解析日期並寫入資料庫。
+    - 若使用者在對話框直接打字，會在 `handleDirectTextUpdate` 被攔截。實作了 `parseUserDateInput` 輔助函數，支援年/月/日、月/日，以及單一日期數字（自動以出發月份為基準補齊）的智慧解析。
+    - 修正了 LINE 機器人在修改品項、金額、日期等欄位後，因為使用舊 `expense` 物件渲染導致推播明細卡片沒同步更新的歷史 Bug，全面改用資料庫 update 後的 latest expense，提供 100% 準確的即時卡片更新回饋！
+
+- **花費統計改版：今日花費改為每日花費折線圖 (Chart Refactoring for Stats Modal)**：
+  - **語言字典**：於 `src/lib/i18n.ts` 中新增了 `trip.dailySpendTrend` 鍵值（中文：「📈 每日花費趨勢」，英文：「📈 Daily Spend Trend」）。
+  - **資料處理**：在 `src/app/trips/[tripId]/page.tsx` 中實作了行程每日消費的聚合邏輯，並對 `convertedAmount` 設計了防禦性 null/undefined fallback機制。
+  - **圖表繪製**：在統計 Modal（`StatsModal`）中移除了原本的 `📅 今日花費` 列表區塊，並引入一個以純 SVG ＋ CSS 漸變陰影填充繪製的極精緻「每日花費折線圖」。
+  - **極致設計細節**：折線圖支援單日金額大於 1000 時自動精簡為 `k`（如 `1.5k`）顯示，防堵長數字重疊擠壓；若當天無消費則僅顯示微小灰色圓點不標示金額；X 軸日期 label 依據行程天數大小自適應抽樣（例如大於 12 天時隔天抽樣），防堵標籤擠壓。

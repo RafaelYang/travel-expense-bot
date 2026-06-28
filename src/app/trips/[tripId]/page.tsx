@@ -174,6 +174,50 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
   const todayExpenses = trip.expenses.filter(e => isToday(new Date(e.date)))
   const todayTotal = todayExpenses.reduce((sum, e) => sum + e.amount, 0)
   const totalDays = differenceInDays(new Date(trip.endDate), new Date(trip.startDate)) + 1
+
+  // 產生每日花費折線圖數據
+  const chartDays: { label: string; dateStr: string; amount: number }[] = []
+  try {
+    const start = new Date(trip.startDate)
+    const end = new Date(trip.endDate)
+    let current = new Date(start)
+    let count = 0
+    while (current <= end && count < 31) {
+      const yyyy = current.getFullYear()
+      const mm = String(current.getMonth() + 1).padStart(2, '0')
+      const dd = String(current.getDate()).padStart(2, '0')
+      const dateStr = `${yyyy}-${mm}-${dd}`
+      const label = `${current.getMonth() + 1}/${current.getDate()}`
+      
+      const dayAmount = trip.expenses
+        .filter(e => {
+          const eDate = new Date(e.date)
+          const ey = eDate.getFullYear()
+          const em = String(eDate.getMonth() + 1).padStart(2, '0')
+          const ed = String(eDate.getDate()).padStart(2, '0')
+          return `${ey}-${em}-${ed}` === dateStr
+        })
+        .reduce((sum, e) => sum + (e.convertedAmount ?? e.amount ?? 0), 0)
+        
+      chartDays.push({ label, dateStr, amount: Math.round(dayAmount) })
+      current.setDate(current.getDate() + 1)
+      count++
+    }
+  } catch (err) {
+    console.error("Chart data error:", err)
+  }
+
+  const maxChartAmount = Math.max(...chartDays.map(d => d.amount), 1000)
+  const chartPoints = chartDays.map((d, i) => {
+    const x = chartDays.length > 1
+      ? 20 + (i / (chartDays.length - 1)) * 320
+      : 180
+    const y = 90 - (d.amount / maxChartAmount) * 70
+    return { x, y, amount: d.amount, label: d.label }
+  })
+  
+  const chartLinePath = chartPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+  const chartAreaPath = chartPoints.length > 0 ? `${chartLinePath} L ${chartPoints[chartPoints.length - 1].x} 90 L ${chartPoints[0].x} 90 Z` : ''
   const daysPassed = Math.max(0, differenceInDays(new Date(), new Date(trip.startDate)) + 1)
   const budget = trip.budgetAmount || 0
   const canEdit = trip.userRole !== 'viewer'
@@ -715,29 +759,96 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
                 </div>
               )}
 
-              {/* 今日花費 */}
-              {todayExpenses.length > 0 && (
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    marginBottom: '0.75rem',
-                  }}>
-                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700 }}>
-                      {t('trip.today')}
-                    </h4>
-                    <span style={{
-                      fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary-light)',
-                    }}>
-                      {getCurrencySymbol(trip.baseCurrency)}{todayTotal.toLocaleString()}
-                    </span>
+              {/* 每日花費趨勢折線圖 */}
+              <div style={{ marginBottom: '1.25rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '12px', padding: '1rem' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                  {t('trip.dailySpendTrend')} ({getCurrencySymbol(trip.baseCurrency)})
+                </h4>
+                
+                {chartDays.length > 0 ? (
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <svg width="100%" height="125" viewBox="0 0 360 125" style={{ overflow: 'visible' }}>
+                      <defs>
+                        <linearGradient id="chart-grad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.25" />
+                          <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
+                      
+                      {/* 網格背景線 */}
+                      <line x1="15" y1="20" x2="345" y2="20" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
+                      <line x1="15" y1="55" x2="345" y2="55" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
+                      <line x1="15" y1="90" x2="345" y2="90" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
+
+                      {/* 陰影填充區域 */}
+                      {chartPoints.length > 0 && (
+                        <path d={chartAreaPath} fill="url(#chart-grad)" />
+                      )}
+
+                      {/* 趨勢折線 */}
+                      {chartPoints.length > 0 && (
+                        <path
+                          d={chartLinePath}
+                          fill="none"
+                          stroke="#0ea5e9"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      )}
+
+                      {/* 資料點與金額文字 */}
+                      {chartPoints.map((p, i) => {
+                        const showLabel = chartDays.length <= 10 || i % Math.ceil(chartDays.length / 8) === 0 || i === chartDays.length - 1
+                        return (
+                          <g key={i}>
+                            {/* 金額標籤 (僅大於 0 時顯示) */}
+                            {p.amount > 0 && (
+                              <text
+                                x={p.x}
+                                y={p.y - 8}
+                                textAnchor="middle"
+                                fontSize="8"
+                                fill="#38bdf8"
+                                fontWeight="700"
+                              >
+                                {p.amount >= 1000 ? `${(p.amount / 1000).toFixed(1)}k` : p.amount}
+                              </text>
+                            )}
+                            
+                            {/* 圓點節點 */}
+                            <circle
+                              cx={p.x}
+                              cy={p.y}
+                              r={p.amount > 0 ? "4" : "2"}
+                              fill={p.amount > 0 ? "#0ea5e9" : "var(--text-muted)"}
+                              stroke={p.amount > 0 ? "#fff" : "none"}
+                              strokeWidth="1.5"
+                            />
+                            
+                            {/* 日期 X 軸 Label */}
+                            {showLabel && (
+                              <text
+                                x={p.x}
+                                y="112"
+                                textAnchor="middle"
+                                fontSize="8.5"
+                                fill="var(--text-muted)"
+                              >
+                                {p.label}
+                              </text>
+                            )}
+                          </g>
+                        )
+                      })}
+                    </svg>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {todayExpenses.map(expense => (
-                      <ExpenseRow key={expense.id} expense={expense} currency={trip.baseCurrency} />
-                    ))}
+                ) : (
+                  <div style={{ height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                    暫無每日花費數據
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* 分類統計 */}
               {categoryStats.length > 0 && (
