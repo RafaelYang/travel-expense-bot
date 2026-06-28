@@ -72,13 +72,30 @@ export async function POST(req: NextRequest) {
     const tripCurrencies = getCurrenciesFromCountries(data.countries)
     const defaultCurrency = tripCurrencies[0] || data.baseCurrency
 
+    // 計算行程天數，並預設初始化每一天的目的地為第一個國家
+    const start = new Date(data.startDate)
+    const end = new Date(data.endDate)
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+    const firstCountry = data.countries[0] || "TW"
+    const daily: string[] = []
+    for (let i = 0; i < totalDays; i++) {
+      daily.push(firstCountry)
+    }
+
+    const countriesPayload = [
+      JSON.stringify({
+        list: data.countries,
+        daily,
+      })
+    ]
+
     const trip = await prisma.trip.create({
       data: {
         name: data.name,
         description: data.description,
         startDate: new Date(data.startDate),
         endDate: new Date(data.endDate),
-        countries: data.countries,
+        countries: countriesPayload,
         defaultCurrency,
         baseCurrency: data.baseCurrency,
         members: {
