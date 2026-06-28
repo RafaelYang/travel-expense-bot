@@ -352,7 +352,10 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - **移除 LINE 不支援的 Markdown 標記格式修正 (Markdown Symbols Cleanup)**：
   - 移除了連結帳號成功提示、幣別切換成功提示、幣別手動設定範例、金額修改提示中的所有星號 `**` 及反引號 `` ` `` 標記，改以 LINE 能完美原生呈現的乾淨純文字與引號替代。
 
+- **幣種設定選單說明優化 (Currency Selector Instructions Optimization)**：
+  - 為了在使用者開啟「幣種設定」時提供更明確的 UI 指引，於 `/currency` 的手動切換說明文字中，新增「請選擇下方快速選單進行切換，帶有 ⭐ 的按鈕即代表目前的記帳幣別」的溫馨說明。
+
 ### 修改的檔案
 - `upload-rich-menu.js` — 修改左下角按鈕對應的 Action 動作為發送 `/currency` 文字訊息。
-- `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流的 API 圖片代理端點。
-- `src/app/api/line/webhook/route.ts` — 修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
+- `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流 the API 圖片代理端點。
+- `src/app/api/line/webhook/route.ts` — 於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式（由 `/0` 改為 `?index=0`），解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
