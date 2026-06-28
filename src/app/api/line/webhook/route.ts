@@ -1761,6 +1761,11 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
             label: "📊 前往網頁看完整帳本",
             uri: `https://travel-expense-bot-steel.vercel.app/trips/${trip.id}`,
           },
+          {
+            type: "message",
+            label: "📅 查詢其他日期",
+            text: "/expenses_other_dates",
+          },
         ],
       })
     }
@@ -1776,6 +1781,11 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
           type: "uri",
           label: "📊 前往網頁看完整帳本",
           uri: `https://travel-expense-bot-steel.vercel.app/trips/${trip.id}`,
+        },
+        {
+          type: "message",
+          label: "📅 查詢其他日期",
+          text: "/expenses_other_dates",
         },
       ],
     })
