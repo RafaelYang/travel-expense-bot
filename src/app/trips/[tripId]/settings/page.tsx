@@ -241,35 +241,49 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         baseCurrency: data.baseCurrency,
       })
 
-      // 解析目的地國家 JSON
-      try {
-        const parsed = JSON.parse(data.countries || "[]")
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          setCountriesList(parsed.list || [])
-          setDailyCountries(parsed.daily || [])
-        } else if (Array.isArray(parsed)) {
-          setCountriesList(parsed)
-          // 均分配套
-          const start = new Date(data.startDate)
-          const end = new Date(data.endDate)
-          const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-          const daily: string[] = []
-          for (let i = 0; i < totalDays; i++) {
-            if (parsed.length === 1) {
-              daily.push(parsed[0])
-            } else if (parsed.length > 1) {
-              const interval = totalDays / parsed.length
-              const countryIdx = Math.min(Math.floor(i / interval), parsed.length - 1)
-              daily.push(parsed[countryIdx])
-            } else {
-              daily.push("TW")
+      // 遞迴解包與淨化目的地國家 (防止滾雪球式嵌套髒資料)
+      const cleanExtractCountries = (input: string[] | null | undefined): { list: string[], daily: string[] } => {
+        if (!input || input.length === 0) return { list: [], daily: [] }
+        const first = input[0]
+        if (first && typeof first === "string" && first.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(first)
+            if (parsed && typeof parsed === "object") {
+              if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
+                return cleanExtractCountries(parsed.list)
+              }
+              const list = (parsed.list || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+              const daily = (parsed.daily || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+              return { list, daily }
             }
-          }
-          setDailyCountries(daily)
+          } catch {}
         }
-      } catch (e) {
-        setCountriesList([])
-        setDailyCountries([])
+        const list = input.filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+        return { list, daily: [] }
+      }
+
+      const { list: cleanList, daily: cleanDaily } = cleanExtractCountries(data.countries)
+      setCountriesList(cleanList)
+
+      if (cleanDaily.length > 0) {
+        setDailyCountries(cleanDaily)
+      } else {
+        const start = new Date(data.startDate)
+        const end = new Date(data.endDate)
+        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+        const daily: string[] = []
+        for (let i = 0; i < totalDays; i++) {
+          if (cleanList.length === 1) {
+            daily.push(cleanList[0])
+          } else if (cleanList.length > 1) {
+            const interval = totalDays / cleanList.length
+            const countryIdx = Math.min(Math.floor(i / interval), cleanList.length - 1)
+            daily.push(cleanList[countryIdx])
+          } else {
+            daily.push("TW")
+          }
+        }
+        setDailyCountries(daily)
       }
     } catch {
       router.push("/")
@@ -300,10 +314,12 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     try {
       const payload = {
         ...editForm,
-        countries: JSON.stringify({
-          list: countriesList,
-          daily: dailyCountries,
-        })
+        countries: [
+          JSON.stringify({
+            list: countriesList,
+            daily: dailyCountries,
+          })
+        ]
       }
       await fetch(`/api/trips/${tripId}`, {
         method: "PUT",

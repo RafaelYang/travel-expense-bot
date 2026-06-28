@@ -1422,40 +1422,53 @@ function parseTripCountries(countriesInput: string[] | null | undefined, current
       return { list: [], active: "TW" }
     }
 
-    // 支援物件格式: {"list": ["AT", "CZ"], "daily": ["AT", "AT", "CZ"]} 封裝在單一元素的陣列中
-    if (countriesInput.length === 1 && countriesInput[0].startsWith("{")) {
-      const parsed = JSON.parse(countriesInput[0])
-      if (parsed && typeof parsed === "object") {
-        const list = parsed.list || []
-        let active = list[0] || "TW"
-        if (parsed.daily && Array.isArray(parsed.daily)) {
-          const dayIdx = currentDay - 1
-          if (dayIdx >= 0 && dayIdx < parsed.daily.length) {
-            active = parsed.daily[dayIdx]
-          } else {
-            active = parsed.daily[parsed.daily.length - 1] || active
+    // 遞迴安全解碼，將可能被多次包裝的字串完全解開至最底層
+    const cleanExtract = (input: string[]): { list: string[], daily: string[] } => {
+      if (!input || input.length === 0) return { list: [], daily: [] }
+      const first = input[0]
+      if (first && typeof first === "string" && first.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(first)
+          if (parsed && typeof parsed === "object") {
+            if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
+              return cleanExtract(parsed.list)
+            }
+            const list = (parsed.list || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+            const daily = (parsed.daily || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+            return { list, daily }
           }
-        }
-        return { list, active }
+        } catch {}
+      }
+      const list = input.filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+      return { list, daily: [] }
+    }
+
+    const { list: cleanList, daily: cleanDaily } = cleanExtract(countriesInput)
+
+    let active = cleanList[0] || "TW"
+    if (cleanDaily.length > 0) {
+      const dayIdx = currentDay - 1
+      if (dayIdx >= 0 && dayIdx < cleanDaily.length) {
+        active = cleanDaily[dayIdx]
+      } else {
+        active = cleanDaily[cleanDaily.length - 1] || active
+      }
+    } else {
+      if (cleanList.length === 1) {
+        active = cleanList[0]
+      } else if (cleanList.length > 1) {
+        const interval = totalDays / cleanList.length
+        const countryIndex = Math.min(
+          Math.floor((currentDay - 1) / interval),
+          cleanList.length - 1
+        )
+        active = cleanList[countryIndex]
       }
     }
 
-    // 支援舊有陣列格式: ["AT", "CZ", "HU"]
-    const list = countriesInput
-    let active = "TW"
-    if (list.length === 1) {
-      active = list[0]
-    } else if (list.length > 1) {
-      const interval = totalDays / list.length
-      const countryIndex = Math.min(
-        Math.floor((currentDay - 1) / interval),
-        list.length - 1
-      )
-      active = list[countryIndex]
-    }
-    return { list, active }
+    return { list: cleanList, active }
   } catch (err) {
-    return { list: countriesInput || [], active: "TW" }
+    return { list: [], active: "TW" }
   }
 }
 

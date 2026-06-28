@@ -83,6 +83,11 @@ export async function PUT(
   }
 
   const body = await req.json()
+  let countriesPayload = body.countries
+  if (typeof countriesPayload === "string") {
+    countriesPayload = [countriesPayload]
+  }
+
   const trip = await prisma.trip.update({
     where: { id: tripId },
     data: {
@@ -94,7 +99,7 @@ export async function PUT(
       baseCurrency: body.baseCurrency,
       budgetAmount: body.budgetAmount,
       status: body.status,
-      countries: body.countries,
+      countries: countriesPayload,
     },
   })
 
