@@ -308,3 +308,22 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - `src/app/trips/[tripId]/settings/page.tsx` — 網頁端連動 UI 擴充 lineCurrency 狀態、getTripCurrencies 獲取可用幣別與 updateLineCurrency 一鍵點擊切換。
 - `src/app/api/line/webhook/route.ts` — 實作 /expenses 日期選單、handleDateExpensesQuery 卡片輪播（智慧國家風景圖均分與總結卡防呆）、handleDeleteExpense 一鍵刪除、handleEditField / handleDirectTextUpdate 的 Stateless 鎖定與文字輸入攔截。
 - `upload-rich-menu.js` — 重新適應最新的 2x2 圖文選單切割坐標與 Actions 綁定。
+
+## 2026-06-28 — 智慧時區自適應查詢與網頁版自訂每日目的地國家
+### 修改概述
+- **網頁端自訂每日目的地國家**：
+  - 在網頁版 **「行程設定 (Settings)」** 頁面基本資料區塊內，新增 **「🗺️ 每日目的地國家設定」** 控制介面。
+  - 對於行程每一天（如 Day 1, Day 2），列出行程已選取的所有目的地國家（如 🇹🇼 台灣、🇯🇵 日本），並以漂亮的國旗圓角按鈕呈現。使用者點選即可指定當日目的地。
+  - 監聽行程時間變動，當行程日期（開始或結束日期）修改時，自動智慧增刪並補齊 dailyCountries 陣列長度。
+  - **資料庫兼容存儲**：將每日分配表與國家列表以 JSON 結構包裝並儲存於 Prisma 的 `countries` (PostgreSQL `String[]` 陣列的第一個元素中)，實現 **0 資料庫 Migration 開銷** 下的 100% 向後相容。
+- **LINE Webhook 主要目的地時區自適應 (Timezone Offset Adaptive)**：
+  - 新增 `COUNTRY_TIMEZONE_MAP` 全球主要國家時區對照表。
+  - 重構 `parseTripCountries` 小工具，支援陣列/物件等多元 JSON 格式相容，取得特定天數的 `activeCountry` 目的地。
+  - 在 `getExpensesDatesQuickReply` 與 `handleOtherDatesCommand` 生成日期選單時，將消費記錄的 UTC 時間轉為「目的地當天時區」日期字串進行本地化歸類，避免跨時區造成的日期拆分錯誤。
+  - 在 `handleDateExpensesQuery` 查詢當天消費卡片時，先獲取當天的目的地時區偏移，動態偏移 `startOfDay` 與 `endOfDay` 對資料庫進行精確 UTC 時間點區間查詢，**徹底防範跨時區（特別是清晨或深夜）記帳的歸類錯置**。
+- **全域 Quick Reply 安全防錯**：在 `replyMessage` 發送端新增自動過濾器，若 `quickReply.items` 為空，將在發送前將其自動移除，防範 LINE HTTP 400 報錯。
+
+### 修改的檔案
+- `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中新增支援 `countries` 欄位的更新與保存。
+- `src/app/trips/[tripId]/settings/page.tsx` — 新增 countriesList 與 dailyCountries 狀態，實作 useEffect 日期監聽補齊，並在設定 Form 中繪製每日目的地國家設定 UI 與發送 payload。
+- `src/app/api/line/webhook/route.ts` — 定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
