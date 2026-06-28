@@ -1746,7 +1746,7 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
         if (images[0].startsWith("http")) {
           imageUrl = images[0]
         } else if (images[0].startsWith("data:image")) {
-          imageUrl = `${currentOrigin}/api/trips/expenses/images/${exp.id}/0`
+          imageUrl = `${currentOrigin}/api/trips/expenses/images/${exp.id}?index=0`
         }
       } else {
         if (exp.category === "transport") {
