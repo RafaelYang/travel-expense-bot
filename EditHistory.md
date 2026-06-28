@@ -324,6 +324,7 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - **全域 Quick Reply 安全防錯**：在 `replyMessage` 發送端新增自動過濾器，若 `quickReply.items` 為空，將在發送前將其自動移除，防範 LINE HTTP 400 報錯。
 
 ### 修改的檔案
+- `src/app/api/trips/route.ts` — 在 POST 新增行程 API 中，根據行程起訖日數，將所有天數的 dailyCountries 預設初始化為第一個目的地國家，完全停用自動均分。
 - `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中新增支援 `countries` 欄位的更新與保存。
 - `src/app/trips/[tripId]/settings/page.tsx` — 新增 countriesList 與 dailyCountries 狀態，實作 useEffect 日期監聽補齊，並在設定 Form 中繪製每日目的地國家設定 UI 與發送 payload。
 - `src/app/api/line/webhook/route.ts` — 定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
