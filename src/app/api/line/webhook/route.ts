@@ -430,7 +430,7 @@ async function handleUserLinkCommand(replyToken: string, lineUserId: string, tok
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `🎉 帳號連結成功！\n\n您的 LINE 帳號已順利與網頁端帳號連動。${activeTripText}\n\n📌 常用功能指令：\n- 直接輸入「品項 金額」即可記帳！\n- 傳送 \`/status\` 查詢目前鎖定的記帳行程。\n- 傳送 \`/list\` 可切換其他行程。`,
+        text: `🎉 帳號連結成功！\n\n您的 LINE 帳號已順利與網頁端帳號連動。${activeTripText}\n\n📌 常用功能指令：\n- 直接輸入「品項 金額」即可記帳！\n- 傳送 /status 查詢目前鎖定的記帳行程。\n- 傳送 /list 可切換其他行程。`,
       },
     ])
   } catch (err: any) {
@@ -1164,7 +1164,7 @@ async function handleCurrencyCommand(replyToken: string, user: any, targetCurren
         .filter(Boolean)
         .join("、")
 
-      let instruction = `💡 想要手動切換其他幣別？\n請直接輸入：\n/currency [三碼幣別] (不限大小寫)\n\n📝 範例：\n- \`/currency GBP\` (切換為英鎊)\n- \`/currency HKD\` (切換為港幣)`
+      let instruction = `💡 想要手動切換其他幣別？\n請直接輸入：\n/currency [三碼幣別] (不限大小寫)\n\n📝 範例：\n- /currency GBP (切換為英鎊)\n- /currency HKD (切換為港幣)`
       if (currencyList) {
         instruction += `\n\n📌 此行程目的地幣別：${currencyList}`
       }
@@ -1193,7 +1193,7 @@ async function handleCurrencyCommand(replyToken: string, user: any, targetCurren
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `💱 幣別切換成功！\n\n您在 LINE 的預設記帳幣別已鎖定為 **${displayName}**。\n\n接下來您直接傳送金額（例如：\`拉麵 1500\`），將會自動記為 ${targetCurrency} 唷！`,
+        text: `💱 幣別切換成功！\n\n您在 LINE 的預設記帳幣別已鎖定為 ${displayName}。\n\n接下來您直接傳送金額（例如：拉麵 1500），將會自動記為 ${targetCurrency} 唷！`,
         quickReply: await getQuickReply(trip, targetCurrency),
       },
     ])
@@ -1960,7 +1960,7 @@ async function handleEditField(replyToken: string, lineUserId: string, field: st
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: `💰 請直接輸入新金額數字（我們將維持原本的 ${expense.currency}，例如：\`1250\`）：`,
+          text: `💰 請直接輸入新金額數字（我們將維持原本的 ${expense.currency}，例如：1250）：`,
         },
       ])
     } else if (field === "category") {
@@ -2103,7 +2103,7 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: `💱 幣別修改成功！\n\n【${expense.item}】的記帳幣別已改為 **${displayName}**。\n💰 金額：${expense.amount} ${value}\n💱 換算台幣：${convertedAmount} TWD (匯率 ${exchangeRate})`,
+          text: `💱 幣別修改成功！\n\n【${expense.item}】的記帳幣別已改為 ${displayName}。\n💰 金額：${expense.amount} ${value}\n💱 換算台幣：${convertedAmount} TWD (匯率 ${exchangeRate})`,
           quickReply: await getQuickReply(trip, userActiveCurrency),
         },
       ])
