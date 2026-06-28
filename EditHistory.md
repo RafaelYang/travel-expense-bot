@@ -278,10 +278,13 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - `src/app/trips/[tripId]/settings/page.tsx` — 簡化連動 UI，依帳號連動狀態提供相應引導與一鍵設定按鈕
 - `src/lib/i18n.ts` — 擴充全域選單、Modal 與行程狀態的多語系翻譯詞條
 
-## 2026-06-28 — LINE 圖片記帳防呆與多筆選單
+## 2026-06-28 — LINE 圖片記帳防呆與多筆選單 & 自動目的地幣別 Quick Reply
 ### 修改概述
 - **LINE 傳送圖片自動附加**：Webhook 新增處理 `image` 類型訊息，自動下載圖片並轉為 Base64 Data URL 寫入 Expense 資料庫，前端網頁直接無縫支援。
 - **多筆記帳嚴謹防呆**：當使用者在最近 10 分鐘內有多筆記帳時，系統會自動回應 Buttons Template 按鈕選單，讓使用者在 LINE 對話中一鍵挑選這張收據/圖片屬於哪一筆消費，徹底避免錯置。
+- **自動目的地幣別與 Quick Reply 切換**：
+  - 新增 `/currency [三碼]` 與 `/currency` 指令，支援在 LINE 快速切換與鎖定預設記帳幣別，利用狀態編碼（`tripId:currency`）技術實現免 Migration 輕量儲存。
+  - 當使用者記帳成功或查詢 `/status` 時，系統會**自動對照行程目的地國家的法定貨幣**（例如去奧、捷、匈，會自動出現歐元 EUR、克朗 CZK、福林 HUF），並與台灣人常用 4 種幣別（台幣、日圓、美金、歐元）合併去重，以 **中文+英文（如：⭐ 歐元 EUR）** 的 LINE 快速回覆 (Quick Reply) 按鈕呈現於鍵盤上方，點選即可一鍵切換。
 
 ### 修改的檔案
-- `src/app/api/line/webhook/route.ts` — 新增處理 `image` 訊息事件、`saveLineImageToExpense` 下載與附加函數，並擴充 Postback 支援 `action=attach_image`。
+- `src/app/api/line/webhook/route.ts` — 實作處理 `image` 事件、`saveLineImageToExpense`、新增 `/currency` 指令、自動目的地對照 `getQuickReply` 函數。

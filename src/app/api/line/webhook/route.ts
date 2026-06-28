@@ -160,6 +160,14 @@ async function handleTextMessage(event: any) {
     return
   }
 
+  // 4.1 處理幣別設定指令：/currency [幣別]
+  const currencyMatch = text.match(/^\/currency(?:\s+([a-zA-Z]{3}))?$/i)
+  if (currencyMatch) {
+    const targetCurrency = currencyMatch[1] ? currencyMatch[1].toUpperCase() : null
+    await handleCurrencyCommand(replyToken, user, targetCurrency)
+    return
+  }
+
   // 5. 一般記帳流程
   if (!user) {
     await replyMessage(replyToken, [
@@ -171,7 +179,20 @@ async function handleTextMessage(event: any) {
     return
   }
 
-  const activeTripId = user.lineBotState?.activeTripId
+  const activeTripState = user.lineBotState?.activeTripId // 例如 "trip-uuid-123:JPY" 或 "trip-uuid-123"
+  let activeTripId = null
+  let userActiveCurrency = null
+
+  if (activeTripState) {
+    if (activeTripState.includes(":")) {
+      const parts = activeTripState.split(":")
+      activeTripId = parts[0]
+      userActiveCurrency = parts[1]
+    } else {
+      activeTripId = activeTripState
+    }
+  }
+
   if (!activeTripId) {
     await replyMessage(replyToken, [
       {
@@ -188,7 +209,7 @@ async function handleTextMessage(event: any) {
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: "💡 LINE 快速記帳格式：\n[品項] [金額] [幣別(選填)]\n\n📝 範例：\n- 拉麵 1500 JPY\n- 捷運 35\n- 樂高 100 USD\n\n📌 常用指令：\n- `/status`：查詢目前連動行程\n- `/list`：列出行程並一鍵切換",
+        text: "💡 LINE 快速記帳格式：\n[品項] [金額] [幣別(選填)]\n\n📝 範例：\n- 拉麵 1500 JPY\n- 捷運 35\n- 樂高 100 USD\n\n📌 常用指令：\n- `/status`：查詢目前連動行程\n- `/list`：列出行程並一鍵切換\n- 點選下方快速選單切換記帳幣別",
       },
     ])
     return
@@ -196,7 +217,7 @@ async function handleTextMessage(event: any) {
 
   const item = expenseMatch[1].trim()
   const amount = parseFloat(expenseMatch[2])
-  const currency = (expenseMatch[3] || "TWD").toUpperCase()
+  let currency = (expenseMatch[3] || "").toUpperCase()
 
   try {
     const trip = await prisma.trip.findUnique({
@@ -211,6 +232,11 @@ async function handleTextMessage(event: any) {
         },
       ])
       return
+    }
+
+    // 推斷幣別優先順序：1. LINE 當前選用幣別 -> 2. 行程預設幣別 -> 3. 台幣 TWD
+    if (!currency) {
+      currency = (userActiveCurrency || trip.defaultCurrency || "TWD").toUpperCase()
     }
 
     const category = getAutoCategory(item)
@@ -263,6 +289,7 @@ async function handleTextMessage(event: any) {
       {
         type: "text",
         text: replyText,
+        quickReply: await getQuickReply(trip, userActiveCurrency),
       },
     ])
   } catch (err: any) {
@@ -447,7 +474,20 @@ async function handleStatusCommand(replyToken: string, user: any) {
     return
   }
 
-  const activeTripId = user.lineBotState?.activeTripId
+  const activeTripState = user.lineBotState?.activeTripId
+  let activeTripId = null
+  let userActiveCurrency = null
+
+  if (activeTripState) {
+    if (activeTripState.includes(":")) {
+      const parts = activeTripState.split(":")
+      activeTripId = parts[0]
+      userActiveCurrency = parts[1]
+    } else {
+      activeTripId = activeTripState
+    }
+  }
+
   if (!activeTripId) {
     await replyMessage(replyToken, [
       {
@@ -477,17 +517,24 @@ async function handleStatusCommand(replyToken: string, user: any) {
     const startFmt = trip.startDate.toISOString().split("T")[0].replace(/-/g, "/")
     const endFmt = trip.endDate.toISOString().split("T")[0].replace(/-/g, "/")
 
-    let replyText = `📌 目前預設 LINE 記帳行程：\n\n✈️【${trip.name}】\n📅 時間：${startFmt} - ${endFmt}\n🧭 狀態：${dayInfo.dayText}`
+    const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || "TWD"
+    const currencyName = ALL_CURRENCY_NAMES[activeCurrencyCode.toUpperCase()] || ""
+    const currencyLabel = userActiveCurrency
+      ? `${currencyName} (${activeCurrencyCode})`
+      : `${currencyName} (${activeCurrencyCode}) [行程預設]`
+
+    let replyText = `📌 目前預設 LINE 記帳行程：\n\n✈️【${trip.name}】\n📅 時間：${startFmt} - ${endFmt}\n🧭 狀態：${dayInfo.dayText}\n💱 LINE 預設幣別：${currencyLabel}`
     if (dayInfo.status !== "active") {
       replyText += `\n\n${dayInfo.message}`
     }
 
-    replyText += `\n\n💡 提示：可以直接在 LINE 中傳送「品項 金額」記帳；傳送 \`/list\` 則可以隨時切換行程！`
+    replyText += `\n\n💡 提示：可以直接傳送「品項 金額」記帳；點選下方鍵盤上方按鈕，可快速切換該行程的目的地幣別！`
 
     await replyMessage(replyToken, [
       {
         type: "text",
         text: replyText,
+        quickReply: await getQuickReply(trip, userActiveCurrency),
       },
     ])
   } catch (err: any) {
@@ -819,6 +866,259 @@ async function saveLineImageToExpense(replyToken: string, expenseId: string, mes
       {
         type: "text",
         text: `❌ 下載或附加圖片失敗：${err.message}`,
+      },
+    ])
+  }
+}
+
+// ==========================================
+// 幣別切換與國家對應相關常數與函數
+// ==========================================
+
+// 國家代碼與貨幣中文對照表
+const COUNTRY_CURRENCY_MAP: Record<string, { currency: string; name: string }> = {
+  TW: { currency: "TWD", name: "台幣" },
+  JP: { currency: "JPY", name: "日圓" },
+  US: { currency: "USD", name: "美金" },
+  AT: { currency: "EUR", name: "歐元" }, // 奧地利
+  DE: { currency: "EUR", name: "歐元" }, // 德國
+  FR: { currency: "EUR", name: "歐元" }, // 法國
+  IT: { currency: "EUR", name: "歐元" }, // 義大利
+  ES: { currency: "EUR", name: "歐元" }, // 西班牙
+  NL: { currency: "EUR", name: "歐元" }, // 荷蘭
+  PT: { currency: "EUR", name: "歐元" }, // 葡萄牙
+  GR: { currency: "EUR", name: "歐元" }, // 希臘
+  FI: { currency: "EUR", name: "歐元" }, // 芬蘭
+  CZ: { currency: "CZK", name: "克朗" }, // 捷克
+  HU: { currency: "HUF", name: "福林" }, // 匈牙利
+  PL: { currency: "PLN", name: "茲羅提" }, // 波蘭
+  CH: { currency: "CHF", name: "法郎" }, // 瑞士
+  GB: { currency: "GBP", name: "英鎊" }, // 英國
+  SE: { currency: "SEK", name: "克朗" }, // 瑞典
+  NO: { currency: "NOK", name: "克朗" }, // 挪威
+  DK: { currency: "DKK", name: "克朗" }, // 丹麥
+  IS: { currency: "ISK", name: "克朗" }, // 冰島
+  HR: { currency: "EUR", name: "歐元" }, // 克羅埃西亞
+  TR: { currency: "TRY", name: "里拉" }, // 土耳其
+  KR: { currency: "KRW", name: "韓元" }, // 韓國
+  CN: { currency: "CNY", name: "人民幣" },
+  HK: { currency: "HKD", name: "港幣" },
+  MO: { currency: "MOP", name: "澳門幣" },
+  TH: { currency: "THB", name: "泰銖" },
+  VN: { currency: "VND", name: "越南盾" },
+  SG: { currency: "SGD", name: "新幣" },
+  MY: { currency: "MYR", name: "馬幣" },
+  PH: { currency: "PHP", name: "披索" },
+  ID: { currency: "IDR", name: "印尼盾" },
+  AU: { currency: "AUD", name: "澳幣" },
+  NZ: { currency: "NZD", name: "紐幣" },
+  CA: { currency: "CAD", name: "加幣" },
+}
+
+const COMMON_CURRENCIES = [
+  { currency: "TWD", name: "台幣" },
+  { currency: "JPY", name: "日圓" },
+  { currency: "USD", name: "美金" },
+  { currency: "EUR", name: "歐元" },
+]
+
+const ALL_CURRENCY_NAMES: Record<string, string> = {
+  TWD: "台幣",
+  JPY: "日圓",
+  USD: "美金",
+  EUR: "歐元",
+  CZK: "克朗",
+  HUF: "福林",
+  PLN: "茲羅提",
+  CHF: "法郎",
+  GBP: "英鎊",
+  SEK: "克朗",
+  NOK: "克朗",
+  DKK: "克朗",
+  ISK: "克朗",
+  TRY: "里拉",
+  KRW: "韓元",
+  CNY: "人民幣",
+  HKD: "港幣",
+  MOP: "澳門幣",
+  THB: "泰銖",
+  VND: "越南盾",
+  SGD: "新幣",
+  MYR: "馬幣",
+  PHP: "披索",
+  IDR: "印尼盾",
+  AUD: "澳幣",
+  NZD: "紐幣",
+  CAD: "加幣",
+}
+
+// 根據行程目的地和常用幣別，動態生成 LINE Quick Reply 項目
+async function getQuickReply(trip: any, userActiveCurrency: string | null) {
+  const currencies: { currency: string; name: string }[] = []
+
+  // 1. 抓取目的地國家對應幣別
+  const tripCountries = trip.countries || []
+  for (const c of tripCountries) {
+    const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
+    if (match) {
+      currencies.push(match)
+    }
+  }
+
+  // 2. 加入常用四種幣別
+  for (const c of COMMON_CURRENCIES) {
+    currencies.push(c)
+  }
+
+  // 3. 排除重複的幣別
+  const uniqueCurrencies: { currency: string; name: string }[] = []
+  const seen = new Set<string>()
+
+  for (const item of currencies) {
+    if (!seen.has(item.currency)) {
+      seen.add(item.currency)
+      uniqueCurrencies.push(item)
+    }
+  }
+
+  // 4. 將當前正在使用的幣別移到最前面
+  const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || "TWD"
+  const activeIndex = uniqueCurrencies.findIndex(c => c.currency === activeCurrencyCode)
+  if (activeIndex > -1) {
+    const [activeItem] = uniqueCurrencies.splice(activeIndex, 1)
+    uniqueCurrencies.unshift(activeItem)
+  }
+
+  // 5. 限制最多 11 個 (加上 "其他" 後最多 12 個，LINE 限制單次 13 個內)
+  const finalCurrencies = uniqueCurrencies.slice(0, 11)
+
+  // 6. 轉為 LINE Quick Reply 格式
+  const items = finalCurrencies.map((c) => {
+    const isActive = c.currency === activeCurrencyCode
+    return {
+      type: "action",
+      action: {
+        type: "message",
+        // 選單顯示中文與英文，如 "⭐ 日圓 JPY"
+        label: `${isActive ? "⭐ " : ""}${c.name} ${c.currency}`,
+        text: `/currency ${c.currency}`,
+      },
+    }
+  })
+
+  // 7. 加入 "其他" 按鈕
+  items.push({
+    type: "action",
+    action: {
+      type: "message",
+      label: "🔍 其他",
+      text: "/currency",
+    },
+  })
+
+  return { items }
+}
+
+// 處理 /currency 指令
+async function handleCurrencyCommand(replyToken: string, user: any, targetCurrency: string | null) {
+  if (!user) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "⚠️ 您的 LINE 尚未連結帳號！\n請至網頁端取得個人配對碼，並在 LINE 輸入：\n/link [6位配對碼]",
+      },
+    ])
+    return
+  }
+
+  const activeTripState = user.lineBotState?.activeTripId
+  let activeTripId = null
+  let userActiveCurrency = null
+
+  if (activeTripState) {
+    if (activeTripState.includes(":")) {
+      const parts = activeTripState.split(":")
+      activeTripId = parts[0]
+      userActiveCurrency = parts[1]
+    } else {
+      activeTripId = activeTripState
+    }
+  }
+
+  if (!activeTripId) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "💡 您目前尚未綁定任何記帳行程。\n請在 LINE 傳送 `/list` 來選擇並切換您要記帳的行程。",
+      },
+    ])
+    return
+  }
+
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: activeTripId },
+    })
+
+    if (!trip) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "⚠️ 找不到您目前綁定的行程，可能該行程已被刪除。請輸入 `/list` 重新選定行程。",
+        },
+      ])
+      return
+    }
+
+    if (!targetCurrency) {
+      // 沒帶參數，提示如何手動輸入切換，並一樣附上 Quick Reply
+      const currencyList = trip.countries
+        .map((c: string) => {
+          const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
+          return match ? `${match.name} (${match.currency})` : null
+        })
+        .filter(Boolean)
+        .join("、")
+
+      let instruction = `💡 想要手動切換其他幣別？\n請直接輸入：\n/currency [三碼幣別] (不限大小寫)\n\n📝 範例：\n- \`/currency GBP\` (切換為英鎊)\n- \`/currency HKD\` (切換為港幣)`
+      if (currencyList) {
+        instruction += `\n\n📌 此行程目的地幣別：${currencyList}`
+      }
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: instruction,
+          quickReply: await getQuickReply(trip, userActiveCurrency),
+        },
+      ])
+      return
+    }
+
+    // 儲存新幣別設定到 activeTripId 狀態中 (格式 tripId:currency)
+    const newTripState = `${activeTripId}:${targetCurrency}`
+    await prisma.lineBotState.upsert({
+      where: { userId: user.id },
+      update: { activeTripId: newTripState },
+      create: { userId: user.id, activeTripId: newTripState },
+    })
+
+    const currencyChinese = ALL_CURRENCY_NAMES[targetCurrency] || ""
+    const displayName = currencyChinese ? `${currencyChinese} (${targetCurrency})` : targetCurrency
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `💱 幣別切換成功！\n\n您在 LINE 的預設記帳幣別已鎖定為 **${displayName}**。\n\n接下來您直接傳送金額（例如：\`拉麵 1500\`），將會自動記為 ${targetCurrency} 唷！`,
+        quickReply: await getQuickReply(trip, targetCurrency),
+      },
+    ])
+  } catch (err: any) {
+    console.error("[LINE Currency Command Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 切換幣別失敗：${err.message}`,
       },
     ])
   }
