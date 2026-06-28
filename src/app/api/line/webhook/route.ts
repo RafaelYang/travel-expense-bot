@@ -1251,6 +1251,15 @@ const COUNTRY_SCENERY_MAP: Record<string, string> = {
   CA: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&q=80", // 加拿大
 }
 
+// 消費類別專屬預設精美圖片對照表
+const CATEGORY_IMAGE_MAP: Record<string, string> = {
+  food: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&q=80",          // 餐飲美食
+  transport: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=800&q=80",     // 交通 (飛機與雲海)
+  accommodation: "https://images.unsplash.com/photo-1618773928121-c32242e63f39?w=800&q=80", // 住宿飯店
+  shopping: "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&q=80",      // 購物血拼
+  ticket: "https://images.unsplash.com/photo-1460627390041-532a28402358?w=800&q=80",        // 景點票券與古堡
+}
+
 // 國家與時區偏移量 (UTC+) 對照表
 const COUNTRY_TIMEZONE_MAP: Record<string, number> = {
   TW: 8, // 台灣 UTC+8
@@ -1721,8 +1730,8 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
         textFmt += `\n台幣: ${exp.convertedAmount} TWD`
       }
 
-      // 卡片圖片安全判定 (LINE 不支援 Base64)
-      let imageUrl = countrySceneryUrl
+      // 卡片圖片安全判定：1. 使用者自行上傳的照片 -> 2. 分類主題代表圖 -> 3. Fallback 當天目的地國家風景照
+      let imageUrl = CATEGORY_IMAGE_MAP[exp.category] || countrySceneryUrl
       const images = Array.isArray(exp.images) ? (exp.images as string[]) : []
       if (images.length > 0 && typeof images[0] === "string" && images[0].startsWith("http")) {
         imageUrl = images[0]
