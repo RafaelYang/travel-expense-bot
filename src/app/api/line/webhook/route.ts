@@ -260,10 +260,21 @@ async function handleTextMessage(event: any) {
   // 解析記帳語法 (品項 金額 幣別)
   const expenseMatch = text.match(/^(.+?)\s+(\d+(?:\.\d+)?)(?:\s+([a-zA-Z]{3}))?$/)
   if (!expenseMatch) {
+    let quickReply = undefined
+    try {
+      const trip = await prisma.trip.findUnique({
+        where: { id: activeTripId },
+      })
+      if (trip) {
+        quickReply = await getQuickReply(trip, userActiveCurrency)
+      }
+    } catch (e) {}
+
     await replyMessage(replyToken, [
       {
         type: "text",
         text: "💡 LINE 快速記帳格式：\n[品項] [金額] [幣別(選填)]\n\n📝 範例：\n- 拉麵 1500 JPY\n- 捷運 35\n- 樂高 100 USD\n\n📌 常用指令：\n- `/status`：查詢目前連動行程\n- `/list`：列出行程並一鍵切換\n- 點選下方快速選單切換記帳幣別",
+        quickReply,
       },
     ])
     return
@@ -2005,6 +2016,17 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
       return
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: expense.userId },
+      include: { lineBotState: true },
+    })
+
+    const activeTripState = user?.lineBotState?.activeTripId
+    let userActiveCurrency = null
+    if (activeTripState && activeTripState.includes(":")) {
+      userActiveCurrency = activeTripState.split(":")[1]
+    }
+
     if (field === "item") {
       await prisma.expense.update({
         where: { id: expenseId },
@@ -2015,6 +2037,7 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
         {
           type: "text",
           text: `📝 項目名稱已成功修改為：【${text}】！`,
+          quickReply: await getQuickReply(expense.trip, userActiveCurrency),
         },
       ])
     } else if (field === "amount") {
@@ -2048,6 +2071,7 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
         {
           type: "text",
           text: `💰 金額已成功修改為：【${newAmount} ${expense.currency}】！\n💱 換算台幣：${convertedAmount} TWD`,
+          quickReply: await getQuickReply(expense.trip, userActiveCurrency),
         },
       ])
     }
