@@ -1322,16 +1322,36 @@ function parseTripCountries(countriesInput: string[] | null | undefined, current
   }
 }
 
+// 智慧判定行程時區偏移：如果所有目的地國家皆為同一個時區，則統一使用該時區，避免天數分配偏差
+function getTripTimezoneOffset(trip: any, activeCountry: string): number {
+  try {
+    const { list } = parseTripCountries(trip?.countries, 1, 1)
+    if (list && list.length > 0) {
+      const offsets = list
+        .map(c => COUNTRY_TIMEZONE_MAP[c.toUpperCase()])
+        .filter((offset): offset is number => offset !== undefined)
+      
+      const uniqueOffsets = Array.from(new Set(offsets))
+      if (uniqueOffsets.length === 1) {
+        return uniqueOffsets[0]
+      }
+    }
+  } catch (err) {
+    // 忽略錯誤，Fallback
+  }
+  return COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
+}
+
 // 根據記帳紀錄，動態生成行程日期 Quick Reply 項目 (考慮行程目的地當地時區)
 async function getExpensesDatesQuickReply(activeTripId: string, userId: string, trip: any) {
   try {
-    // 1. 取得行程主要目的地國家的時區偏移量 (預設台北 UTC+8)
+    // 1. 取得行程目的地時區偏移量 (預設台北 UTC+8，若無跨時區則統一時區)
     let activeCountry = "TW"
     try {
       const { active } = parseTripCountries(trip?.countries, 1, 1)
       activeCountry = active
     } catch (e) {}
-    const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
+    const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
 
     // 2. 查詢該行程下該使用者有記帳的日期
     const expenses = await prisma.expense.findMany({
@@ -1539,7 +1559,7 @@ async function handleOtherDatesCommand(replyToken: string, user: any) {
       const { active } = parseTripCountries(trip?.countries, 1, 1)
       activeCountry = active
     } catch (e) {}
-    const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
+    const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
 
     // 查詢有記帳記錄的日期
     const expenses = await prisma.expense.findMany({
@@ -1625,7 +1645,7 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
 
     const { list: tripCountries, active: activeCountry } = parseTripCountries(trip.countries, currentDay, totalDays)
 
-    const tzOffsetHours = COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
+    const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
 
     // 2. 取得目的地當地當天的 UTC 物理時間區間
     const startOfDay = new Date(new Date(`${queryDateStr}T00:00:00.000Z`).getTime() - tzOffsetHours * 60 * 60 * 1000)
