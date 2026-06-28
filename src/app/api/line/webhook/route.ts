@@ -1169,7 +1169,7 @@ async function handleCurrencyCommand(replyToken: string, user: any, targetCurren
         .filter(Boolean)
         .join("、")
 
-      let instruction = `💡 想要手動切換其他幣別？\n請直接輸入：\n/currency [三碼幣別] (不限大小寫)\n\n📝 範例：\n- /currency GBP (切換為英鎊)\n- /currency HKD (切換為港幣)`
+      let instruction = `💡 想要手動切換其他幣別？\n請直接輸入：\n/currency [三碼幣別] (不限大小寫)\n\n📝 範例：\n- /currency GBP (切換為英鎊)\n- /currency HKD (切換為港幣)\n\n🎯 亦可直接點選下方快速選單進行切換，帶有 ⭐ 的按鈕即代表目前的記帳幣別唷！`
       if (currencyList) {
         instruction += `\n\n📌 此行程目的地幣別：${currencyList}`
       }
