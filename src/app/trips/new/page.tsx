@@ -40,9 +40,12 @@ export default function NewTripPage() {
     if (saved) setForm(f => ({ ...f, baseCurrency: saved }))
   }, [])
 
-  // 當起訖日期或目的地國家列表變更時，自動裁切或補齊每日國家分配
+  // 當起訖日期或目的地國家列表變更時，預設自動進行平均分配
   useEffect(() => {
-    if (!form.startDate || !form.endDate) return
+    if (!form.startDate || !form.endDate || form.countries.length === 0) {
+      setDailyCountries([])
+      return
+    }
     const start = new Date(form.startDate)
     const end = new Date(form.endDate)
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return
@@ -50,19 +53,16 @@ export default function NewTripPage() {
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
     if (totalDays <= 0) return
 
-    setDailyCountries((prev) => {
-      const next = [...prev]
-      if (next.length < totalDays) {
-        const fallback = form.countries[0] || "TW"
-        const lastVal = next[next.length - 1] || fallback
-        while (next.length < totalDays) {
-          next.push(lastVal)
-        }
-      } else if (next.length > totalDays) {
-        return next.slice(0, totalDays)
-      }
-      return next
-    })
+    // 實作自動平均分配
+    const nextDaily: string[] = []
+    const list = form.countries
+    const interval = totalDays / list.length
+
+    for (let i = 0; i < totalDays; i++) {
+      const countryIdx = Math.min(Math.floor(i / interval), list.length - 1)
+      nextDaily.push(list[countryIdx])
+    }
+    setDailyCountries(nextDaily)
   }, [form.startDate, form.endDate, form.countries])
 
   // 搜尋過濾國家
@@ -383,12 +383,9 @@ export default function NewTripPage() {
             {/* 每日目的地設定 */}
             {dailyCountries.length > 0 && form.countries.length > 0 && (
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
-                  🗺️ 每日目的地國家設定
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', fontWeight: 600 }}>
+                  🗺️ 每日目的地國家設定 <span style={{ color: '#ef4444' }}>*</span>
                 </label>
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
-                  請為行程的每一天指定預計的目的地國家。這會作為您在 LINE 記帳時各天時區與風景照的對照依據唷！
-                </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
                   {dailyCountries.map((countryCode, idx) => {
