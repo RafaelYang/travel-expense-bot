@@ -23,6 +23,7 @@ export default function NewTripPage() {
   const [error, setError] = useState("")
   const [countrySearch, setCountrySearch] = useState("")
   const [showCountryPicker, setShowCountryPicker] = useState(false)
+  const [dailyCountries, setDailyCountries] = useState<string[]>([])
 
   const [form, setForm] = useState({
     name: "",
@@ -38,6 +39,31 @@ export default function NewTripPage() {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('preferredCurrency') : null
     if (saved) setForm(f => ({ ...f, baseCurrency: saved }))
   }, [])
+
+  // 當起訖日期或目的地國家列表變更時，自動裁切或補齊每日國家分配
+  useEffect(() => {
+    if (!form.startDate || !form.endDate) return
+    const start = new Date(form.startDate)
+    const end = new Date(form.endDate)
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return
+
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+    if (totalDays <= 0) return
+
+    setDailyCountries((prev) => {
+      const next = [...prev]
+      if (next.length < totalDays) {
+        const fallback = form.countries[0] || "TW"
+        const lastVal = next[next.length - 1] || fallback
+        while (next.length < totalDays) {
+          next.push(lastVal)
+        }
+      } else if (next.length > totalDays) {
+        return next.slice(0, totalDays)
+      }
+      return next
+    })
+  }, [form.startDate, form.endDate, form.countries])
 
   // 搜尋過濾國家
   const filteredCountries = useMemo(() => {
@@ -68,10 +94,23 @@ export default function NewTripPage() {
     setLoading(true)
 
     try {
+      // 打包為 JSON 物件陣列格式
+      const countriesPayload = [
+        JSON.stringify({
+          list: form.countries,
+          daily: dailyCountries,
+        })
+      ]
+
+      const payload = {
+        ...form,
+        countries: countriesPayload,
+      }
+
       const res = await fetch("/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json()
@@ -340,6 +379,119 @@ export default function NewTripPage() {
                 {t('newTrip.baseCurrency.hint')}
               </div>
             </div>
+
+            {/* 每日目的地設定 */}
+            {dailyCountries.length > 0 && form.countries.length > 0 && (
+              <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                  🗺️ 每日目的地國家設定
+                </label>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
+                  請為行程的每一天指定預計的目的地國家。這會作為您在 LINE 記帳時各天時區與風景照的對照依據唷！
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                  {dailyCountries.map((countryCode, idx) => {
+                    const dayNum = idx + 1
+                    let dateLabel = ""
+                    try {
+                      const start = new Date(form.startDate)
+                      const d = new Date(start.getTime() + idx * 24 * 60 * 60 * 1000)
+                      dateLabel = `${d.getMonth() + 1}/${d.getDate()}`
+                    } catch {}
+
+                    // 國家國旗中文對照
+                    const COUNTRY_INFO_MAP: Record<string, { flag: string; name: string }> = {
+                      TW: { flag: "🇹🇼", name: "台灣" },
+                      JP: { flag: "🇯🇵", name: "日本" },
+                      KR: { flag: "🇰🇷", name: "韓國" },
+                      AT: { flag: "🇦🇹", name: "奧地利" },
+                      DE: { flag: "🇩🇪", name: "德國" },
+                      FR: { flag: "🇫🇷", name: "法國" },
+                      IT: { flag: "🇮🇹", name: "義大利" },
+                      ES: { flag: "🇪🇸", name: "西班牙" },
+                      NL: { flag: "🇳🇱", name: "荷蘭" },
+                      PT: { flag: "🇵🇹", name: "葡萄牙" },
+                      GR: { flag: "🇬🇷", name: "希臘" },
+                      FI: { flag: "🇫🇮", name: "芬蘭" },
+                      CZ: { flag: "🇨🇿", name: "捷克" },
+                      HU: { flag: "🇭🇺", name: "匈牙利" },
+                      PL: { flag: "🇵🇱", name: "波蘭" },
+                      CH: { flag: "🇨🇭", name: "瑞士" },
+                      GB: { flag: "🇬🇧", name: "英國" },
+                      SE: { flag: "🇸🇪", name: "瑞典" },
+                      NO: { flag: "🇳🇴", name: "挪威" },
+                      DK: { flag: "🇩🇰", name: "丹麥" },
+                      IS: { flag: "🇮🇸", name: "冰島" },
+                      HR: { flag: "🇭🇷", name: "克羅埃西亞" },
+                      TR: { flag: "🇹🇷", name: "土耳其" },
+                      CN: { flag: "🇨🇳", name: "中國" },
+                      HK: { flag: "🇭🇰", name: "香港" },
+                      MO: { flag: "🇲🇴", name: "澳門" },
+                      TH: { flag: "🇹🇭", name: "泰國" },
+                      VN: { flag: "🇻🇳", name: "越南" },
+                      SG: { flag: "🇸🇬", name: "新加坡" },
+                      MY: { flag: "🇲🇾", name: "馬來西亞" },
+                      PH: { flag: "🇵🇭", name: "菲律賓" },
+                      ID: { flag: "🇮🇩", name: "印尼" },
+                      AU: { flag: "🇦🇺", name: "澳洲" },
+                      NZ: { flag: "🇳🇿", name: "紐西蘭" },
+                      CA: { flag: "🇨🇦", name: "加拿大" },
+                    }
+
+                    return (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.5rem 0.75rem', borderRadius: 'var(--radius)',
+                        background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-primary-light)' }}>
+                            Day {dayNum}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            ({dateLabel})
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {form.countries.map((c) => {
+                            const info = COUNTRY_INFO_MAP[c.toUpperCase()] || { flag: "🌐", name: c }
+                            const isSelected = countryCode.toUpperCase() === c.toUpperCase()
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => {
+                                  setDailyCountries(prev => {
+                                    const next = [...prev]
+                                    next[idx] = c
+                                    return next
+                                  })
+                                }}
+                                style={{
+                                  padding: '0.25rem 0.5rem', borderRadius: '8px',
+                                  fontSize: '0.65rem', fontWeight: isSelected ? 600 : 400,
+                                  background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255,255,255,0.02)',
+                                  border: isSelected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(255,255,255,0.05)',
+                                  color: isSelected ? '#3b82f6' : 'var(--text-secondary)',
+                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.15rem',
+                                  transition: 'all 0.15s',
+                                  minHeight: 'auto'
+                                }}
+                              >
+                                <span>{info.flag}</span>
+                                <span>{info.name}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             <button
               type="submit"
