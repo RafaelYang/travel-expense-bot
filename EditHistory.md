@@ -334,9 +334,14 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 在記帳語法解析失敗的「格式錯誤說明」回覆中，自動載入並注入當前行程的幣值快速選單，使用戶在輸入一般對話文字或打錯字時，鍵盤上方能立馬彈出幣值按鈕。
   - 在對話式編輯 (`handleDirectTextUpdate`) 的「項目名稱修改成功」與「金額修改成功」回覆中，同樣補上當前行程的幣值 `quickReply`，讓使用者編輯完任何花費資訊後，體驗不會斷掉，幣別選單依舊常駐在鍵盤上方。
 
+- **LINE Carousel 卡片按鈕數量一致化修正 (Carousel Actions Count Alignment)**：
+  - 修復了 LINE API 回傳 HTTP 400 Bad Request 拒絕發送訊息的 Bug。
+  - 原因在於 LINE Carousel 模板要求各個卡片欄位（columns）中的 action 按鈕數量、標題與圖片的使用必須完全一致。
+  - 我們將原本只有 1 個按鈕的「今日結算卡片」與「還有更多卡片」，同樣補上第 2 個按鈕（📅 查詢其他日期，觸發 `/expenses_other_dates` 訊息），使其與帶有 2 個編輯/刪除按鈕的實體花費卡片完美對齊，順利通過 LINE 伺服器端驗證。
+
 ### 修改的檔案
 - `src/app/trips/new/page.tsx` — 新增 `dailyCountries` 狀態與監聽 useEffect，並在基準幣種選單下方置入每日目的地設定 UI。
 - `src/app/api/trips/route.ts` — 在 POST 新增行程 API 中，根據行程起訖日數，將所有天數的 dailyCountries 預設初始化為第一個目的地國家，完全停用自動均分。
 - `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中新增支援 `countries` 欄位的更新與保存。
 - `src/app/trips/[tripId]/settings/page.tsx` — 新增 countriesList 與 dailyCountries 狀態，實作 useEffect 日期監聽補齊，並在設定 Form 中繪製每日目的地國家設定 UI 與發送 payload。
-- `src/app/api/line/webhook/route.ts` — 於記帳錯誤提示與 `handleDirectTextUpdate` 編輯成功回覆中引入 `quickReply` 機制，強化 `handleDateExpensesQuery` 的圖片欄位 `startsWith` 字串防禦，補上出錯回報 `catch` 回覆塊，新增 `getTripTimezoneOffset` 時區檢查機制，定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
+- `src/app/api/line/webhook/route.ts` — 統一 Carousel 所有卡片的 `actions` 數量為 2 個（補上「查詢其他日期」按鈕），於記帳錯誤提示與 `handleDirectTextUpdate` 編輯成功回覆中引入 `quickReply` 機制，強化 `handleDateExpensesQuery` 的圖片欄位 `startsWith` 字串防禦，補上出錯回報 `catch` 回覆塊，新增 `getTripTimezoneOffset` 時區檢查機制，定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
