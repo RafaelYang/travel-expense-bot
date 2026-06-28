@@ -436,11 +436,11 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           <div
             onClick={() => setShowShareModal(false)}
             style={{
-              position: 'fixed', inset: 0, zIndex: 999,
+              position: 'fixed', inset: 0, zIndex: 20000,
               background: 'rgba(0, 0, 0, 0.5)',
               backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: '1.5rem',
+              padding: 'calc(1.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
               animation: 'fadeIn 0.15s ease-out',
             }}
           >
@@ -713,11 +713,11 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
           <div
             onClick={() => setShowStatsModal(false)}
             style={{
-              position: 'fixed', inset: 0, zIndex: 999,
+              position: 'fixed', inset: 0, zIndex: 20000,
               background: 'rgba(0, 0, 0, 0.5)',
               backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: '1.5rem',
+              padding: 'calc(1.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
               animation: 'fadeIn 0.15s ease-out',
             }}
           >
@@ -1439,7 +1439,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
               style={{
                 position: 'fixed', inset: 0,
                 background: 'rgba(0,0,0,0.95)',
-                zIndex: 9999,
+                zIndex: 30000,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'zoom-out',
                 padding: '1rem',
@@ -1457,12 +1457,12 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
                 type="button"
                 onClick={() => setLightboxIndex(null)}
                 style={{
-                  position: 'absolute', top: '16px', right: '16px',
+                  position: 'absolute', top: 'calc(16px + env(safe-area-inset-top))', right: '16px',
                   width: '40px', height: '40px', borderRadius: '50%',
                   background: 'rgba(255,255,255,0.2)', color: '#fff',
                   border: 'none', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  zIndex: 10010,
+                  zIndex: 31000,
                   backdropFilter: 'blur(8px)',
                   transition: 'background 0.2s',
                 }}
@@ -1696,11 +1696,11 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
     <div
       onClick={() => { if (!isBusy) onClose() }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 999,
+        position: 'fixed', inset: 0, zIndex: 20000,
         background: 'rgba(0, 0, 0, 0.5)',
         backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '1.5rem',
+        padding: 'calc(1.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
         animation: 'fadeIn 0.15s ease-out',
       }}
     >
@@ -1710,7 +1710,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
         style={{
           width: '100%', maxWidth: '420px', padding: '1.75rem',
           animation: 'fadeInDown 0.2s ease-out',
-          maxHeight: '85vh', overflowY: 'auto',
+          maxHeight: '80vh', overflowY: 'auto',
         }}
       >
         {mode === 'view' ? (
@@ -2057,7 +2057,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
         style={{
           position: 'fixed', inset: 0,
           background: 'rgba(0,0,0,0.95)',
-          zIndex: 10000,
+          zIndex: 30000,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'zoom-out',
           padding: '1rem',
@@ -2075,12 +2075,12 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
           type="button"
           onClick={() => setLightboxIndex(null)}
           style={{
-            position: 'absolute', top: '16px', right: '16px',
+            position: 'absolute', top: 'calc(16px + env(safe-area-inset-top))', right: '16px',
             width: '40px', height: '40px', borderRadius: '50%',
             background: 'rgba(255,255,255,0.2)', color: '#fff',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 10010,
+            zIndex: 31000,
             backdropFilter: 'blur(8px)',
             transition: 'background 0.2s',
           }}
