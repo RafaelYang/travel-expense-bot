@@ -326,9 +326,13 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - **無跨時區國家統一時區偏移**：新增 `getTripTimezoneOffset` 工具函數。當行程去過的所有目的地國家對照出來的時區均相同時（如都是歐洲中部時區 UTC+2），直接統一回傳此偏移量，避開了不必要的依天數分配偏差，僅在真正的「跨時區」行程中才依當日目的地自適應轉換。
 - **舊行程資料庫一鍵清理**：建立臨時 API 腳本，透過動態 import `@prisma/client` 先行初始化 dotenv 讀取，成功連線 Supabase PostgreSQL 並清空所有舊有測試行程（Cascade 級聯清理所有記帳、儲值、成員），重新測試。
 
+- **LINE Webhook 卡片查詢安全防禦與出錯回報**：
+  - 在 `handleDateExpensesQuery` 中，為圖片陣列的 `startsWith` 呼叫加上 `typeof === "string"` 判定，防止當資料庫欄位儲存了 `null` 等非預期 JSON 值時崩潰。
+  - 為 `handleDateExpensesQuery` 補上 `catch` 回覆塊，一旦伺服器內部發生任何未預期的 runtime exception，將主動在 LINE 對話框印出 `❌ 載入消費卡片失敗，請稍候重試。錯誤詳情：...`，拒絕死寂。
+
 ### 修改的檔案
 - `src/app/trips/new/page.tsx` — 新增 `dailyCountries` 狀態與監聽 useEffect，並在基準幣種選單下方置入每日目的地設定 UI。
 - `src/app/api/trips/route.ts` — 在 POST 新增行程 API 中，根據行程起訖日數，將所有天數的 dailyCountries 預設初始化為第一個目的地國家，完全停用自動均分。
 - `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中新增支援 `countries` 欄位的更新與保存。
 - `src/app/trips/[tripId]/settings/page.tsx` — 新增 countriesList 與 dailyCountries 狀態，實作 useEffect 日期監聽補齊，並在設定 Form 中繪製每日目的地國家設定 UI 與發送 payload。
-- `src/app/api/line/webhook/route.ts` — 新增 `getTripTimezoneOffset` 時區檢查機制，定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
+- `src/app/api/line/webhook/route.ts` — 強化 `handleDateExpensesQuery` 的圖片欄位 `startsWith` 字串防禦，補上出錯回報 `catch` 回覆塊，新增 `getTripTimezoneOffset` 時區檢查機制，定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
