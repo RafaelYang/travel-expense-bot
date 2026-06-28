@@ -366,9 +366,13 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 第一頁預設常用選單**僅會顯示「行程基準/偏好幣別 (trip.baseCurrency || 'TWD')」+「該此旅行的目的地國家法定幣別」+「當前鎖定幣別」+「🔍 其他」**，其餘非此行程關聯的常用幣別不再顯示。
   - 在「🔍 其他」第二頁中，會**動態計算並自動過濾掉已在第一頁顯示的偏好與目的地幣別**，確保兩頁之間完全不重複，達到極致清爽的 UI 體驗。
 
+- **修改/刪除消費後自動載入當天花費清單 (Auto-Reload Expense List on Modify Success)**：
+  - 應使用者要求，在 LINE 記帳機器人中進行消費項目編輯（如修改品項名稱、修改金額、修改分類、修改記帳幣別）或一鍵刪除消費成功後，機器人除了回覆成功訊息外，還會**自動重新渲染並夾帶發送該消費原本日期當天最新、最即時的「目前花費」輪播卡片與今日結算資訊**，免去使用者手動點按查詢的繁瑣步驟。
+  - 同步確保在夾帶多個訊息時，底部快速選單（Quick Reply）仍能精準繫結在最後一個訊息上，完美符合 LINE API 規範。
+
 ### 修改的檔案
-- `upload-rich-menu.js` — 修改左下角按鈕對應的 Action 動作為發送 `/currency` 文字訊息。
+- `upload-rich-menu.js` — 修改左下角按鈕對應 the Action 動作為發送 `/currency` 文字訊息。
 - `src/app/api/trips/expenses/images/[expenseId]/route.ts` [NEW] — 新增代理下載解碼 Base64 並輸出實體 JPEG 二進位流 the API 圖片代理端點。
 - `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中對 `countries` 欄位進行防禦性類型轉換，若前端傳送裸字串時自動包裝為陣列，符合 `String[]` 規格。
 - `src/app/trips/[tripId]/settings/page.tsx` — 實作安全遞迴解碼 `cleanExtractCountries` 函數，在讀取資料庫時自動過濾與解開可能存在的多層嵌套 JSON 髒資料，並在儲存時改以標準的單一字串陣列 `[string]` 送出，阻斷再次嵌套。
-- `src/app/api/line/webhook/route.ts` — 將 `parseTripCountries` 重構為遞迴安全解包版本，防止被歷史嵌套髒資料干擾，完美抓出目的地代碼；修正 `getQuickReply` 和 `getOtherQuickReply` 中的目的地國家獲取方式；重構 `getQuickReply` 以精簡預設選單至僅有偏好與目的地幣種，重構 `getOtherQuickReply` 新增動態去重過濾機制；新增 `/currency_other` 更多常見幣別選單及 handler 邏輯，並於手動切換幣別說明文字中新增選單引導與星號（⭐）幣別提示；修正自傳 Base64 圖片代理的 URL 格式，解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
+- `src/app/api/line/webhook/route.ts` — 修正 `handleUpdateField` (分類與幣別)、`handleDirectTextUpdate` (品項名稱與金額) 和 `handleDeleteExpense` (一鍵刪除) 的成功回覆，在發送成功訊息時同時調用 `getExpenseDateQueryMessages` 將對應日期的花費卡片一併附帶回傳；將 `handleDateExpensesQuery` 的卡片產生邏輯重構拆分為獨立的 `buildDateExpensesMessages` 輔助函數以供多處拼裝；將 `parseTripCountries` 重構為遞迴安全解包版本，防止被歷史嵌套髒資料干擾，完美抓出目的地國家二碼；重構 `getQuickReply` 以精簡預設選單至僅有偏好與目的地幣種，重構 `getOtherQuickReply` 新增動態去重過濾機制；新增 `/currency_other` 更多常見幣別選單及 handler 邏輯；修正自傳 Base64 圖片代理的 URL 格式，解決 App Router 404 一片白的問題，同時智慧辨識機票與車票子類別主題圖，並移除所有的 Markdown 雙星號及反引號標記。
