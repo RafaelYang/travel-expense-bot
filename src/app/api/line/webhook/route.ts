@@ -140,6 +140,31 @@ async function handleTextMessage(event: any) {
     include: { lineBotState: true },
   })
 
+  // === 優先攔截對話欄位修改 (Stateless Edit Prompt) ===
+  if (user) {
+    const identifier = `edit-prompt:${user.id}`
+    const editPrompt = await prisma.verificationToken.findFirst({
+      where: {
+        identifier,
+        expires: { gt: new Date() },
+      },
+    })
+
+    if (editPrompt) {
+      // 刪除此臨時標記，避免重複攔截
+      await prisma.verificationToken.delete({
+        where: { id: editPrompt.id },
+      })
+
+      const parts = editPrompt.token.split(":")
+      const field = parts[0]
+      const expenseId = parts[1]
+
+      await handleDirectTextUpdate(replyToken, expenseId, field, text)
+      return
+    }
+  }
+
   // 2. 解析個人帳號綁定指令：/link 6位配對碼
   const linkMatch = text.match(/^\/link\s+(\d{6})$/i)
   if (linkMatch) {
@@ -165,6 +190,26 @@ async function handleTextMessage(event: any) {
   if (currencyMatch) {
     const targetCurrency = currencyMatch[1] ? currencyMatch[1].toUpperCase() : null
     await handleCurrencyCommand(replyToken, user, targetCurrency)
+    return
+  }
+
+  // 4.2 處理目前花費查詢：/expenses 或 '目前花費' 或 '花費'
+  if (text === "/expenses" || text === "目前花費" || text === "花費") {
+    await handleExpensesCommand(replyToken, user)
+    return
+  }
+
+  // 4.3 處理特定日期花費查詢：/expenses_date 2026-06-28
+  const dateMatch = text.match(/^\/expenses_date\s+(\d{4}-\d{2}-\d{2})$/i)
+  if (dateMatch) {
+    const queryDateStr = dateMatch[1]
+    await handleDateExpensesQuery(replyToken, user, queryDateStr)
+    return
+  }
+
+  // 4.4 處理其他日期查詢：/expenses_other_dates
+  if (text === "/expenses_other_dates") {
+    await handleOtherDatesCommand(replyToken, user)
     return
   }
 
@@ -418,13 +463,13 @@ async function handleListCommand(replyToken: string, user: any) {
       const startFmt = trip.startDate.toISOString().split("T")[0].replace(/-/g, "/")
       const endFmt = trip.endDate.toISOString().split("T")[0].replace(/-/g, "/")
 
-      const title = trip.name.substring(0, 40) // 標題限制 40 字
-      const isActive = trip.id === activeTripId
-      
-      // 內文最多 60 字
+      const title = trip.name.substring(0, 40)
+      const currentActiveTripId = activeTripId?.includes(":") ? activeTripId.split(":")[0] : activeTripId
+      const isReallyActive = trip.id === currentActiveTripId
+
       let description = `${startFmt} - ${endFmt}\n狀態: ${dayInfo.dayText}`
-      if (isActive) {
-        description += ` (⭐ 目前預設)`
+      if (isReallyActive) {
+        description += ` (⭐ 目前行程)`
       }
 
       return {
@@ -433,9 +478,9 @@ async function handleListCommand(replyToken: string, user: any) {
         actions: [
           {
             type: "postback",
-            label: isActive ? "⭐ 目前預設" : "設為預設記帳行程",
+            label: isReallyActive ? "此為目前行程" : "設定為目前行程",
             data: `action=switch_trip&tripId=${trip.id}`,
-            displayText: `將【${trip.name}】設為 LINE 預設記帳`,
+            displayText: isReallyActive ? `此行程為目前記帳行程` : `將【${trip.name}】設定為目前行程`,
           },
         ],
       }
@@ -568,6 +613,25 @@ async function handlePostbackEvent(event: any) {
     const msgId = params.get("msgId")
     if (!expenseId || !msgId) return
     await saveLineImageToExpense(replyToken, expenseId, msgId)
+  } else if (action === "delete_expense") {
+    const expenseId = params.get("expenseId")
+    if (!expenseId) return
+    await handleDeleteExpense(replyToken, expenseId)
+  } else if (action === "edit_expense_menu") {
+    const expenseId = params.get("expenseId")
+    if (!expenseId) return
+    await handleEditExpenseMenu(replyToken, expenseId)
+  } else if (action === "edit_field") {
+    const field = params.get("field")
+    const expenseId = params.get("expenseId")
+    if (!field || !expenseId) return
+    await handleEditField(replyToken, lineUserId, field, expenseId)
+  } else if (action === "update_field") {
+    const field = params.get("field")
+    const value = params.get("value")
+    const expenseId = params.get("expenseId")
+    if (!field || !value || !expenseId) return
+    await handleUpdateField(replyToken, field, value, expenseId)
   }
 }
 
@@ -1119,6 +1183,648 @@ async function handleCurrencyCommand(replyToken: string, user: any, targetCurren
       {
         type: "text",
         text: `❌ 切換幣別失敗：${err.message}`,
+      },
+    ])
+  }
+}
+
+// ==========================================
+// 行程花費管理、對話式編輯與刪除互動模組
+// ==========================================
+
+// 國家風景照 Unsplash 靜態對照表
+const COUNTRY_SCENERY_MAP: Record<string, string> = {
+  TW: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80", // 台灣
+  JP: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80", // 日本
+  KR: "https://images.unsplash.com/photo-1534274988757-a28bf1a57c17?w=800&q=80", // 韓國
+  AT: "https://images.unsplash.com/photo-1516550893923-42d28e5677af?w=800&q=80", // 奧地利
+  DE: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=80", // 德國
+  FR: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80", // 法國
+  IT: "https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?w=800&q=80", // 義大利
+  ES: "https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80", // 西班牙
+  NL: "https://images.unsplash.com/photo-1534351590666-13e3e96b5017?w=800&q=80", // 荷蘭
+  PT: "https://images.unsplash.com/photo-1555881400-74d7acaacd8b?w=800&q=80", // 葡萄牙
+  GR: "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&q=80", // 希臘
+  FI: "https://images.unsplash.com/photo-1538332576228-eb5b4c4de6f5?w=800&q=80", // 芬蘭
+  CZ: "https://images.unsplash.com/photo-1519677100203-a0e668c92439?w=800&q=80", // 捷克
+  HU: "https://images.unsplash.com/photo-1551867633-194f125bddfa?w=800&q=80", // 匈牙利
+  PL: "https://images.unsplash.com/photo-1519197924294-4ba991a11128?w=800&q=80", // 波蘭
+  CH: "https://images.unsplash.com/photo-1530122037265-a5f1f91d3b99?w=800&q=80", // 瑞士
+  GB: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80", // 英國
+  SE: "https://images.unsplash.com/photo-1509356843151-3e7d96241e11?w=800&q=80", // 瑞典
+  NO: "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=800&q=80", // 挪威
+  DK: "https://images.unsplash.com/photo-1513622470522-26c3c8a854bc?w=800&q=80", // 丹麥
+  IS: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80", // 冰島
+  HR: "https://images.unsplash.com/photo-1555990538-1e15faca6782?w=800&q=80", // 克羅埃西亞
+  TR: "https://images.unsplash.com/photo-1524231757912-21f4fe3a7200?w=800&q=80", // 土耳其
+  CN: "https://images.unsplash.com/photo-1547981609-4b6bfe67ca0b?w=800&q=80", // 中國
+  HK: "https://images.unsplash.com/photo-1536599018102-9f803c140fc1?w=800&q=80", // 香港
+  MO: "https://images.unsplash.com/photo-1552912867-69c07ba0e9a8?w=800&q=80", // 澳門
+  TH: "https://images.unsplash.com/photo-1528181304800-259b08848526?w=800&q=80", // 泰國
+  VN: "https://images.unsplash.com/photo-1557750255-c76072a7aad1?w=800&q=80", // 越南
+  SG: "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?w=800&q=80", // 新加坡
+  MY: "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?w=800&q=80", // 馬來西亞
+  PH: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?w=800&q=80", // 菲律賓
+  ID: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&q=80", // 印尼
+  AU: "https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&q=80", // 澳洲
+  NZ: "https://images.unsplash.com/photo-1469521669194-babb45599def?w=800&q=80", // 紐西蘭
+  CA: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&q=80", // 加拿大
+}
+
+// 處理 /expenses 查詢，輸出當前行程的所有日期 Quick Reply
+async function handleExpensesCommand(replyToken: string, user: any) {
+  if (!user) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "⚠️ 您的 LINE 尚未連結帳號！\n請至網頁端取得個人配對碼，並在 LINE 輸入：\n/link [6位配對碼]",
+      },
+    ])
+    return
+  }
+
+  const activeTripState = user.lineBotState?.activeTripId
+  let activeTripId = null
+
+  if (activeTripState) {
+    activeTripId = activeTripState.includes(":") ? activeTripState.split(":")[0] : activeTripState
+  }
+
+  if (!activeTripId) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "💡 您目前尚未選定或設定目前記帳行程。\n請在 LINE 傳送 `/list` 來選擇您目前的旅遊行程唷！",
+      },
+    ])
+    return
+  }
+
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: activeTripId },
+    })
+
+    if (!trip) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "⚠️ 找不到您目前預設的記帳行程，可能該行程已被刪除。請輸入 `/list` 重新選取行程。",
+        },
+      ])
+      return
+    }
+
+    // 計算行程天數
+    const start = new Date(trip.startDate)
+    const end = new Date(trip.endDate)
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+
+    // 產生行程的所有日期 (格式：6/28 週日)
+    const days: { dateStr: string; label: string }[] = []
+    const weekDays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"]
+
+    for (let i = 0; i < totalDays; i++) {
+      const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000)
+      const month = d.getMonth() + 1
+      const date = d.getDate()
+      const dayName = weekDays[d.getDay()]
+      const dateStr = d.toISOString().split("T")[0] // "2026-06-28"
+      days.push({
+        dateStr,
+        label: `${month}/${date} ${dayName}`,
+      })
+    }
+
+    // LINE Quick Reply 限制一排最多 13 個按鈕
+    // 我們只顯示前 11 個日期卡片，最後加一個 "其他日期" 避開限制
+    const displayDays = days.slice(0, 11)
+    const items = displayDays.map((d) => ({
+      type: "action",
+      action: {
+        type: "message",
+        label: d.label,
+        text: `/expenses_date ${d.dateStr}`,
+      },
+    }))
+
+    if (days.length > 11) {
+      items.push({
+        type: "action",
+        action: {
+          type: "message",
+          label: "🔍 其他日期",
+          text: `/expenses_other_dates`,
+        },
+      })
+    }
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `📅 請點選下方按鈕，選擇您想要查看花費的日期：\n（目前行程：【${trip.name}】）`,
+        quickReply: { items },
+      },
+    ])
+  } catch (err: any) {
+    console.error("[LINE Expenses Command Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 載入行程日期失敗：${err.message}`,
+      },
+    ])
+  }
+}
+
+// 處理 /expenses_other_dates，列出該行程中實際有記帳紀錄的所有日期
+async function handleOtherDatesCommand(replyToken: string, user: any) {
+  if (!user) return
+
+  const activeTripState = user.lineBotState?.activeTripId
+  const activeTripId = activeTripState?.includes(":") ? activeTripState.split(":")[0] : activeTripState
+  if (!activeTripId) return
+
+  try {
+    // 查詢有記帳記錄的日期
+    const expenses = await prisma.expense.findMany({
+      where: { tripId: activeTripId, userId: user.id },
+      select: { date: true },
+      orderBy: { date: "asc" },
+    })
+
+    const uniqueDates = Array.from(new Set(expenses.map(e => e.date.toISOString().split("T")[0])))
+    if (uniqueDates.length === 0) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "💡 該行程目前尚無任何記帳紀錄唷！",
+        },
+      ])
+      return
+    }
+
+    const weekDays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"]
+    const items = uniqueDates.slice(0, 13).map((dateStr) => {
+      const d = new Date(dateStr)
+      const month = d.getMonth() + 1
+      const date = d.getDate()
+      const dayName = weekDays[d.getDay()]
+      return {
+        type: "action",
+        action: {
+          type: "message",
+          label: `${month}/${date} ${dayName}`,
+          text: `/expenses_date ${dateStr}`,
+        },
+      }
+    })
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "📅 以下是目前該行程實際有記帳的日期，請選擇：",
+        quickReply: { items },
+      },
+    ])
+  } catch (err: any) {
+    console.error("[LINE Other Dates Error]", err)
+  }
+}
+
+// 處理日期花費卡片輪播查詢
+async function handleDateExpensesQuery(replyToken: string, user: any, queryDateStr: string) {
+  if (!user) return
+
+  const activeTripState = user.lineBotState?.activeTripId
+  const activeTripId = activeTripState?.includes(":") ? activeTripState.split(":")[0] : activeTripState
+  if (!activeTripId) return
+
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: activeTripId },
+    })
+    if (!trip) return
+
+    // 1. 取得當天起迄區間
+    const startOfDay = new Date(`${queryDateStr}T00:00:00.000Z`)
+    const endOfDay = new Date(`${queryDateStr}T23:59:59.999Z`)
+
+    // 2. 查詢當天消費
+    const expenses = await prisma.expense.findMany({
+      where: {
+        tripId: activeTripId,
+        userId: user.id,
+        date: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    })
+
+    if (expenses.length === 0) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `💡 您在 ${queryDateStr.replace(/-/g, "/")} 當天沒有任何花費紀錄唷！`,
+        },
+      ])
+      return
+    }
+
+    // 3. 智慧目的地國家風景照演算法
+    const start = new Date(trip.startDate)
+    const end = new Date(trip.endDate)
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+    const queryDate = new Date(queryDateStr)
+    const currentDay = Math.ceil((queryDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+
+    let activeCountry = "TW"
+    const tripCountries = trip.countries || []
+    if (tripCountries.length === 1) {
+      activeCountry = tripCountries[0]
+    } else if (tripCountries.length > 1) {
+      const interval = totalDays / tripCountries.length
+      const countryIndex = Math.min(
+        Math.floor((currentDay - 1) / interval),
+        tripCountries.length - 1
+      )
+      activeCountry = tripCountries[countryIndex]
+    }
+
+    const defaultCover = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80"
+    const countrySceneryUrl = COUNTRY_SCENERY_MAP[activeCountry.toUpperCase()] || defaultCover
+
+    // 4. 計算本日總額
+    let dailyTotalTwd = 0
+    expenses.forEach((exp) => {
+      dailyTotalTwd += exp.convertedAmount || exp.amount
+    })
+    dailyTotalTwd = Math.round(dailyTotalTwd * 100) / 100
+
+    const categoryMap: Record<string, string> = {
+      food: "🍜 餐飲",
+      transport: "🚃 交通",
+      accommodation: "🛏️ 住宿",
+      shopping: "🛍️ 購物",
+      ticket: "🎫 門票",
+      other: "📦 其他",
+    }
+
+    const baseCurrency = trip.baseCurrency || "TWD"
+    const columns: any[] = []
+
+    // 決定要放入實體消費卡片的筆數 (Carousel 限制 10 筆)
+    const displayLimit = expenses.length > 9 ? 8 : expenses.length
+
+    for (let i = 0; i < displayLimit; i++) {
+      const exp = expenses[i]
+      const title = exp.item.substring(0, 40)
+      
+      let textFmt = `分類: ${categoryMap[exp.category] || "其他"}\n金額: ${exp.amount} ${exp.currency}`
+      if (exp.currency !== baseCurrency) {
+        textFmt += `\n台幣: ${exp.convertedAmount} TWD`
+      }
+
+      // 卡片圖片安全判定 (LINE 不支援 Base64)
+      let imageUrl = countrySceneryUrl
+      const images = Array.isArray(exp.images) ? (exp.images as string[]) : []
+      if (images.length > 0 && images[0].startsWith("http")) {
+        imageUrl = images[0]
+      }
+
+      columns.push({
+        thumbnailImageUrl: imageUrl,
+        imageBackgroundColor: "#0F172A",
+        title,
+        text: textFmt,
+        actions: [
+          {
+            type: "postback",
+            label: "✏️ 編輯",
+            data: `action=edit_expense_menu&expenseId=${exp.id}`,
+          },
+          {
+            type: "postback",
+            label: "❌ 刪除",
+            data: `action=delete_expense&expenseId=${exp.id}`,
+          },
+        ],
+      })
+    }
+
+    // 若大於 9 筆，追加一格「還有更多」卡片
+    if (expenses.length > 9) {
+      columns.push({
+        thumbnailImageUrl: countrySceneryUrl,
+        imageBackgroundColor: "#0F172A",
+        title: "🔍 還有更多花費...",
+        text: `今日還有其他 ${expenses.length - 8} 筆花費未在此顯示，請點選按鈕查看完整帳本。`,
+        actions: [
+          {
+            type: "uri",
+            label: "📊 前往網頁看完整帳本",
+            uri: `https://travel-expense-bot-steel.vercel.app/trips/${trip.id}`,
+          },
+        ],
+      })
+    }
+
+    // 追加最後一張「今日總結卡片」
+    columns.push({
+      thumbnailImageUrl: countrySceneryUrl,
+      imageBackgroundColor: "#0F172A",
+      title: `📊 今日結算 (${queryDateStr.replace(/-/g, "/")})`,
+      text: `本日總花費: ${dailyTotalTwd} TWD\n已記錄花費共 ${expenses.length} 筆。`,
+      actions: [
+        {
+          type: "uri",
+          label: "📊 前往網頁看完整帳本",
+          uri: `https://travel-expense-bot-steel.vercel.app/trips/${trip.id}`,
+        },
+      ],
+    })
+
+    await replyMessage(replyToken, [
+      {
+        type: "template",
+        altText: `${queryDateStr} 當日消費清單與今日結算`,
+        template: {
+          type: "carousel",
+          columns,
+        },
+      },
+    ])
+  } catch (err: any) {
+    console.error("[LINE Date Expenses Error]", err)
+  }
+}
+
+// 處理一鍵刪除
+async function handleDeleteExpense(replyToken: string, expenseId: string) {
+  try {
+    const expense = await prisma.expense.delete({
+      where: { id: expenseId },
+    })
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 已成功刪除【${expense.item} ${expense.amount} ${expense.currency}】消費記錄！`,
+      },
+    ])
+  } catch (err: any) {
+    console.error("[handleDeleteExpense Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 刪除花費失敗，該項目可能已被刪除。`,
+      },
+    ])
+  }
+}
+
+// 處理編輯選單 (彈出欄位選擇 Quick Reply)
+async function handleEditExpenseMenu(replyToken: string, expenseId: string) {
+  try {
+    const expense = await prisma.expense.findUnique({
+      where: { id: expenseId },
+    })
+
+    if (!expense) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "⚠️ 找不到該花費記錄，可能已被刪除。",
+        },
+      ])
+      return
+    }
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `✏️ 請選擇您想要修改【${expense.item}】的哪個部分：`,
+        quickReply: {
+          items: [
+            {
+              type: "action",
+              action: {
+                type: "postback",
+                label: "📝 修改品項名稱",
+                data: `action=edit_field&field=item&expenseId=${expense.id}`,
+                displayText: "修改品項名稱",
+              },
+            },
+            {
+              type: "action",
+              action: {
+                type: "postback",
+                label: "📂 修改花費分類",
+                data: `action=edit_field&field=category&expenseId=${expense.id}`,
+                displayText: "修改花費分類",
+              },
+            },
+            {
+              type: "action",
+              action: {
+                type: "postback",
+                label: "💰 修改消費金額",
+                data: `action=edit_field&field=amount&expenseId=${expense.id}`,
+                displayText: "修改消費金額",
+              },
+            },
+          ],
+        },
+      },
+    ])
+  } catch (err: any) {
+    console.error("[handleEditExpenseMenu Error]", err)
+  }
+}
+
+// 處理編輯欄位動作 (品項名稱/金額 ➡️ 啟動對話攔截鎖定；分類 ➡️ 彈出分類選單)
+async function handleEditField(replyToken: string, lineUserId: string, field: string, expenseId: string) {
+  try {
+    // 查詢 User
+    const user = await prisma.user.findUnique({
+      where: { lineUserId },
+    })
+    if (!user) return
+
+    const expense = await prisma.expense.findUnique({
+      where: { id: expenseId },
+    })
+    if (!expense) return
+
+    if (field === "item") {
+      const expires = new Date(Date.now() + 5 * 60 * 1000)
+      await prisma.verificationToken.create({
+        data: {
+          identifier: `edit-prompt:${user.id}`,
+          token: `item:${expenseId}`,
+          expires,
+        },
+      })
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `📝 請直接輸入【${expense.item}】的新項目名稱：`,
+        },
+      ])
+    } else if (field === "amount") {
+      const expires = new Date(Date.now() + 5 * 60 * 1000)
+      await prisma.verificationToken.create({
+        data: {
+          identifier: `edit-prompt:${user.id}`,
+          token: `amount:${expenseId}`,
+          expires,
+        },
+      })
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `💰 請直接輸入新金額數字（我們將維持原本的 ${expense.currency}，例如：\`1250\`）：`,
+        },
+      ])
+    } else if (field === "category") {
+      const categories = [
+        { code: "food", label: "🍜 餐飲" },
+        { code: "transport", label: "🚃 交通" },
+        { code: "accommodation", label: "🛏️ 住宿" },
+        { code: "shopping", label: "🛍️ 購物" },
+        { code: "ticket", label: "🎫 門票" },
+        { code: "other", label: "📦 其他" },
+      ]
+
+      const items = categories.map((cat) => ({
+        type: "action",
+        action: {
+          type: "postback",
+          label: cat.label,
+          data: `action=update_field&field=category&value=${cat.code}&expenseId=${expenseId}`,
+          displayText: `修改為 ${cat.label}`,
+        },
+      }))
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `📂 請點選按鈕，選擇【${expense.item}】的新分類：`,
+          quickReply: { items },
+        },
+      ])
+    }
+  } catch (err: any) {
+    console.error("[handleEditField Error]", err)
+  }
+}
+
+// 處理分類的直接修改寫入
+async function handleUpdateField(replyToken: string, field: string, value: string, expenseId: string) {
+  try {
+    if (field === "category") {
+      const categoryMap: Record<string, string> = {
+        food: "🍜 餐飲",
+        transport: "🚃 交通",
+        accommodation: "🛏️ 住宿",
+        shopping: "🛍️ 購物",
+        ticket: "🎫 門票",
+        other: "📦 其他",
+      }
+
+      const expense = await prisma.expense.update({
+        where: { id: expenseId },
+        data: { category: value },
+      })
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `📂 分類修改成功！【${expense.item}】的分類已改為：${categoryMap[value] || value}。`,
+        },
+      ])
+    }
+  } catch (err: any) {
+    console.error("[handleUpdateField Error]", err)
+  }
+}
+
+// 處理對話式文字直接寫入
+async function handleDirectTextUpdate(replyToken: string, expenseId: string, field: string, text: string) {
+  try {
+    const expense = await prisma.expense.findUnique({
+      where: { id: expenseId },
+      include: { trip: true },
+    })
+
+    if (!expense) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "⚠️ 找不到對應的花費項目，修改失敗。",
+        },
+      ])
+      return
+    }
+
+    if (field === "item") {
+      await prisma.expense.update({
+        where: { id: expenseId },
+        data: { item: text },
+      })
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `📝 項目名稱已成功修改為：【${text}】！`,
+        },
+      ])
+    } else if (field === "amount") {
+      const newAmount = parseFloat(text)
+      if (isNaN(newAmount) || newAmount <= 0) {
+        await replyMessage(replyToken, [
+          {
+            type: "text",
+            text: "❌ 修改失敗：請輸入正確的正數金額數字。",
+          },
+        ])
+        return
+      }
+
+      const trip = expense.trip
+      const baseCurrency = trip.baseCurrency || "TWD"
+      const conversion = await convertExpenseAmount(newAmount, expense.currency, baseCurrency)
+      const convertedAmount = conversion ? conversion.convertedAmount : newAmount
+      const exchangeRate = conversion ? conversion.exchangeRate : 1.0
+
+      await prisma.expense.update({
+        where: { id: expenseId },
+        data: {
+          amount: newAmount,
+          convertedAmount,
+          exchangeRate,
+        },
+      })
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `💰 金額已成功修改為：【${newAmount} ${expense.currency}】！\n💱 換算台幣：${convertedAmount} TWD`,
+        },
+      ])
+    }
+  } catch (err: any) {
+    console.error("[handleDirectTextUpdate Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 修改失敗：${err.message}`,
       },
     ])
   }

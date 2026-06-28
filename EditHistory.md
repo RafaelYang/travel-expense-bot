@@ -288,3 +288,23 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 
 ### 修改的檔案
 - `src/app/api/line/webhook/route.ts` — 實作處理 `image` 事件、`saveLineImageToExpense`、新增 `/currency` 指令、自動目的地對照 `getQuickReply` 函數。
+
+## 2026-06-28 — 2x2 圖文選單更新與 LINE 記帳清單（目前花費）、智慧多國風景圖、對話式編輯與刪除互動
+### 修改概述
+- **更新圖文選單上傳腳本 (`upload-rich-menu.js`)**：調整為全新的 2x2 四等份版面，並綁定對應的按鈕動作（左上首頁、右上目前花費、左下目前行程、右下行程清單）。
+- **「目前花費」查詢與日期快速選單**：
+  - 當收到 `/expenses` 或點選「目前花費」時，系統以 Quick Reply 列出行程的各個日期與 `🔍 其他日期` 按鈕。
+  - 使用者點選日期後，系統會回傳 **Carousel 輪播卡片** 以左右滑動展示該日消費詳情。
+  - 針對 LINE 10 張卡片的上限做了**智慧分頁防呆**（前 N 筆消費 + 尾卡「今日結算與前往網頁」）。
+- **智慧目的地國家風景照演算法**：當消費卡片沒有上傳圖片備註時，系統會自動根據「總天數與國家數」，以「智慧均分演算法」算出該天對應的目的地國家，並顯示對應國家的 Unsplash 風景底圖（支持台灣、日本、韓國、奧地利、捷克、匈牙利等多個國家），極致美觀。
+- **無痛對話式編輯 (Stateless Prompt)**：點選卡片下方 `✏️ 編輯` 按鈕可呼叫 Quick Reply。點選「改項目名稱」或「改金額」後，系統會在 `VerificationToken` 中建立對話狀態鎖定 5 分鐘，使用者的下一句文字輸入會被 Webhook 攔截並直接寫入該筆消費（若修改金額，會自動重新呼叫 API 計算匯率台幣換算），隨後解除鎖定，流暢度如同微型 App。
+- **一鍵刪除功能**：點選 `❌ 刪除` 即可直接透過 Webhook 刪除資料庫該筆花費並回覆成功。
+- **雙向幣別切換與狀態優化**：
+  - 微調行程清單 Carousel 卡片按鈕，將「設為預設記帳行程」優化為「設定為目前行程」或「此為目前行程」，相容 `tripId:currency` 的格式。
+  - 網頁端行程設定頁面 (`settings/page.tsx`) 新增顯示當前 LINE 記帳預設幣別，並提供一整排快速切換按鈕，使用者在網頁點擊即可直接修改其 LINE Bot 的預設記帳幣別，達成極致的雙向連動。
+
+### 修改的檔案
+- `src/app/api/trips/[tripId]/line-link/route.ts` — 在 GET 中回傳當前記帳幣別，在 PUT 中支援接收 body.currency。
+- `src/app/trips/[tripId]/settings/page.tsx` — 網頁端連動 UI 擴充 lineCurrency 狀態、getTripCurrencies 獲取可用幣別與 updateLineCurrency 一鍵點擊切換。
+- `src/app/api/line/webhook/route.ts` — 實作 /expenses 日期選單、handleDateExpensesQuery 卡片輪播（智慧國家風景圖均分與總結卡防呆）、handleDeleteExpense 一鍵刪除、handleEditField / handleDirectTextUpdate 的 Stateless 鎖定與文字輸入攔截。
+- `upload-rich-menu.js` — 重新適應最新的 2x2 圖文選單切割坐標與 Actions 綁定。
