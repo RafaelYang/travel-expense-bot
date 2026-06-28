@@ -322,9 +322,13 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 在 `getExpensesDatesQuickReply` 與 `handleOtherDatesCommand` 生成日期選單時，將消費記錄的 UTC 時間轉為「目的地當天時區」日期字串進行本地化歸類，避免跨時區造成的日期拆分錯誤。
   - 在 `handleDateExpensesQuery` 查詢當天消費卡片時，先獲取當天的目的地時區偏移，動態偏移 `startOfDay` 與 `endOfDay` 對資料庫進行精確 UTC 時間點區間查詢，**徹底防範跨時區（特別是清晨或深夜）記帳的歸類錯置**。
 - **全域 Quick Reply 安全防錯**：在 `replyMessage` 發送端新增自動過濾器，若 `quickReply.items` 為空，將在發送前將其自動移除，防範 LINE HTTP 400 報錯。
+- **新增行程頁面自訂每日目的地**：在「新增行程 (New Trip)」頁面中，當起訖日期與國家選取後，動態渲染一排國旗按鈕，引導使用者在建立行程的第一時間完成每一天的目的地自訂分配。
+- **無跨時區國家統一時區偏移**：新增 `getTripTimezoneOffset` 工具函數。當行程去過的所有目的地國家對照出來的時區均相同時（如都是歐洲中部時區 UTC+2），直接統一回傳此偏移量，避開了不必要的依天數分配偏差，僅在真正的「跨時區」行程中才依當日目的地自適應轉換。
+- **舊行程資料庫一鍵清理**：建立臨時 API 腳本，透過動態 import `@prisma/client` 先行初始化 dotenv 讀取，成功連線 Supabase PostgreSQL 並清空所有舊有測試行程（Cascade 級聯清理所有記帳、儲值、成員），重新測試。
 
 ### 修改的檔案
+- `src/app/trips/new/page.tsx` — 新增 `dailyCountries` 狀態與監聽 useEffect，並在基準幣種選單下方置入每日目的地設定 UI。
 - `src/app/api/trips/route.ts` — 在 POST 新增行程 API 中，根據行程起訖日數，將所有天數的 dailyCountries 預設初始化為第一個目的地國家，完全停用自動均分。
 - `src/app/api/trips/[tripId]/route.ts` — 在 PUT 修改行程 API 中新增支援 `countries` 欄位的更新與保存。
 - `src/app/trips/[tripId]/settings/page.tsx` — 新增 countriesList 與 dailyCountries 狀態，實作 useEffect 日期監聽補齊，並在設定 Form 中繪製每日目的地國家設定 UI 與發送 payload。
-- `src/app/api/line/webhook/route.ts` — 定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
+- `src/app/api/line/webhook/route.ts` — 新增 `getTripTimezoneOffset` 時區檢查機制，定義 `COUNTRY_TIMEZONE_MAP`，重構 `parseTripCountries` 以相容解析單元素 JSON string 陣列，調整 `getExpensesDatesQuickReply`、`handleOtherDatesCommand` 與 `handleDateExpensesQuery` 使用目的地時區計算起訖時間與解析日期，並在 `replyMessage` 加入 items 為空的安全過濾防護。
