@@ -63,13 +63,21 @@ export async function GET(
     }
 
     const hasLinkedLine = user.lineUserId !== null
-    const isActive = user.lineBotState?.activeTripId === tripId
+    const activeState = user.lineBotState?.activeTripId || ""
+    const isActive = activeState.split(":")[0] === tripId
     const dayText = getTripDayText(trip.startDate, trip.endDate)
+
+    // 取得 LINE 連動的當前記帳幣別
+    let lineCurrency = null
+    if (isActive) {
+      lineCurrency = activeState.includes(":") ? activeState.split(":")[1] : (trip.defaultCurrency || "TWD")
+    }
 
     return NextResponse.json({
       hasLinkedLine,
       isActive,
       dayText,
+      lineCurrency,
     })
   } catch (error) {
     console.error("[GET LINE Link Status Error]", error)
@@ -160,7 +168,7 @@ export async function POST(
   }
 }
 
-// PUT — 網頁端一鍵將此行程設定為預設 LINE 記帳行程
+// PUT — 網頁端一鍵將此行程設定為預設 LINE 記帳行程，並可設定其記帳幣別
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ tripId: string }> }
@@ -182,7 +190,7 @@ export async function PUT(
     if (!user || !user.lineUserId) {
       return NextResponse.json(
         { error: "請先完成個人 LINE 帳號連動" },
-        { status: 400 }
+      { status: 400 }
       )
     }
 
@@ -203,17 +211,27 @@ export async function PUT(
       )
     }
 
-    // 3. 更新 LINE Bot 狀態
+    // 3. 更新 LINE Bot 狀態 (可選擇性傳入特定幣別)
+    let newActiveTripId = tripId
+    try {
+      const body = await req.json()
+      if (body && body.currency) {
+        newActiveTripId = `${tripId}:${body.currency.toUpperCase()}`
+      }
+    } catch (e) {
+      // 忽略無 JSON body 的情況
+    }
+
     await prisma.lineBotState.upsert({
       where: { userId },
-      update: { activeTripId: tripId },
+      update: { activeTripId: newActiveTripId },
       create: {
         userId,
-        activeTripId: tripId,
+        activeTripId: newActiveTripId,
       },
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, activeTripId: newActiveTripId })
   } catch (error) {
     console.error("[PUT LINE Link Error]", error)
     return NextResponse.json({ error: "伺服器內部錯誤" }, { status: 500 })

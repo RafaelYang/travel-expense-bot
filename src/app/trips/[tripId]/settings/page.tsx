@@ -27,6 +27,7 @@ interface TripSettings {
   budgetAmount?: number
   status: string
   userRole: string
+  countries?: string[]
   members: {
     id: string
     role: string
@@ -59,7 +60,93 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [isLineActive, setIsLineActive] = useState(false)
   const [lineDayText, setLineDayText] = useState("")
   const [settingDefault, setSettingDefault] = useState(false)
+  const [lineCurrency, setLineCurrency] = useState<string | null>(null)
   const { t } = useLanguage()
+
+  const COUNTRY_CURRENCY_MAP: Record<string, { code: string; name: string }> = {
+    TW: { code: "TWD", name: "台幣" },
+    JP: { code: "JPY", name: "日圓" },
+    US: { code: "USD", name: "美金" },
+    AT: { code: "EUR", name: "歐元" },
+    DE: { code: "EUR", name: "歐元" },
+    FR: { code: "EUR", name: "歐元" },
+    IT: { code: "EUR", name: "歐元" },
+    ES: { code: "EUR", name: "歐元" },
+    NL: { code: "EUR", name: "歐元" },
+    PT: { code: "EUR", name: "歐元" },
+    GR: { code: "EUR", name: "歐元" },
+    FI: { code: "EUR", name: "歐元" },
+    CZ: { code: "CZK", name: "克朗" },
+    HU: { code: "HUF", name: "福林" },
+    PL: { code: "PLN", name: "茲羅提" },
+    CH: { code: "CHF", name: "法郎" },
+    GB: { code: "GBP", name: "英鎊" },
+    SE: { code: "SEK", name: "克朗" },
+    NO: { code: "NOK", name: "克朗" },
+    DK: { code: "DKK", name: "克朗" },
+    IS: { code: "ISK", name: "克朗" },
+    HR: { code: "EUR", name: "歐元" },
+    TR: { code: "TRY", name: "里拉" },
+    KR: { code: "KRW", name: "韓元" },
+    CN: { code: "CNY", name: "人民幣" },
+    HK: { code: "HKD", name: "港幣" },
+    MO: { code: "MOP", name: "澳門幣" },
+    TH: { code: "THB", name: "泰銖" },
+    VN: { code: "VND", name: "越南盾" },
+    SG: { code: "SGD", name: "新幣" },
+    MY: { code: "MYR", name: "馬幣" },
+    PH: { code: "PHP", name: "披索" },
+    ID: { code: "IDR", name: "印尼盾" },
+    AU: { code: "AUD", name: "澳幣" },
+    NZ: { code: "NZD", name: "紐幣" },
+    CA: { code: "CAD", name: "加幣" },
+  }
+
+  const getTripCurrencies = () => {
+    const list: { code: string; name: string }[] = []
+    if (trip && trip.countries && Array.isArray(trip.countries)) {
+      trip.countries.forEach((c: string) => {
+        const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
+        if (match) list.push(match)
+      })
+    }
+    const common = [
+      { code: "TWD", name: "台幣" },
+      { code: "JPY", name: "日圓" },
+      { code: "USD", name: "美金" },
+      { code: "EUR", name: "歐元" },
+    ]
+    common.forEach(item => list.push(item))
+    const result: { code: string; name: string }[] = []
+    const seen = new Set<string>()
+    list.forEach(item => {
+      if (!seen.has(item.code)) {
+        seen.add(item.code)
+        result.push(item)
+      }
+    })
+    return result
+  }
+
+  const updateLineCurrency = async (currencyCode: string) => {
+    try {
+      const res = await fetch(`/api/trips/${tripId}/line-link`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ currency: currencyCode }),
+      })
+      if (res.ok) {
+        setLineCurrency(currencyCode)
+      } else {
+        const data = await res.json()
+        alert(data.error || "更新失敗")
+      }
+    } catch {
+      alert("更新失敗")
+    }
+  }
 
   const [editForm, setEditForm] = useState({
     name: "",
@@ -423,6 +510,45 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
                     {t('settings.lineLink.status.activeDay').replace('{dayText}', lineDayText)}
+                  </div>
+
+                  {/* 網頁端快速設定與預設幣值顯示 */}
+                  <div style={{ 
+                    marginTop: '0.75rem', 
+                    borderTop: '1px solid rgba(255,255,255,0.08)', 
+                    paddingTop: '0.75rem' 
+                  }}>
+                    <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 500 }}>
+                      💱 LINE 預設記帳幣別：<span style={{ color: 'var(--color-primary-light)', fontWeight: 700 }}>{lineCurrency || "TWD"}</span>
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                      {getTripCurrencies().map((cur) => {
+                        const isActiveCur = lineCurrency === cur.code
+                        return (
+                          <button
+                            key={cur.code}
+                            onClick={() => updateLineCurrency(cur.code)}
+                            style={{ 
+                              fontSize: '0.7rem', 
+                              padding: '0.25rem 0.5rem', 
+                              borderRadius: '20px', 
+                              minHeight: 'auto',
+                              background: isActiveCur ? 'var(--color-primary)' : 'rgba(255,255,255,0.05)',
+                              border: isActiveCur ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                              color: isActiveCur ? '#fff' : 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              fontWeight: isActiveCur ? 600 : 400
+                            }}
+                          >
+                            {cur.name} ({cur.code})
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.5rem', lineHeight: 1.4 }}>
+                      💡 提示：您也可以在 LINE 傳送 <code>/currency [幣別]</code> 或直接點選聊天室鍵盤上方的快速按鈕隨時進行切換唷！
+                    </p>
                   </div>
                 </div>
               ) : (
