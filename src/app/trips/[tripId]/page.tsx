@@ -906,7 +906,7 @@ function ExpenseRow({ expense, currency, onEdit }: {
             {expense.item}
           </div>
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-            {expense.user.name} · {format(new Date(expense.date), 'M/d HH:mm')}
+            {expense.user.name} · {format(new Date(expense.date), 'yyyy/M/d HH:mm')}
             {expense.source === 'line' && ' · 📱'}
           </div>
         </div>
@@ -1466,6 +1466,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
     amount: String(expense.amount),
     currency: expense.currency,
     note: expense.note || '',
+    date: format(new Date(expense.date), "yyyy-MM-dd'T'HH:mm"),
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -1525,6 +1526,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
           currency: form.currency,
           note: form.note || null,
           images: editImages,
+          date: new Date(form.date).toISOString(),
         }),
       })
       if (res.ok) onSave()
@@ -1803,6 +1805,20 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
               placeholder="備註（選填）"
               style={{ marginBottom: '0.75rem' }}
             />
+
+            {/* 消費時間 */}
+            <div style={{ marginBottom: '0.75rem' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
+                消費日期與時間
+              </label>
+              <input
+                type="datetime-local"
+                className="input-field"
+                value={form.date}
+                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                style={{ fontSize: '0.85rem' }}
+              />
+            </div>
 
             {/* 圖片編輯 */}
             <div style={{ marginBottom: '1rem' }}>

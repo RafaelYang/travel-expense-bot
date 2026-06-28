@@ -2087,6 +2087,15 @@ async function handleEditExpenseMenu(replyToken: string, expenseId: string) {
                 displayText: "修改消費幣別",
               },
             },
+            {
+              type: "action",
+              action: {
+                type: "postback",
+                label: "📅 修改消費日期",
+                data: `action=edit_field&field=date&expenseId=${expense.id}`,
+                displayText: "修改消費日期",
+              },
+            },
           ],
         },
       },
@@ -2214,6 +2223,57 @@ async function handleEditField(replyToken: string, lineUserId: string, field: st
           quickReply: { items },
         },
       ])
+    } else if (field === "date") {
+      const trip = await prisma.trip.findUnique({
+        where: { id: expense.tripId },
+      })
+      if (!trip) return
+
+      // 計算行程的所有日期區間
+      const start = new Date(trip.startDate)
+      const end = new Date(trip.endDate)
+      const dateList: string[] = []
+      
+      let current = new Date(start)
+      let count = 0
+      // LINE 的 Quick Reply 最多只支援 13 個按鈕，為防萬一限制在 12 個
+      while (current <= end && count < 12) {
+        dateList.push(current.toISOString().split("T")[0])
+        current.setDate(current.getDate() + 1)
+        count++
+      }
+
+      const items = dateList.map((dStr) => {
+        const dObj = new Date(dStr)
+        const label = `${dObj.getMonth() + 1}/${dObj.getDate()}` // 例如 "6/29"
+        return {
+          type: "action",
+          action: {
+            type: "postback",
+            label: label,
+            data: `action=update_field&field=date&value=${dStr}&expenseId=${expenseId}`,
+            displayText: `修改日期為 ${label}`,
+          },
+        }
+      })
+
+      // 建立對話攔截鎖定 Token，時效 5 分鐘
+      const expires = new Date(Date.now() + 5 * 60 * 1000)
+      await prisma.verificationToken.create({
+        data: {
+          identifier: `edit-prompt:${user.id}`,
+          token: `date:${expenseId}`,
+          expires,
+        },
+      })
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `📅 請點選下方快速回覆按鈕修改【${expense.item}】的消費日期：\n（或者您也可以直接打字輸入日期，例如 6/29 或 2026/6/29）`,
+          quickReply: { items },
+        },
+      ])
     }
   } catch (err: any) {
     console.error("[handleEditField Error]", err)
@@ -2300,6 +2360,44 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
         },
         ...dateMsgs
       ])
+    } else if (field === "date") {
+      const parsedDate = new Date(value)
+      if (isNaN(parsedDate.getTime())) {
+        await replyMessage(replyToken, [
+          {
+            type: "text",
+            text: "❌ 修改失敗：無效的日期格式。",
+          },
+        ])
+        return
+      }
+
+      await prisma.expense.update({
+        where: { id: expenseId },
+        data: { date: parsedDate },
+      })
+
+      const updatedExpense = await prisma.expense.findUnique({
+        where: { id: expenseId },
+        include: { trip: true },
+      })
+      if (!updatedExpense) return
+
+      const user = await prisma.user.findUnique({
+        where: { id: updatedExpense.userId },
+        include: { lineBotState: true },
+      })
+
+      const label = `${parsedDate.getMonth() + 1}/${parsedDate.getDate()}`
+      const dateMsgs = await getExpenseDateQueryMessages(updatedExpense, user)
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `📅 消費日期修改成功！\n\n【${updatedExpense.item}】的消費日期已修改為 ${label}。`,
+        },
+        ...dateMsgs
+      ])
     }
   } catch (err: any) {
     console.error("[handleUpdateField Error]", err)
@@ -2336,15 +2434,16 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
     }
 
     if (field === "item") {
-      await prisma.expense.update({
+      const updated = await prisma.expense.update({
         where: { id: expenseId },
         data: { item: text },
+        include: { trip: true }
       })
 
-      const dateMsgs = await getExpenseDateQueryMessages(expense, user)
+      const dateMsgs = await getExpenseDateQueryMessages(updated, user)
       if (dateMsgs.length > 0) {
         const lastMsg = dateMsgs[dateMsgs.length - 1]
-        lastMsg.quickReply = await getQuickReply(expense.trip, userActiveCurrency)
+        lastMsg.quickReply = await getQuickReply(updated.trip, userActiveCurrency)
       }
 
       await replyMessage(replyToken, [
@@ -2372,25 +2471,58 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
       const convertedAmount = conversion ? conversion.convertedAmount : newAmount
       const exchangeRate = conversion ? conversion.exchangeRate : 1.0
 
-      await prisma.expense.update({
+      const updated = await prisma.expense.update({
         where: { id: expenseId },
         data: {
           amount: newAmount,
           convertedAmount,
           exchangeRate,
         },
+        include: { trip: true }
       })
 
-      const dateMsgs = await getExpenseDateQueryMessages(expense, user)
+      const dateMsgs = await getExpenseDateQueryMessages(updated, user)
       if (dateMsgs.length > 0) {
         const lastMsg = dateMsgs[dateMsgs.length - 1]
-        lastMsg.quickReply = await getQuickReply(expense.trip, userActiveCurrency)
+        lastMsg.quickReply = await getQuickReply(updated.trip, userActiveCurrency)
       }
 
       await replyMessage(replyToken, [
         {
           type: "text",
           text: `💰 金額已成功修改為：【${newAmount} ${expense.currency}】！\n💱 換算台幣：${convertedAmount} TWD`,
+        },
+        ...dateMsgs
+      ])
+    } else if (field === "date") {
+      const parsedDate = parseUserDateInput(text, expense.trip.startDate)
+      if (!parsedDate) {
+        await replyMessage(replyToken, [
+          {
+            type: "text",
+            text: `❌ 日期解析失敗！\n請直接輸入您想修改的日期（格式如：6/29、2026/6/29），或是輸入單一數字（如 29 表示出發月份的 29 號）。`,
+          },
+        ])
+        return
+      }
+
+      const updated = await prisma.expense.update({
+        where: { id: expenseId },
+        data: { date: parsedDate },
+        include: { trip: true }
+      })
+
+      const label = `${parsedDate.getMonth() + 1}/${parsedDate.getDate()}`
+      const dateMsgs = await getExpenseDateQueryMessages(updated, user)
+      if (dateMsgs.length > 0) {
+        const lastMsg = dateMsgs[dateMsgs.length - 1]
+        lastMsg.quickReply = await getQuickReply(updated.trip, userActiveCurrency)
+      }
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `📅 消費日期已成功修改為：【${label}】！`,
         },
         ...dateMsgs
       ])
@@ -2404,6 +2536,52 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
       },
     ])
   }
+}
+
+// 智慧解析使用者手動輸入的日期
+function parseUserDateInput(text: string, tripStartDate: Date): Date | null {
+  const clean = text.trim()
+  
+  // 1. 支援 yyyy/MM/dd 或 yyyy-MM-dd
+  const fullDatePattern = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/
+  const fullMatch = clean.match(fullDatePattern)
+  if (fullMatch) {
+    const y = parseInt(fullMatch[1])
+    const m = parseInt(fullMatch[2]) - 1
+    const d = parseInt(fullMatch[3])
+    const parsed = new Date(y, m, d, 12, 0, 0)
+    if (!isNaN(parsed.getTime())) return parsed
+  }
+  
+  // 2. 支援 MM/dd 或 M/d
+  const mdPattern = /^(\d{1,2})[-/](\d{1,2})$/
+  const mdMatch = clean.match(mdPattern)
+  if (mdMatch) {
+    const y = tripStartDate.getFullYear()
+    const m = parseInt(mdMatch[1]) - 1
+    const d = parseInt(mdMatch[2])
+    const parsed = new Date(y, m, d, 12, 0, 0)
+    if (!isNaN(parsed.getTime())) return parsed
+  }
+  
+  // 3. 支援單一數字 d 或 dd
+  const dPattern = /^(\d{1,2})$/
+  const dMatch = clean.match(dPattern)
+  if (dMatch) {
+    const y = tripStartDate.getFullYear()
+    const m = tripStartDate.getMonth() // 預設使用出發日期的月份
+    const d = parseInt(dMatch[1])
+    const parsed = new Date(y, m, d, 12, 0, 0)
+    if (!isNaN(parsed.getTime())) return parsed
+  }
+  
+  // 4. 支援 JavaScript 原生 parse (例如 2026-06-29)
+  const native = new Date(clean)
+  if (!isNaN(native.getTime())) {
+    return native
+  }
+  
+  return null
 }
 
 // 輔助函數：藉由消費物件與使用者，安全算出 queryDateStr 並回傳對應日期的 LINE 花費訊息

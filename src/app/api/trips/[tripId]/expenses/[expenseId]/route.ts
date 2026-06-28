@@ -14,6 +14,7 @@ const updateSchema = z.object({
   currency: z.string().optional(),
   note: z.string().optional().nullable(),
   images: z.array(z.string()).max(3).optional(),
+  date: z.string().optional(),
 })
 
 // PATCH — 編輯花費
@@ -42,6 +43,10 @@ export async function PATCH(
 
     // 如果金額或幣種改變，重新計算匯率
     const updateData: Record<string, unknown> = { ...data }
+
+    if (data.date) {
+      updateData.date = new Date(data.date)
+    }
 
     if (data.amount || data.currency) {
       const existing = await prisma.expense.findUnique({

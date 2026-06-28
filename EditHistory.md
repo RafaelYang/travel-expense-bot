@@ -401,3 +401,8 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - **歷史 JSON 目的地髒資料防禦性解碼 (Nested JSON Countries Fallback Fix)**：
   - 發現部分現有舊行程的 `countries` 欄位中，因為歷史 Bug 存入了多重嵌套 JSON 字串（如 `"{\"list\":[\"{\\\"list\\\":[...`），導致首頁 `TripCard` 渲染與旗幟轉換時無法比對出正確的國家代碼。
   - 在 `src/lib/countries.ts` 中，實作了防禦性的 `extractCleanCountries` 遞迴解碼函數，並無縫套用至 `getCountryCoverImage` 與 `getCountryFlags` 中，自動淨化任何歷史嵌套資料。這使得首頁現有舊行程能瞬間恢復配對，成功顯示奧地利的 Hallstatt 風景照與國旗！
+
+- **行程封面照上傳功能與中英文多語系支持 (Cover Image Upload & Translations)**：
+  - 在 `src/lib/i18n.ts` 中分別為中文和英文補齊了 `settings.coverImage.*` 相關的標籤、占位符及提示翻譯字典項目，完美解決原本在畫面上直接裸露顯示 key 的問題。
+  - 在「行程設定」頁面中，實作了隱藏的 file input 及本機 FileReader 圖片讀取機制（限制 1.5MB 以內以維護資料庫載入效能）。上傳的圖片會自動編碼為 Base64 寫入 `editForm.coverImage`，並在前端即時呈現預覽，在點選儲存後即可寫入資料庫並於首頁展示。
+  - 改善輸入框體驗：若當前設定為上傳圖片（以 `data:` 開頭之 Base64），輸入框會自動防禦性顯示「已選擇本機上傳圖片 (Base64) / [Local Upload Image (Base64)]」並將輸入框設為唯讀狀態，若點按其他精選風景照或預設目的地封面即可清除並重置輸入框，體驗非常滑順。
