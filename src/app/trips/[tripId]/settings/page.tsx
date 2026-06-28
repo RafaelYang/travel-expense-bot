@@ -47,6 +47,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [codeCopied, setCodeCopied] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
@@ -63,7 +64,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [lineDayText, setLineDayText] = useState("")
   const [settingDefault, setSettingDefault] = useState(false)
   const [lineCurrency, setLineCurrency] = useState<string | null>(null)
-  const { t } = useLanguage()
+  const { t, locale } = useLanguage()
 
   const [countriesList, setCountriesList] = useState<string[]>([])
   const [dailyCountries, setDailyCountries] = useState<string[]>([])
@@ -311,6 +312,31 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     navigator.clipboard.writeText(inviteCode)
     setCodeCopied(true)
     setTimeout(() => setCodeCopied(false), 2000)
+  }
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // 限制圖片大小以防資料庫載入過慢，例如 1.5MB
+    if (file.size > 1.5 * 1024 * 1024) {
+      alert(locale === 'en' ? 'Image size should be less than 1.5MB' : '上傳圖片大小限制為 1.5MB 以內唷！')
+      return
+    }
+
+    setUploadingImage(true)
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string
+      if (base64) {
+        setEditForm(prev => ({ ...prev, coverImage: base64 }))
+      }
+      setUploadingImage(false)
+    }
+    reader.onerror = () => {
+      setUploadingImage(false)
+    }
+    reader.readAsDataURL(file)
   }
 
   const saveSettings = async () => {
@@ -564,7 +590,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             {/* 行程封面照設定 */}
             <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
-                🖼️ {t('settings.coverImage') || '行程封面照'}
+                🖼️ {t('settings.coverImage')}
               </label>
               
               {/* 目前封面照預覽 */}
@@ -591,26 +617,59 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                   borderRadius: '4px',
                   backdropFilter: 'blur(4px)'
                 }}>
-                  {editForm.coverImage ? '自訂封面' : '預設目的地封面'}
+                  {editForm.coverImage ? t('settings.coverImage.custom') : t('settings.coverImage.default')}
                 </div>
               </div>
 
-              {/* 圖片連結輸入 */}
-              <div style={{ marginBottom: '0.75rem' }}>
+              {/* 圖片上傳與網址輸入 */}
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="請輸入自訂圖片 URL (例如 https://...)"
-                  value={editForm.coverImage}
+                  placeholder={t('settings.coverImage.placeholder')}
+                  value={editForm.coverImage.startsWith('data:') ? (locale === 'en' ? '[Local Upload Image (Base64)]' : '已選擇本機上傳圖片 (Base64)') : editForm.coverImage}
+                  disabled={editForm.coverImage.startsWith('data:')}
                   onChange={(e) => setEditForm({ ...editForm, coverImage: e.target.value })}
-                  style={{ fontSize: '0.8rem' }}
+                  style={{ fontSize: '0.8rem', flex: 1 }}
                 />
+                
+                {/* 隱藏的 File Input */}
+                <input
+                  type="file"
+                  id="cover-upload-input"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  style={{ display: 'none' }}
+                />
+                
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('cover-upload-input')?.click()}
+                  className="btn-secondary"
+                  disabled={uploadingImage}
+                  style={{
+                    padding: '0.5rem 0.75rem',
+                    fontSize: '0.8rem',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.25rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '8px',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    minHeight: '38px',
+                  }}
+                >
+                  {uploadingImage ? t('settings.coverImage.uploading') : t('settings.coverImage.upload')}
+                </button>
               </div>
 
               {/* 精選預設封面圖列表 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                  或點擊下方精選照片快速套用：
+                  {t('settings.coverImage.orSelect')}
                 </div>
                 <div style={{
                   display: 'flex',
