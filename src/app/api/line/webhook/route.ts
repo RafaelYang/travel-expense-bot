@@ -1193,6 +1193,7 @@ async function handleCurrencyCommand(replyToken: string, user: any, targetCurren
 // ==========================================
 
 // 國家風景照 Unsplash 靜態對照表
+// 國家風景照 Unsplash 靜態對照表
 const COUNTRY_SCENERY_MAP: Record<string, string> = {
   TW: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=800&q=80", // 台灣
   JP: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80", // 日本
@@ -1229,6 +1230,82 @@ const COUNTRY_SCENERY_MAP: Record<string, string> = {
   AU: "https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?w=800&q=80", // 澳洲
   NZ: "https://images.unsplash.com/photo-1469521669194-babb45599def?w=800&q=80", // 紐西蘭
   CA: "https://images.unsplash.com/photo-1517935706615-2717063c2225?w=800&q=80", // 加拿大
+}
+
+// 根據記帳紀錄，動態生成行程日期 Quick Reply 項目
+async function getExpensesDatesQuickReply(activeTripId: string, userId: string, trip: any) {
+  try {
+    // 1. 查詢該行程下該使用者有記帳的日期
+    const expenses = await prisma.expense.findMany({
+      where: { tripId: activeTripId, userId },
+      select: { date: true },
+      orderBy: { date: "asc" }
+    })
+
+    // 2. 取出唯一日期字串 (YYYY-MM-DD)
+    const uniqueDateStrs = Array.from(
+      new Set(expenses.map(e => e.date.toISOString().split("T")[0]))
+    )
+
+    // 3. 確保「今天」也有在列表裡 (方便隨時查看今天)
+    const todayStr = new Date().toISOString().split("T")[0]
+    if (!uniqueDateStrs.includes(todayStr)) {
+      const start = new Date(trip.startDate).toISOString().split("T")[0]
+      const end = new Date(trip.endDate).toISOString().split("T")[0]
+      if (todayStr >= start && todayStr <= end) {
+        uniqueDateStrs.push(todayStr)
+      }
+    }
+
+    // 4. 排序日期 (升序：舊到新)
+    uniqueDateStrs.sort()
+
+    // 5. 如果沒有任何記帳日期且今天也不在行程中，則 fallback 為行程的前 11 天
+    if (uniqueDateStrs.length === 0) {
+      const start = new Date(trip.startDate)
+      const end = new Date(trip.endDate)
+      const totalDays = Math.min(
+        Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
+        11
+      )
+      for (let i = 0; i < totalDays; i++) {
+        const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000)
+        uniqueDateStrs.push(d.toISOString().split("T")[0])
+      }
+    }
+
+    const weekDays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"]
+    const items = uniqueDateStrs.slice(0, 11).map((dateStr) => {
+      const d = new Date(dateStr)
+      const month = d.getMonth() + 1
+      const date = d.getDate()
+      const dayName = weekDays[d.getDay()]
+      return {
+        type: "action",
+        action: {
+          type: "message",
+          label: `${month}/${date} ${dayName}`,
+          text: `/expenses_date ${dateStr}`,
+        }
+      }
+    })
+
+    if (uniqueDateStrs.length > 11) {
+      items.push({
+        type: "action",
+        action: {
+          type: "message",
+          label: "🔍 其他日期",
+          text: `/expenses_other_dates`,
+        }
+      })
+    }
+
+    return { items }
+  } catch (err) {
+    console.error("[getExpensesDatesQuickReply Error]", err)
+    return { items: [] }
+  }
 }
 
 // 處理 /expenses 查詢，輸出當前行程的所有日期 Quick Reply
@@ -1275,55 +1352,13 @@ async function handleExpensesCommand(replyToken: string, user: any) {
       return
     }
 
-    // 計算行程天數
-    const start = new Date(trip.startDate)
-    const end = new Date(trip.endDate)
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-
-    // 產生行程的所有日期 (格式：6/28 週日)
-    const days: { dateStr: string; label: string }[] = []
-    const weekDays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"]
-
-    for (let i = 0; i < totalDays; i++) {
-      const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000)
-      const month = d.getMonth() + 1
-      const date = d.getDate()
-      const dayName = weekDays[d.getDay()]
-      const dateStr = d.toISOString().split("T")[0] // "2026-06-28"
-      days.push({
-        dateStr,
-        label: `${month}/${date} ${dayName}`,
-      })
-    }
-
-    // LINE Quick Reply 限制一排最多 13 個按鈕
-    // 我們只顯示前 11 個日期卡片，最後加一個 "其他日期" 避開限制
-    const displayDays = days.slice(0, 11)
-    const items = displayDays.map((d) => ({
-      type: "action",
-      action: {
-        type: "message",
-        label: d.label,
-        text: `/expenses_date ${d.dateStr}`,
-      },
-    }))
-
-    if (days.length > 11) {
-      items.push({
-        type: "action",
-        action: {
-          type: "message",
-          label: "🔍 其他日期",
-          text: `/expenses_other_dates`,
-        },
-      })
-    }
+    const quickReply = await getExpensesDatesQuickReply(activeTripId, user.id, trip)
 
     await replyMessage(replyToken, [
       {
         type: "text",
         text: `📅 請點選下方按鈕，選擇您想要查看花費的日期：\n（目前行程：【${trip.name}】）`,
-        quickReply: { items },
+        quickReply,
       },
     ])
   } catch (err: any) {
@@ -1548,6 +1583,8 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
       ],
     })
 
+    const quickReply = await getExpensesDatesQuickReply(activeTripId, user.id, trip)
+
     await replyMessage(replyToken, [
       {
         type: "template",
@@ -1556,6 +1593,7 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
           type: "carousel",
           columns,
         },
+        quickReply,
       },
     ])
   } catch (err: any) {
