@@ -1051,18 +1051,18 @@ const ALL_CURRENCY_NAMES: Record<string, string> = {
 async function getQuickReply(trip: any, userActiveCurrency: string | null) {
   const currencies: { currency: string; name: string }[] = []
 
-  // 1. 抓取目的地國家對應幣別
+  // 1. 加入行程基準幣別 (偏好貨幣)
+  const baseCurrency = trip.baseCurrency || "TWD"
+  const baseCurrencyChinese = ALL_CURRENCY_NAMES[baseCurrency.toUpperCase()] || baseCurrency
+  currencies.push({ currency: baseCurrency.toUpperCase(), name: baseCurrencyChinese })
+
+  // 2. 抓取目的地國家對應幣別
   const tripCountries = trip.countries || []
   for (const c of tripCountries) {
     const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
     if (match) {
       currencies.push(match)
     }
-  }
-
-  // 2. 加入常用四種幣別
-  for (const c of COMMON_CURRENCIES) {
-    currencies.push(c)
   }
 
   // 3. 排除重複的幣別
@@ -1077,11 +1077,16 @@ async function getQuickReply(trip: any, userActiveCurrency: string | null) {
   }
 
   // 4. 將當前正在使用的幣別移到最前面
-  const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || "TWD"
-  const activeIndex = uniqueCurrencies.findIndex(c => c.currency === activeCurrencyCode)
-  if (activeIndex > -1) {
-    const [activeItem] = uniqueCurrencies.splice(activeIndex, 1)
-    uniqueCurrencies.unshift(activeItem)
+  const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || baseCurrency
+  if (!seen.has(activeCurrencyCode.toUpperCase())) {
+    const activeChinese = ALL_CURRENCY_NAMES[activeCurrencyCode.toUpperCase()] || activeCurrencyCode
+    uniqueCurrencies.unshift({ currency: activeCurrencyCode.toUpperCase(), name: activeChinese })
+  } else {
+    const activeIndex = uniqueCurrencies.findIndex(c => c.currency === activeCurrencyCode)
+    if (activeIndex > -1) {
+      const [activeItem] = uniqueCurrencies.splice(activeIndex, 1)
+      uniqueCurrencies.unshift(activeItem)
+    }
   }
 
   // 5. 限制最多 11 個 (加上 "其他" 後最多 12 個，LINE 限制單次 13 個內)
@@ -1114,8 +1119,11 @@ async function getQuickReply(trip: any, userActiveCurrency: string | null) {
   return { items }
 }
 
-// 額外常見幣別對照
+// 額外常見幣別對照 (包含主流但可能沒在行程中出現的貨幣)
 const ALTERNATIVE_CURRENCIES = [
+  { currency: "JPY", name: "日圓" },
+  { currency: "EUR", name: "歐元" },
+  { currency: "USD", name: "美金" },
   { currency: "KRW", name: "韓元" },
   { currency: "THB", name: "泰銖" },
   { currency: "CNY", name: "人民幣" },
@@ -1124,15 +1132,32 @@ const ALTERNATIVE_CURRENCIES = [
   { currency: "AUD", name: "澳幣" },
   { currency: "SGD", name: "新加坡幣" },
   { currency: "MYR", name: "馬來西亞幣" },
-  { currency: "CHF", name: "瑞士法郎" },
-  { currency: "NZD", name: "紐西蘭元" },
 ]
 
-// 獲取更多幣別的快速選單
+// 獲取更多幣別的快速選單 (動態過濾已在常用選單出現的幣別，防止重複)
 async function getOtherQuickReply(trip: any, userActiveCurrency: string | null) {
-  const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || "TWD"
+  const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || trip.baseCurrency || "TWD"
   
-  const items = ALTERNATIVE_CURRENCIES.map((c) => {
+  // 1. 收集已在第一頁顯示的幣別
+  const firstPageCurrencies = new Set<string>()
+  const baseCurrency = trip.baseCurrency || "TWD"
+  firstPageCurrencies.add(baseCurrency.toUpperCase())
+  firstPageCurrencies.add(activeCurrencyCode.toUpperCase())
+  
+  const tripCountries = trip.countries || []
+  for (const c of tripCountries) {
+    const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
+    if (match) {
+      firstPageCurrencies.add(match.currency.toUpperCase())
+    }
+  }
+
+  // 2. 過濾第二頁的 ALTERNATIVE_CURRENCIES
+  const filteredAlts = ALTERNATIVE_CURRENCIES.filter(
+    (c) => !firstPageCurrencies.has(c.currency.toUpperCase())
+  )
+
+  const items = filteredAlts.map((c) => {
     const isActive = c.currency === activeCurrencyCode
     return {
       type: "action",
