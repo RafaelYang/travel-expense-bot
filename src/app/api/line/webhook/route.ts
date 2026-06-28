@@ -1057,7 +1057,7 @@ async function getQuickReply(trip: any, userActiveCurrency: string | null) {
   currencies.push({ currency: baseCurrency.toUpperCase(), name: baseCurrencyChinese })
 
   // 2. 抓取目的地國家對應幣別
-  const tripCountries = trip.countries || []
+  const { list: tripCountries } = parseTripCountries(trip.countries, 1, 1)
   for (const c of tripCountries) {
     const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
     if (match) {
@@ -1144,7 +1144,7 @@ async function getOtherQuickReply(trip: any, userActiveCurrency: string | null) 
   firstPageCurrencies.add(baseCurrency.toUpperCase())
   firstPageCurrencies.add(activeCurrencyCode.toUpperCase())
   
-  const tripCountries = trip.countries || []
+  const { list: tripCountries } = parseTripCountries(trip.countries, 1, 1)
   for (const c of tripCountries) {
     const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
     if (match) {
