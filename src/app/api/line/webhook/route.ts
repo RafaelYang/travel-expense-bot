@@ -1773,167 +1773,144 @@ async function handleOtherDatesCommand(replyToken: string, user: any) {
 }
 
 // 處理日期花費卡片輪播查詢
-async function handleDateExpensesQuery(replyToken: string, user: any, queryDateStr: string) {
-  if (!user) return
+async function buildDateExpensesMessages(user: any, queryDateStr: string): Promise<any[]> {
+  if (!user) return []
 
   const activeTripState = user.lineBotState?.activeTripId
   const activeTripId = activeTripState?.includes(":") ? activeTripState.split(":")[0] : activeTripState
-  if (!activeTripId) return
+  if (!activeTripId) return []
 
-  try {
-    const trip = await prisma.trip.findUnique({
-      where: { id: activeTripId },
-    })
-    if (!trip) return
+  const trip = await prisma.trip.findUnique({
+    where: { id: activeTripId },
+  })
+  if (!trip) return []
 
-    // 1. 智慧目的地國家與時區計算
-    const start = new Date(trip.startDate)
-    const end = new Date(trip.endDate)
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-    const queryDate = new Date(queryDateStr)
-    const currentDay = Math.ceil((queryDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+  // 1. 智慧目的地國家與時區計算
+  const start = new Date(trip.startDate)
+  const end = new Date(trip.endDate)
+  const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+  const queryDate = new Date(queryDateStr)
+  const currentDay = Math.ceil((queryDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
 
-    const { list: tripCountries, active: activeCountry } = parseTripCountries(trip.countries, currentDay, totalDays)
+  const { list: tripCountries, active: activeCountry } = parseTripCountries(trip.countries, currentDay, totalDays)
 
-    const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
+  const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
 
-    // 2. 取得目的地當地當天的 UTC 物理時間區間
-    const startOfDay = new Date(new Date(`${queryDateStr}T00:00:00.000Z`).getTime() - tzOffsetHours * 60 * 60 * 1000)
-    const endOfDay = new Date(new Date(`${queryDateStr}T23:59:59.999Z`).getTime() - tzOffsetHours * 60 * 60 * 1000)
+  // 2. 取得目的地當地當天的 UTC 物理時間區間
+  const startOfDay = new Date(new Date(`${queryDateStr}T00:00:00.000Z`).getTime() - tzOffsetHours * 60 * 60 * 1000)
+  const endOfDay = new Date(new Date(`${queryDateStr}T23:59:59.999Z`).getTime() - tzOffsetHours * 60 * 60 * 1000)
 
-    // 3. 查詢當天消費
-    const expenses = await prisma.expense.findMany({
-      where: {
-        tripId: activeTripId,
-        userId: user.id,
-        date: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
+  // 3. 查詢當天消費
+  const expenses = await prisma.expense.findMany({
+    where: {
+      tripId: activeTripId,
+      userId: user.id,
+      date: {
+        gte: startOfDay,
+        lte: endOfDay,
       },
-      orderBy: {
-        createdAt: "asc",
-      },
-    })
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  })
 
-    if (expenses.length === 0) {
-      await replyMessage(replyToken, [
-        {
-          type: "text",
-          text: `💡 您在 ${queryDateStr.replace(/-/g, "/")} 當天沒有任何花費紀錄唷！`,
-        },
-      ])
-      return
+  if (expenses.length === 0) {
+    return [
+      {
+        type: "text",
+        text: `💡 您在 ${queryDateStr.replace(/-/g, "/")} 當天沒有任何花費紀錄唷！`,
+      },
+    ]
+  }
+
+  const defaultCover = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80"
+  const countrySceneryUrl = COUNTRY_SCENERY_MAP[activeCountry.toUpperCase()] || defaultCover
+
+  // 4. 計算本日總額
+  let dailyTotalTwd = 0
+  expenses.forEach((exp) => {
+    dailyTotalTwd += exp.convertedAmount || exp.amount
+  })
+  dailyTotalTwd = Math.round(dailyTotalTwd * 100) / 100
+
+  const categoryMap: Record<string, string> = {
+    food: "🍜 餐飲",
+    transport: "🚃 交通",
+    accommodation: "🛏️ 住宿",
+    shopping: "🛍️ 購物",
+    ticket: "🎫 門票",
+    other: "📦 其他",
+  }
+
+  const baseCurrency = trip.baseCurrency || "TWD"
+  const columns: any[] = []
+
+  // 決定要放入實體消費卡片的筆數 (Carousel 限制 10 筆)
+  const displayLimit = expenses.length > 9 ? 8 : expenses.length
+
+  for (let i = 0; i < displayLimit; i++) {
+    const exp = expenses[i]
+    const title = exp.item.substring(0, 40)
+    
+    let textFmt = `分類: ${categoryMap[exp.category] || "其他"}\n金額: ${exp.amount} ${exp.currency}`
+    if (exp.currency !== baseCurrency) {
+      textFmt += `\n台幣: ${exp.convertedAmount} TWD`
     }
 
-    const defaultCover = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80"
-    const countrySceneryUrl = COUNTRY_SCENERY_MAP[activeCountry.toUpperCase()] || defaultCover
-
-    // 4. 計算本日總額
-    let dailyTotalTwd = 0
-    expenses.forEach((exp) => {
-      dailyTotalTwd += exp.convertedAmount || exp.amount
-    })
-    dailyTotalTwd = Math.round(dailyTotalTwd * 100) / 100
-
-    const categoryMap: Record<string, string> = {
-      food: "🍜 餐飲",
-      transport: "🚃 交通",
-      accommodation: "🛏️ 住宿",
-      shopping: "🛍️ 購物",
-      ticket: "🎫 門票",
-      other: "📦 其他",
-    }
-
-    const baseCurrency = trip.baseCurrency || "TWD"
-    const columns: any[] = []
-
-    // 決定要放入實體消費卡片的筆數 (Carousel 限制 10 筆)
-    const displayLimit = expenses.length > 9 ? 8 : expenses.length
-
-    for (let i = 0; i < displayLimit; i++) {
-      const exp = expenses[i]
-      const title = exp.item.substring(0, 40)
-      
-      let textFmt = `分類: ${categoryMap[exp.category] || "其他"}\n金額: ${exp.amount} ${exp.currency}`
-      if (exp.currency !== baseCurrency) {
-        textFmt += `\n台幣: ${exp.convertedAmount} TWD`
+    // 卡片圖片安全判定：
+    // 1. 使用者自行上傳的照片（若是 Base64 則使用代理路由轉為實體 HTTPS 連結，以符合 LINE 限制）
+    // 2. 分類主題代表圖（若為交通類，特別區分機票與火車車票主題）
+    // 3. Fallback 當天目的地國家風景照
+    let imageUrl = countrySceneryUrl
+    
+    const images = Array.isArray(exp.images) ? (exp.images as string[]) : []
+    if (images.length > 0 && typeof images[0] === "string") {
+      if (images[0].startsWith("http")) {
+        imageUrl = images[0]
+      } else if (images[0].startsWith("data:image")) {
+        imageUrl = `${currentOrigin}/api/trips/expenses/images/${exp.id}?index=0`
       }
-
-      // 卡片圖片安全判定：
-      // 1. 使用者自行上傳的照片（若是 Base64 則使用代理路由轉為實體 HTTPS 連結，以符合 LINE 限制）
-      // 2. 分類主題代表圖（若為交通類，特別區分機票與火車車票主題）
-      // 3. Fallback 當天目的地國家風景照
-      let imageUrl = countrySceneryUrl
-      
-      const images = Array.isArray(exp.images) ? (exp.images as string[]) : []
-      if (images.length > 0 && typeof images[0] === "string") {
-        if (images[0].startsWith("http")) {
-          imageUrl = images[0]
-        } else if (images[0].startsWith("data:image")) {
-          imageUrl = `${currentOrigin}/api/trips/expenses/images/${exp.id}?index=0`
+    } else {
+      if (exp.category === "transport") {
+        const itemLower = (exp.item || "").toLowerCase()
+        if (["機票", "飛機", "航空", "flight", "plane", "airline"].some(k => itemLower.includes(k))) {
+          imageUrl = CATEGORY_IMAGE_MAP.transport // 飛機雲海照
+        } else {
+          imageUrl = "https://images.unsplash.com/photo-1541417904950-b855846fe074?w=800&q=80" // 精美歐洲火車鐵道照
         }
       } else {
-        if (exp.category === "transport") {
-          const itemLower = (exp.item || "").toLowerCase()
-          if (["機票", "飛機", "航空", "flight", "plane", "airline"].some(k => itemLower.includes(k))) {
-            imageUrl = CATEGORY_IMAGE_MAP.transport // 飛機雲海照
-          } else {
-            imageUrl = "https://images.unsplash.com/photo-1541417904950-b855846fe074?w=800&q=80" // 精美歐洲火車鐵道照
-          }
-        } else {
-          imageUrl = CATEGORY_IMAGE_MAP[exp.category] || countrySceneryUrl
-        }
+        imageUrl = CATEGORY_IMAGE_MAP[exp.category] || countrySceneryUrl
       }
-
-      columns.push({
-        thumbnailImageUrl: imageUrl,
-        imageBackgroundColor: "#0F172A",
-        title,
-        text: textFmt,
-        actions: [
-          {
-            type: "postback",
-            label: "✏️ 編輯",
-            data: `action=edit_expense_menu&expenseId=${exp.id}`,
-          },
-          {
-            type: "postback",
-            label: "❌ 刪除",
-            data: `action=delete_expense&expenseId=${exp.id}`,
-          },
-        ],
-      })
     }
 
-    // 若大於 9 筆，追加一格「還有更多」卡片
-    if (expenses.length > 9) {
-      columns.push({
-        thumbnailImageUrl: countrySceneryUrl,
-        imageBackgroundColor: "#0F172A",
-        title: "🔍 還有更多花費...",
-        text: `今日還有其他 ${expenses.length - 8} 筆花費未在此顯示，請點選按鈕查看完整帳本。`,
-        actions: [
-          {
-            type: "uri",
-            label: "📊 前往網頁看完整帳本",
-            uri: `https://travel-expense-bot-steel.vercel.app/trips/${trip.id}`,
-          },
-          {
-            type: "message",
-            label: "📅 查詢其他日期",
-            text: "/expenses_other_dates",
-          },
-        ],
-      })
-    }
+    columns.push({
+      thumbnailImageUrl: imageUrl,
+      imageBackgroundColor: "#0F172A",
+      title,
+      text: textFmt,
+      actions: [
+        {
+          type: "postback",
+          label: "✏️ 編輯",
+          data: `action=edit_expense_menu&expenseId=${exp.id}`,
+        },
+        {
+          type: "postback",
+          label: "❌ 刪除",
+          data: `action=delete_expense&expenseId=${exp.id}`,
+        },
+      ],
+    })
+  }
 
-    // 追加最後一張「今日總結卡片」
+  // 若大於 9 筆，追加一格「還有更多」卡片
+  if (expenses.length > 9) {
     columns.push({
       thumbnailImageUrl: countrySceneryUrl,
       imageBackgroundColor: "#0F172A",
-      title: `📊 今日結算 (${queryDateStr.replace(/-/g, "/")})`,
-      text: `本日總花費: ${dailyTotalTwd} TWD\n已記錄花費共 ${expenses.length} 筆。`,
+      title: "🔍 還有更多花費...",
+      text: `今日還有其他 ${expenses.length - 8} 筆花費未在此顯示，請點選按鈕查看完整帳本。`,
       actions: [
         {
           type: "uri",
@@ -1947,20 +1924,51 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
         },
       ],
     })
+  }
 
-    const quickReply = await getExpensesDatesQuickReply(activeTripId, user.id, trip)
-
-    await replyMessage(replyToken, [
+  // 追加最後一張「今日總結卡片」
+  columns.push({
+    thumbnailImageUrl: countrySceneryUrl,
+    imageBackgroundColor: "#0F172A",
+    title: `📊 今日結算 (${queryDateStr.replace(/-/g, "/")})`,
+    text: `本日總花費: ${dailyTotalTwd} TWD\n已記錄花費共 ${expenses.length} 筆。`,
+    actions: [
       {
-        type: "template",
-        altText: `${queryDateStr} 當日消費清單與今日結算`,
-        template: {
-          type: "carousel",
-          columns,
-        },
-        quickReply,
+        type: "uri",
+        label: "📊 前往網頁看完整帳本",
+        uri: `https://travel-expense-bot-steel.vercel.app/trips/${trip.id}`,
       },
-    ])
+      {
+        type: "message",
+        label: "📅 查詢其他日期",
+        text: "/expenses_other_dates",
+      },
+    ],
+  })
+
+  const quickReply = await getExpensesDatesQuickReply(activeTripId, user.id, trip)
+
+  return [
+    {
+      type: "template",
+      altText: `${queryDateStr} 當日消費清單與今日結算`,
+      template: {
+        type: "carousel",
+        columns,
+      },
+      quickReply,
+    },
+  ]
+}
+
+async function handleDateExpensesQuery(replyToken: string, user: any, queryDateStr: string) {
+  if (!user) return
+
+  try {
+    const messages = await buildDateExpensesMessages(user, queryDateStr)
+    if (messages.length > 0) {
+      await replyMessage(replyToken, messages)
+    }
   } catch (err: any) {
     console.error("[LINE Date Expenses Error]", err)
     try {
@@ -1981,11 +1989,33 @@ async function handleDeleteExpense(replyToken: string, expenseId: string) {
       where: { id: expenseId },
     })
 
+    const user = await prisma.user.findUnique({
+      where: { id: expense.userId },
+      include: { lineBotState: true },
+    })
+
+    const activeTripState = user?.lineBotState?.activeTripId
+    let userActiveCurrency = null
+    if (activeTripState && activeTripState.includes(":")) {
+      userActiveCurrency = activeTripState.split(":")[1]
+    }
+
+    const trip = await prisma.trip.findUnique({
+      where: { id: expense.tripId },
+    })
+
+    const dateMsgs = await getExpenseDateQueryMessages(expense, user)
+    if (dateMsgs.length > 0 && trip) {
+      const lastMsg = dateMsgs[dateMsgs.length - 1]
+      lastMsg.quickReply = await getQuickReply(trip, userActiveCurrency)
+    }
+
     await replyMessage(replyToken, [
       {
         type: "text",
         text: `❌ 已成功刪除【${expense.item} ${expense.amount} ${expense.currency}】消費記錄！`,
       },
+      ...dateMsgs
     ])
   } catch (err: any) {
     console.error("[handleDeleteExpense Error]", err)
@@ -2208,11 +2238,18 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
         data: { category: value },
       })
 
+      const user = await prisma.user.findUnique({
+        where: { id: expense.userId },
+        include: { lineBotState: true },
+      })
+      const dateMsgs = await getExpenseDateQueryMessages(expense, user)
+
       await replyMessage(replyToken, [
         {
           type: "text",
           text: `📂 分類修改成功！【${expense.item}】的分類已改為：${categoryMap[value] || value}。`,
         },
+        ...dateMsgs
       ])
     } else if (field === "currency") {
       const expense = await prisma.expense.findUnique({
@@ -2249,12 +2286,19 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
       const currencyName = ALL_CURRENCY_NAMES[value.toUpperCase()] || ""
       const displayName = currencyName ? `${currencyName} (${value})` : value
 
+      const dateMsgs = await getExpenseDateQueryMessages(expense, user)
+      if (dateMsgs.length > 0) {
+        const lastMsg = dateMsgs[dateMsgs.length - 1]
+        // 確保將 QuickReply 綁定在最後一個訊息上，否則 LINE 無法顯示
+        lastMsg.quickReply = await getQuickReply(trip, userActiveCurrency)
+      }
+
       await replyMessage(replyToken, [
         {
           type: "text",
           text: `💱 幣別修改成功！\n\n【${expense.item}】的記帳幣別已改為 ${displayName}。\n💰 金額：${expense.amount} ${value}\n💱 換算台幣：${convertedAmount} TWD (匯率 ${exchangeRate})`,
-          quickReply: await getQuickReply(trip, userActiveCurrency),
         },
+        ...dateMsgs
       ])
     }
   } catch (err: any) {
@@ -2297,12 +2341,18 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
         data: { item: text },
       })
 
+      const dateMsgs = await getExpenseDateQueryMessages(expense, user)
+      if (dateMsgs.length > 0) {
+        const lastMsg = dateMsgs[dateMsgs.length - 1]
+        lastMsg.quickReply = await getQuickReply(expense.trip, userActiveCurrency)
+      }
+
       await replyMessage(replyToken, [
         {
           type: "text",
           text: `📝 項目名稱已成功修改為：【${text}】！`,
-          quickReply: await getQuickReply(expense.trip, userActiveCurrency),
         },
+        ...dateMsgs
       ])
     } else if (field === "amount") {
       const newAmount = parseFloat(text)
@@ -2331,12 +2381,18 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
         },
       })
 
+      const dateMsgs = await getExpenseDateQueryMessages(expense, user)
+      if (dateMsgs.length > 0) {
+        const lastMsg = dateMsgs[dateMsgs.length - 1]
+        lastMsg.quickReply = await getQuickReply(expense.trip, userActiveCurrency)
+      }
+
       await replyMessage(replyToken, [
         {
           type: "text",
           text: `💰 金額已成功修改為：【${newAmount} ${expense.currency}】！\n💱 換算台幣：${convertedAmount} TWD`,
-          quickReply: await getQuickReply(expense.trip, userActiveCurrency),
         },
+        ...dateMsgs
       ])
     }
   } catch (err: any) {
@@ -2347,5 +2403,25 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
         text: `❌ 修改失敗：${err.message}`,
       },
     ])
+  }
+}
+
+// 輔助函數：藉由消費物件與使用者，安全算出 queryDateStr 並回傳對應日期的 LINE 花費訊息
+async function getExpenseDateQueryMessages(expense: any, user: any): Promise<any[]> {
+  try {
+    const trip = await prisma.trip.findUnique({
+      where: { id: expense.tripId },
+    })
+    if (!trip) return []
+
+    const { active: activeCountry } = parseTripCountries(trip.countries, 1, 1)
+    const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
+    const localDate = new Date(expense.date.getTime() + tzOffsetHours * 60 * 60 * 1000)
+    const queryDateStr = localDate.toISOString().split("T")[0]
+
+    return await buildDateExpensesMessages(user, queryDateStr)
+  } catch (e) {
+    console.error("[getExpenseDateQueryMessages Error]", e)
+    return []
   }
 }
