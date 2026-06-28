@@ -108,8 +108,12 @@ export async function POST(req: NextRequest) {
     const events = payload.events || []
 
     for (const event of events) {
-      if (event.type === "message" && event.message.type === "text") {
-        await handleTextMessage(event)
+      if (event.type === "message") {
+        if (event.message.type === "text") {
+          await handleTextMessage(event)
+        } else if (event.message.type === "image") {
+          await handleImageMessage(event)
+        }
       } else if (event.type === "postback") {
         await handlePostbackEvent(event)
       }
@@ -497,19 +501,31 @@ async function handleStatusCommand(replyToken: string, user: any) {
   }
 }
 
-// 處理 Postback 行程切換事件
+// 處理 Postback 事件 (包含行程切換、圖片附加)
 async function handlePostbackEvent(event: any) {
   const replyToken = event.replyToken
   const lineUserId = event.source.userId
-  const data = event.postback.data // "action=switch_trip&tripId=xxx"
+  const data = event.postback.data
 
   if (!lineUserId || !data) return
 
   const params = new URLSearchParams(data)
   const action = params.get("action")
-  const tripId = params.get("tripId")
 
-  if (action !== "switch_trip" || !tripId) return
+  if (action === "switch_trip") {
+    const tripId = params.get("tripId")
+    if (!tripId) return
+    await handleSwitchTripPostback(replyToken, lineUserId, tripId)
+  } else if (action === "attach_image") {
+    const expenseId = params.get("expenseId")
+    const msgId = params.get("msgId")
+    if (!expenseId || !msgId) return
+    await saveLineImageToExpense(replyToken, expenseId, msgId)
+  }
+}
+
+// 處理 Postback 中的行程切換邏輯
+async function handleSwitchTripPostback(replyToken: string, lineUserId: string, tripId: string) {
 
   try {
     // 1. 查詢使用者
@@ -632,4 +648,178 @@ function getAutoCategory(item: string): string {
   }
 
   return "other"
+}
+
+// 處理 LINE 圖片訊息
+async function handleImageMessage(event: any) {
+  const replyToken = event.replyToken
+  const lineUserId = event.source.userId
+  const messageId = event.message.id
+
+  if (!lineUserId || !messageId) return
+
+  // 1. 查詢使用者
+  const user = await prisma.user.findUnique({
+    where: { lineUserId },
+  })
+
+  if (!user) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "⚠️ 您的 LINE 帳號尚未與「小銘子記帳」網站連結。\n\n請點選網頁右上角個人頭像選單，點選「連結 LINE 帳號」並取得 6 位配對碼，並在 LINE 傳送：\n/link [6位配對碼]\n\n即可完成個人帳號綁定！",
+      },
+    ])
+    return
+  }
+
+  try {
+    // 2. 查詢 10 分鐘內該使用者建立的所有花費
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    const recentExpenses = await prisma.expense.findMany({
+      where: {
+        userId: user.id,
+        createdAt: {
+          gte: tenMinutesAgo,
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    })
+
+    if (recentExpenses.length === 0) {
+      // 情況 A：0 筆
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "💡 找不到您最近 10 分鐘內的花費紀錄。\n\n請先傳送記帳文字（例如：`拉麵 1500 JPY`），隨後在 10 分鐘內傳送照片，即可自動為該花費添加圖片備註唷！",
+        },
+      ])
+    } else if (recentExpenses.length === 1) {
+      // 情況 B：剛好 1 筆
+      const expense = recentExpenses[0]
+      await saveLineImageToExpense(replyToken, expense.id, messageId)
+    } else {
+      // 情況 C：多於 1 筆
+      // LINE Buttons Template 限制最多 4 個 actions
+      const expensesToShow = recentExpenses.slice(0, 4)
+      
+      const actions = expensesToShow.map((exp) => {
+        // LINE 按鈕文字限制 20 字以內，截斷品項避免報錯
+        const label = `${exp.item} (${exp.amount} ${exp.currency})`.substring(0, 20)
+        return {
+          type: "postback",
+          label,
+          data: `action=attach_image&expenseId=${exp.id}&msgId=${messageId}`,
+          displayText: `將照片附加至【${exp.item}】`,
+        }
+      })
+
+      await replyMessage(replyToken, [
+        {
+          type: "template",
+          altText: "有多筆最近的花費，請點擊按鈕選擇要附加的項目",
+          template: {
+            type: "buttons",
+            title: "選擇附加花費項目",
+            text: `偵測到您最近 10 分鐘內有多筆記帳，請點擊下方按鈕選擇這張照片要附加到哪一筆花費：`,
+            actions,
+          },
+        },
+      ])
+    }
+  } catch (err: any) {
+    console.error("[LINE Image Message Handling Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 處理圖片失敗：${err.message}`,
+      },
+    ])
+  }
+}
+
+// 下載 LINE 圖片，轉換為 Base64 Data URL 並附加在對應 Expense 的 images 欄位中
+async function saveLineImageToExpense(replyToken: string, expenseId: string, messageId: string) {
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
+  if (!token) {
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: "❌ 伺服器端未配置 LINE_CHANNEL_ACCESS_TOKEN，無法下載圖片內容。",
+      },
+    ])
+    return
+  }
+
+  try {
+    // 1. 取得該筆花費
+    const expense = await prisma.expense.findUnique({
+      where: { id: expenseId },
+    })
+
+    if (!expense) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: "⚠️ 找不到對應的花費項目，該項目可能已被刪除。",
+        },
+      ])
+      return
+    }
+
+    // 2. 檢查圖片數量上限 (最多 3 張)
+    const currentImages = Array.isArray(expense.images) ? (expense.images as string[]) : []
+    if (currentImages.length >= 3) {
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `⚠️ 花費【${expense.item}】的圖片備註已達上限（最多 3 張），無法再加入更多圖片。`,
+        },
+      ])
+      return
+    }
+
+    // 3. 呼叫 LINE API 下載圖片二進位內容
+    const res = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      throw new Error(`無法從 LINE 下載圖片内容 HTTP ${res.status}: ${errText}`)
+    }
+
+    const arrayBuffer = await res.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const base64Data = buffer.toString("base64")
+    const dataUrl = `data:image/jpeg;base64,${base64Data}`
+
+    // 4. 更新 Expense 資料庫
+    const updatedImages = [...currentImages, dataUrl]
+    await prisma.expense.update({
+      where: { id: expenseId },
+      data: {
+        images: updatedImages,
+      },
+    })
+
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `📸 照片已成功附加至花費【${expense.item} ${expense.amount} ${expense.currency}】！（第 ${updatedImages.length}/3 張）`,
+      },
+    ])
+  } catch (err: any) {
+    console.error("[saveLineImageToExpense Error]", err)
+    await replyMessage(replyToken, [
+      {
+        type: "text",
+        text: `❌ 下載或附加圖片失敗：${err.message}`,
+      },
+    ])
+  }
 }

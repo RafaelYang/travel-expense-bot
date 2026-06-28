@@ -277,3 +277,11 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
 - `src/components/navbar.tsx` — 全域選單整合 LINE 狀態與毛玻璃彈窗對話框
 - `src/app/trips/[tripId]/settings/page.tsx` — 簡化連動 UI，依帳號連動狀態提供相應引導與一鍵設定按鈕
 - `src/lib/i18n.ts` — 擴充全域選單、Modal 與行程狀態的多語系翻譯詞條
+
+## 2026-06-28 — LINE 圖片記帳防呆與多筆選單
+### 修改概述
+- **LINE 傳送圖片自動附加**：Webhook 新增處理 `image` 類型訊息，自動下載圖片並轉為 Base64 Data URL 寫入 Expense 資料庫，前端網頁直接無縫支援。
+- **多筆記帳嚴謹防呆**：當使用者在最近 10 分鐘內有多筆記帳時，系統會自動回應 Buttons Template 按鈕選單，讓使用者在 LINE 對話中一鍵挑選這張收據/圖片屬於哪一筆消費，徹底避免錯置。
+
+### 修改的檔案
+- `src/app/api/line/webhook/route.ts` — 新增處理 `image` 訊息事件、`saveLineImageToExpense` 下載與附加函數，並擴充 Postback 支援 `action=attach_image`。
