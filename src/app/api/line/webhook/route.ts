@@ -1899,6 +1899,15 @@ async function handleEditExpenseMenu(replyToken: string, expenseId: string) {
                 displayText: "修改消費金額",
               },
             },
+            {
+              type: "action",
+              action: {
+                type: "postback",
+                label: "💱 修改消費幣別",
+                data: `action=edit_field&field=currency&expenseId=${expense.id}`,
+                displayText: "修改消費幣別",
+              },
+            },
           ],
         },
       },
@@ -1981,6 +1990,51 @@ async function handleEditField(replyToken: string, lineUserId: string, field: st
           quickReply: { items },
         },
       ])
+    } else if (field === "currency") {
+      const trip = await prisma.trip.findUnique({
+        where: { id: expense.tripId },
+      })
+      if (!trip) return
+
+      const currencies: { currency: string; name: string }[] = []
+      const tripCountries = trip.countries || []
+      for (const c of tripCountries) {
+        const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
+        if (match) {
+          currencies.push(match)
+        }
+      }
+      for (const c of COMMON_CURRENCIES) {
+        currencies.push(c)
+      }
+      const uniqueCurrencies: { currency: string; name: string }[] = []
+      const seen = new Set<string>()
+      for (const item of currencies) {
+        if (!seen.has(item.currency)) {
+          seen.add(item.currency)
+          uniqueCurrencies.push(item)
+        }
+      }
+
+      const finalCurrencies = uniqueCurrencies.slice(0, 11)
+
+      const items = finalCurrencies.map((c) => ({
+        type: "action",
+        action: {
+          type: "postback",
+          label: `${c.name} ${c.currency}`,
+          data: `action=update_field&field=currency&value=${c.currency}&expenseId=${expenseId}`,
+          displayText: `修改為 ${c.name} ${c.currency}`,
+        },
+      }))
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `💱 請點選下方按鈕，選擇修改【${expense.item}】的記帳幣別：\n（目前為：${expense.currency}）`,
+          quickReply: { items },
+        },
+      ])
     }
   } catch (err: any) {
     console.error("[handleEditField Error]", err)
@@ -2009,6 +2063,48 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
         {
           type: "text",
           text: `📂 分類修改成功！【${expense.item}】的分類已改為：${categoryMap[value] || value}。`,
+        },
+      ])
+    } else if (field === "currency") {
+      const expense = await prisma.expense.findUnique({
+        where: { id: expenseId },
+        include: { trip: true },
+      })
+      if (!expense) return
+
+      const trip = expense.trip
+      const baseCurrency = trip.baseCurrency || "TWD"
+      const conversion = await convertExpenseAmount(expense.amount, value, baseCurrency)
+      const convertedAmount = conversion ? conversion.convertedAmount : expense.amount
+      const exchangeRate = conversion ? conversion.exchangeRate : 1.0
+
+      await prisma.expense.update({
+        where: { id: expenseId },
+        data: {
+          currency: value,
+          convertedAmount,
+          exchangeRate,
+        },
+      })
+
+      const user = await prisma.user.findUnique({
+        where: { id: expense.userId },
+        include: { lineBotState: true },
+      })
+      const activeTripState = user?.lineBotState?.activeTripId
+      let userActiveCurrency = null
+      if (activeTripState && activeTripState.includes(":")) {
+        userActiveCurrency = activeTripState.split(":")[1]
+      }
+
+      const currencyName = ALL_CURRENCY_NAMES[value.toUpperCase()] || ""
+      const displayName = currencyName ? `${currencyName} (${value})` : value
+
+      await replyMessage(replyToken, [
+        {
+          type: "text",
+          text: `💱 幣別修改成功！\n\n【${expense.item}】的記帳幣別已改為 **${displayName}**。\n💰 金額：${expense.amount} ${value}\n💱 換算台幣：${convertedAmount} TWD (匯率 ${exchangeRate})`,
+          quickReply: await getQuickReply(trip, userActiveCurrency),
         },
       ])
     }
