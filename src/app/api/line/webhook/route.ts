@@ -15,6 +15,15 @@ async function replyMessage(replyToken: string, messages: any[]) {
     return
   }
 
+  // 安全防呆：如果 messages 中的 quickReply.items 為空，則將其刪除以防 LINE 400 報錯
+  const sanitizedMessages = messages.map((msg) => {
+    if (msg.quickReply && (!msg.quickReply.items || msg.quickReply.items.length === 0)) {
+      const { quickReply, ...rest } = msg
+      return rest
+    }
+    return msg
+  })
+
   try {
     const res = await fetch("https://api.line.me/v2/bot/message/reply", {
       method: "POST",
@@ -24,7 +33,7 @@ async function replyMessage(replyToken: string, messages: any[]) {
       },
       body: JSON.stringify({
         replyToken,
-        messages,
+        messages: sanitizedMessages,
       }),
     })
 
@@ -1243,52 +1252,88 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
     })
 
     // 2. 取出唯一日期字串 (YYYY-MM-DD)
-    const uniqueDateStrs = Array.from(
-      new Set(expenses.map(e => e.date.toISOString().split("T")[0]))
-    )
+    const uniqueDateStrs: string[] = []
+    const seenDates = new Set<string>()
+
+    expenses.forEach((e) => {
+      if (e.date) {
+        try {
+          const dStr = e.date.toISOString().split("T")[0]
+          if (!seenDates.has(dStr)) {
+            seenDates.add(dStr)
+            uniqueDateStrs.push(dStr)
+          }
+        } catch (err) {
+          // 忽略單筆日期的異常
+        }
+      }
+    })
 
     // 3. 確保「今天」也有在列表裡 (方便隨時查看今天)
-    const todayStr = new Date().toISOString().split("T")[0]
-    if (!uniqueDateStrs.includes(todayStr)) {
-      const start = new Date(trip.startDate).toISOString().split("T")[0]
-      const end = new Date(trip.endDate).toISOString().split("T")[0]
-      if (todayStr >= start && todayStr <= end) {
+    let todayStr = ""
+    try {
+      todayStr = new Date().toISOString().split("T")[0]
+      if (!uniqueDateStrs.includes(todayStr)) {
         uniqueDateStrs.push(todayStr)
       }
+    } catch (e) {
+      // 忽略今天日期的異常
     }
 
     // 4. 排序日期 (升序：舊到新)
     uniqueDateStrs.sort()
 
-    // 5. 如果沒有任何記帳日期且今天也不在行程中，則 fallback 為行程的前 11 天
-    if (uniqueDateStrs.length === 0) {
-      const start = new Date(trip.startDate)
-      const end = new Date(trip.endDate)
-      const totalDays = Math.min(
-        Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
-        11
-      )
-      for (let i = 0; i < totalDays; i++) {
-        const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000)
-        uniqueDateStrs.push(d.toISOString().split("T")[0])
+    // 5. 如果還是沒有任何日期，則 fallback 為行程的前 11 天
+    if (uniqueDateStrs.length === 0 && trip) {
+      try {
+        const start = trip.startDate ? new Date(trip.startDate) : new Date()
+        const end = trip.endDate ? new Date(trip.endDate) : new Date()
+        const totalDays = Math.min(
+          Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1,
+          11
+        )
+        if (totalDays > 0) {
+          for (let i = 0; i < totalDays; i++) {
+            const d = new Date(start.getTime() + i * 24 * 60 * 60 * 1000)
+            uniqueDateStrs.push(d.toISOString().split("T")[0])
+          }
+        }
+      } catch (e) {
+        // 忽略 fallback 的異常
       }
+    }
+
+    // 6. 如果到這裡還是空，強行塞入今天
+    if (uniqueDateStrs.length === 0 && todayStr) {
+      uniqueDateStrs.push(todayStr)
     }
 
     const weekDays = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"]
     const items = uniqueDateStrs.slice(0, 11).map((dateStr) => {
-      const d = new Date(dateStr)
-      const month = d.getMonth() + 1
-      const date = d.getDate()
-      const dayName = weekDays[d.getDay()]
-      return {
-        type: "action",
-        action: {
-          type: "message",
-          label: `${month}/${date} ${dayName}`,
-          text: `/expenses_date ${dateStr}`,
+      try {
+        const d = new Date(dateStr)
+        const month = d.getMonth() + 1
+        const date = d.getDate()
+        const dayName = weekDays[d.getDay()]
+        return {
+          type: "action",
+          action: {
+            type: "message",
+            label: `${month}/${date} ${dayName}`,
+            text: `/expenses_date ${dateStr}`,
+          }
+        }
+      } catch (err) {
+        return {
+          type: "action",
+          action: {
+            type: "message",
+            label: dateStr,
+            text: `/expenses_date ${dateStr}`,
+          }
         }
       }
-    })
+    }).filter(Boolean)
 
     if (uniqueDateStrs.length > 11) {
       items.push({
@@ -1304,7 +1349,19 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
     return { items }
   } catch (err) {
     console.error("[getExpensesDatesQuickReply Error]", err)
-    return { items: [] }
+    const todayStr = new Date().toISOString().split("T")[0]
+    return {
+      items: [
+        {
+          type: "action",
+          action: {
+            type: "message",
+            label: "今天",
+            text: `/expenses_date ${todayStr}`,
+          }
+        }
+      ]
+    }
   }
 }
 
