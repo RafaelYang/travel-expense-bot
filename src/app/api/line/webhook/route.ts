@@ -101,7 +101,12 @@ function getTripDayInfo(startDateStr: string, endDateStr: string): {
   }
 }
 
+let currentOrigin = "https://travel-expense-bot-steel.vercel.app"
+
 export async function POST(req: NextRequest) {
+  const origin = new URL(req.url).origin
+  currentOrigin = origin
+
   const channelSecret = process.env.LINE_CHANNEL_SECRET || ""
   const signature = req.headers.get("x-line-signature") || ""
 
@@ -1730,11 +1735,30 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
         textFmt += `\n台幣: ${exp.convertedAmount} TWD`
       }
 
-      // 卡片圖片安全判定：1. 使用者自行上傳的照片 -> 2. 分類主題代表圖 -> 3. Fallback 當天目的地國家風景照
-      let imageUrl = CATEGORY_IMAGE_MAP[exp.category] || countrySceneryUrl
+      // 卡片圖片安全判定：
+      // 1. 使用者自行上傳的照片（若是 Base64 則使用代理路由轉為實體 HTTPS 連結，以符合 LINE 限制）
+      // 2. 分類主題代表圖（若為交通類，特別區分機票與火車車票主題）
+      // 3. Fallback 當天目的地國家風景照
+      let imageUrl = countrySceneryUrl
+      
       const images = Array.isArray(exp.images) ? (exp.images as string[]) : []
-      if (images.length > 0 && typeof images[0] === "string" && images[0].startsWith("http")) {
-        imageUrl = images[0]
+      if (images.length > 0 && typeof images[0] === "string") {
+        if (images[0].startsWith("http")) {
+          imageUrl = images[0]
+        } else if (images[0].startsWith("data:image")) {
+          imageUrl = `${currentOrigin}/api/trips/expenses/images/${exp.id}/0`
+        }
+      } else {
+        if (exp.category === "transport") {
+          const itemLower = (exp.item || "").toLowerCase()
+          if (["機票", "飛機", "航空", "flight", "plane", "airline"].some(k => itemLower.includes(k))) {
+            imageUrl = CATEGORY_IMAGE_MAP.transport // 飛機雲海照
+          } else {
+            imageUrl = "https://images.unsplash.com/photo-1541417904950-b855846fe074?w=800&q=80" // 精美歐洲火車鐵道照
+          }
+        } else {
+          imageUrl = CATEGORY_IMAGE_MAP[exp.category] || countrySceneryUrl
+        }
       }
 
       columns.push({
