@@ -339,6 +339,11 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - 原因在於 LINE Carousel 模板要求各個卡片欄位（columns）中的 action 按鈕數量、標題與圖片的使用必須完全一致。
   - 我們將原本只有 1 個按鈕的「今日結算卡片」與「還有更多卡片」，同樣補上第 2 個按鈕（📅 查詢其他日期，觸發 `/expenses_other_dates` 訊息），使其與帶有 2 個編輯/刪除按鈕的實體花費卡片完美對齊，順利通過 LINE 伺服器端驗證。
 
+- **智慧消費分類主題圖片優先機制 (Defensive Theme Image Priority)**：
+  - 為解決行程開始前（如出發前幾個月預定機票/飯店/門票）記帳時，因無對應天數目的地而導致圖片單調或無法貼合意境的問題。
+  - 新增 `CATEGORY_IMAGE_MAP`，定義了餐飲（food，美食照）、交通（transport，飛機雲海照）、住宿（accommodation，精品房照）、購物（shopping，血拼照）、門票/景點（ticket，古堡教堂照）的主題示意圖。
+  - 重構卡片渲染的圖片優先級：優先使用使用者自行上傳的照片；其次，若無上傳照，則根據消費的分類 (Category) 自動套用對應的主題精美圖；最後，若分類為 `other` 或是沒匹配到，才 Fallback 顯示該天的目的地國家風景照。
+
 ### 修改的檔案
 - `src/app/trips/new/page.tsx` — 新增 `dailyCountries` 狀態與監聽 useEffect，並在基準幣種選單下方置入每日目的地設定 UI。
 - `src/app/api/trips/route.ts` — 在 POST 新增行程 API 中，根據行程起訖日數，將所有天數的 dailyCountries 預設初始化為第一個目的地國家，完全停用自動均分。
