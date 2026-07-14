@@ -9,16 +9,16 @@
   --color-primary: #0ea5e9;
   --color-primary-dark: #0284c7;
   --color-primary-light: #38bdf8;
-  
+
   /* 強調色 */
   --color-accent: #8b5cf6;
   --color-accent-dark: #7c3aed;
-  
+
   /* 成功/警告/危險 */
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
-  
+
   /* 背景 */
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
@@ -481,4 +481,72 @@ body::before {
 /* ===== 行程卡片背景 hover 效果 ===== */
 a:hover .trip-card-bg {
   transform: scale(1.05);
+}
+
+/* ===== 電腦版彈窗（大螢幕）與字體優化 ===== */
+@media (min-width: 768px) {
+  /* 彈窗整體放大 */
+  .trip-modal {
+    max-width: 550px !important;
+    padding: 2.25rem !important;
+    font-size: 0.95rem !important;
+  }
+
+  /* 支出與收入大標題 */
+  .trip-modal h2 {
+    font-size: 1.6rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .trip-modal h3 {
+    font-size: 1.2rem !important;
+  }
+
+  /* 支出與收入大金額 */
+  .trip-modal .expense-amount,
+  .trip-modal .deposit-amount {
+    font-size: 2rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* 資訊列與明細項目 */
+  .trip-modal div[style*="display: flex"][style*="flex-direction: column"][style*="gap: 0.625rem"],
+  .trip-modal div[style*="display: flex"][style*="flex-direction: column"][style*="gap: 0.875rem"] {
+    font-size: 0.88rem !important;
+    gap: 0.875rem !important;
+    padding: 1.25rem !important;
+    border-radius: 14px !important;
+  }
+
+  .trip-modal div[style*="display: flex"][style*="justify-content: space-between"] {
+    font-size: 0.88rem !important;
+  }
+
+  /* 輸入框與標籤 */
+  .trip-modal label {
+    font-size: 0.82rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .trip-modal .input-field,
+  .trip-modal input.input-field,
+  .trip-modal select.input-field {
+    font-size: 0.92rem !important;
+    padding: 0.625rem 0.875rem !important;
+    height: auto !important;
+  }
+
+  /* 按鈕 */
+  .trip-modal button,
+  .trip-modal .btn-primary,
+  .trip-modal .btn-danger,
+  .trip-modal .btn-nav {
+    font-size: 0.9rem !important;
+    padding: 0.7rem 1rem !important;
+  }
+
+  /* 統計彈窗可以更寬 */
+  .trip-modal.stats-modal {
+    max-width: 800px !important;
+  }
 }

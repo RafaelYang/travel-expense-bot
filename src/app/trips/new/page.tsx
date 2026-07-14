@@ -5,7 +5,7 @@
  */
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { Navbar } from "@/components/navbar"
@@ -15,15 +15,49 @@ import Link from "next/link"
 import { COUNTRIES, type Country } from "@/lib/countries"
 import { CURRENCIES } from "@/lib/utils"
 
+const CURRENCY_CHANGE_EVENT = "travel-expense-currency-change"
+
+function getPreferredCurrencySnapshot() {
+  return localStorage.getItem("preferredCurrency") || "TWD"
+}
+
+function subscribePreferredCurrency(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange)
+  window.addEventListener(CURRENCY_CHANGE_EVENT, onStoreChange)
+  return () => {
+    window.removeEventListener("storage", onStoreChange)
+    window.removeEventListener(CURRENCY_CHANGE_EVENT, onStoreChange)
+  }
+}
+
+function distributeCountriesByDay(startDate: string, endDate: string, countries: string[]) {
+  if (!startDate || !endDate || countries.length === 0) return []
+
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+  if (!Number.isFinite(totalDays) || totalDays <= 0) return []
+
+  const interval = totalDays / countries.length
+  return Array.from({ length: totalDays }, (_, index) => (
+    countries[Math.min(Math.floor(index / interval), countries.length - 1)]
+  ))
+}
+
 export default function NewTripPage() {
   const { data: session } = useSession()
   const router = useRouter()
-  const { t } = useLanguage()
+  const { t, locale } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [countrySearch, setCountrySearch] = useState("")
   const [showCountryPicker, setShowCountryPicker] = useState(false)
   const [dailyCountries, setDailyCountries] = useState<string[]>([])
+  const preferredCurrency = useSyncExternalStore(
+    subscribePreferredCurrency,
+    getPreferredCurrencySnapshot,
+    () => "TWD",
+  )
 
   const [form, setForm] = useState({
     name: "",
@@ -31,39 +65,8 @@ export default function NewTripPage() {
     startDate: "",
     endDate: "",
     countries: [] as string[],
-    baseCurrency: "TWD",
+    baseCurrency: "",
   })
-
-  // 讀取偏好幣種作為預設基準幣種
-  useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('preferredCurrency') : null
-    if (saved) setForm(f => ({ ...f, baseCurrency: saved }))
-  }, [])
-
-  // 當起訖日期或目的地國家列表變更時，預設自動進行平均分配
-  useEffect(() => {
-    if (!form.startDate || !form.endDate || form.countries.length === 0) {
-      setDailyCountries([])
-      return
-    }
-    const start = new Date(form.startDate)
-    const end = new Date(form.endDate)
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return
-
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-    if (totalDays <= 0) return
-
-    // 實作自動平均分配
-    const nextDaily: string[] = []
-    const list = form.countries
-    const interval = totalDays / list.length
-
-    for (let i = 0; i < totalDays; i++) {
-      const countryIdx = Math.min(Math.floor(i / interval), list.length - 1)
-      nextDaily.push(list[countryIdx])
-    }
-    setDailyCountries(nextDaily)
-  }, [form.startDate, form.endDate, form.countries])
 
   // 搜尋過濾國家
   const filteredCountries = useMemo(() => {
@@ -80,12 +83,17 @@ export default function NewTripPage() {
     .filter(Boolean) as Country[]
 
   const toggleCountry = (code: string) => {
-    setForm(prev => ({
-      ...prev,
-      countries: prev.countries.includes(code)
-        ? prev.countries.filter(c => c !== code)
-        : [...prev.countries, code],
-    }))
+    const countries = form.countries.includes(code)
+      ? form.countries.filter(c => c !== code)
+      : [...form.countries, code]
+    setForm({ ...form, countries })
+    setDailyCountries(distributeCountriesByDay(form.startDate, form.endDate, countries))
+  }
+
+  const updateDate = (field: "startDate" | "endDate", value: string) => {
+    const nextForm = { ...form, [field]: value }
+    setForm(nextForm)
+    setDailyCountries(distributeCountriesByDay(nextForm.startDate, nextForm.endDate, nextForm.countries))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -104,6 +112,7 @@ export default function NewTripPage() {
 
       const payload = {
         ...form,
+        baseCurrency: form.baseCurrency || preferredCurrency,
         countries: countriesPayload,
       }
 
@@ -238,7 +247,7 @@ export default function NewTripPage() {
                         fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
                       }}
                     >
-                      {country.flag} {country.name}
+                      {country.flag} {locale === 'en' ? country.nameEn : country.name}
                       <X size={12} />
                     </button>
                   ))}
@@ -297,7 +306,7 @@ export default function NewTripPage() {
                           >
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                               <span style={{ fontSize: '1.1rem' }}>{country.flag}</span>
-                              <span>{country.name}</span>
+                              <span>{locale === 'en' ? country.nameEn : country.name}</span>
                               <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
                                 {country.currency}
                               </span>
@@ -333,10 +342,13 @@ export default function NewTripPage() {
                   {t('newTrip.startDate')} <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
-                  type="date"
+                  type={form.startDate ? "date" : "text"}
+                  placeholder={t('newTrip.startDate')}
                   className="input-field date-input"
                   value={form.startDate}
-                  onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                  onChange={(e) => updateDate("startDate", e.target.value)}
+                  onFocus={(e) => (e.target.type = "date")}
+                  onBlur={(e) => { if (!e.target.value) e.target.type = "text" }}
                   required
                 />
               </div>
@@ -349,10 +361,13 @@ export default function NewTripPage() {
                   {t('newTrip.endDate')} <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
-                  type="date"
+                  type={form.endDate ? "date" : "text"}
+                  placeholder={t('newTrip.endDate')}
                   className="input-field date-input"
                   value={form.endDate}
-                  onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                  onChange={(e) => updateDate("endDate", e.target.value)}
+                  onFocus={(e) => (e.target.type = "date")}
+                  onBlur={(e) => { if (!e.target.value) e.target.type = "text" }}
                   required
                 />
               </div>
@@ -368,7 +383,7 @@ export default function NewTripPage() {
               </label>
               <select
                 className="input-field"
-                value={form.baseCurrency}
+                value={form.baseCurrency || preferredCurrency}
                 onChange={(e) => setForm({ ...form, baseCurrency: e.target.value })}
               >
                 {CURRENCIES.map(c => (
@@ -384,7 +399,7 @@ export default function NewTripPage() {
             {dailyCountries.length > 0 && form.countries.length > 0 && (
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.75rem', fontWeight: 600 }}>
-                  🗺️ 每日目的地國家設定 <span style={{ color: '#ef4444' }}>*</span>
+                  {t('newTrip.dailyCountries.title')} <span style={{ color: '#ef4444' }}>*</span>
                 </label>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto', paddingRight: '0.25rem' }}>
@@ -396,45 +411,6 @@ export default function NewTripPage() {
                       const d = new Date(start.getTime() + idx * 24 * 60 * 60 * 1000)
                       dateLabel = `${d.getMonth() + 1}/${d.getDate()}`
                     } catch {}
-
-                    // 國家國旗中文對照
-                    const COUNTRY_INFO_MAP: Record<string, { flag: string; name: string }> = {
-                      TW: { flag: "🇹🇼", name: "台灣" },
-                      JP: { flag: "🇯🇵", name: "日本" },
-                      KR: { flag: "🇰🇷", name: "韓國" },
-                      AT: { flag: "🇦🇹", name: "奧地利" },
-                      DE: { flag: "🇩🇪", name: "德國" },
-                      FR: { flag: "🇫🇷", name: "法國" },
-                      IT: { flag: "🇮🇹", name: "義大利" },
-                      ES: { flag: "🇪🇸", name: "西班牙" },
-                      NL: { flag: "🇳🇱", name: "荷蘭" },
-                      PT: { flag: "🇵🇹", name: "葡萄牙" },
-                      GR: { flag: "🇬🇷", name: "希臘" },
-                      FI: { flag: "🇫🇮", name: "芬蘭" },
-                      CZ: { flag: "🇨🇿", name: "捷克" },
-                      HU: { flag: "🇭🇺", name: "匈牙利" },
-                      PL: { flag: "🇵🇱", name: "波蘭" },
-                      CH: { flag: "🇨🇭", name: "瑞士" },
-                      GB: { flag: "🇬🇧", name: "英國" },
-                      SE: { flag: "🇸🇪", name: "瑞典" },
-                      NO: { flag: "🇳🇴", name: "挪威" },
-                      DK: { flag: "🇩🇰", name: "丹麥" },
-                      IS: { flag: "🇮🇸", name: "冰島" },
-                      HR: { flag: "🇭🇷", name: "克羅埃西亞" },
-                      TR: { flag: "🇹🇷", name: "土耳其" },
-                      CN: { flag: "🇨🇳", name: "中國" },
-                      HK: { flag: "🇭🇰", name: "香港" },
-                      MO: { flag: "🇲🇴", name: "澳門" },
-                      TH: { flag: "🇹🇭", name: "泰國" },
-                      VN: { flag: "🇻🇳", name: "越南" },
-                      SG: { flag: "🇸🇬", name: "新加坡" },
-                      MY: { flag: "🇲🇾", name: "馬來西亞" },
-                      PH: { flag: "🇵🇭", name: "菲律賓" },
-                      ID: { flag: "🇮🇩", name: "印尼" },
-                      AU: { flag: "🇦🇺", name: "澳洲" },
-                      NZ: { flag: "🇳🇿", name: "紐西蘭" },
-                      CA: { flag: "🇨🇦", name: "加拿大" },
-                    }
 
                     return (
                       <div key={idx} style={{
@@ -453,7 +429,9 @@ export default function NewTripPage() {
 
                         <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {form.countries.map((c) => {
-                            const info = COUNTRY_INFO_MAP[c.toUpperCase()] || { flag: "🌐", name: c }
+                            const matchedCountry = COUNTRIES.find(item => item.code.toUpperCase() === c.toUpperCase())
+                            const flag = matchedCountry?.flag || "🌐"
+                            const cName = matchedCountry ? (locale === 'en' ? matchedCountry.nameEn : matchedCountry.name) : c
                             const isSelected = countryCode.toUpperCase() === c.toUpperCase()
                             return (
                               <button
@@ -477,8 +455,8 @@ export default function NewTripPage() {
                                   minHeight: 'auto'
                                 }}
                               >
-                                <span>{info.flag}</span>
-                                <span>{info.name}</span>
+                                <span>{flag}</span>
+                                <span>{cName}</span>
                               </button>
                             )
                           })}

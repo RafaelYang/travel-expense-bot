@@ -1,0 +1,236 @@
+# EditHistory.md — 小銘子記帳機器人
+
+## 2026-05-15 — 專案初建
+
+### Phase 1: 基礎建設
+- 初始化 Next.js 16 專案（TypeScript + Tailwind CSS 4 + App Router）
+- 安裝核心依賴：Prisma 7 + @prisma/adapter-pg + NextAuth v5 + @line/bot-sdk + Radix UI + Lucide Icons + date-fns + zod
+- 建立 Prisma Schema（9 個模型：User, Account, Session, Trip, TripMember, Expense, Deposit, InviteCode, LineBotState, LineTripLink, ExchangeRateCache）
+- 設定 Prisma 7 adapter 模式（使用 @prisma/adapter-pg 連接 Supabase PostgreSQL）
+- 建立 NextAuth v5 認證系統（Credentials Provider + Prisma Adapter）
+- 建立登入/註冊頁面（深色毛玻璃卡片風格）
+- 建立 Middleware 路由保護
+- 建立全域 CSS 設計系統（深色主題、毛玻璃效果、進度條動畫、按鈕樣式）
+
+### Phase 2: 核心功能
+- 建立行程 CRUD API（/api/trips）
+- 建立花費記帳 API（/api/trips/[tripId]/expenses）
+- 建立儲值 API（/api/trips/[tripId]/deposits）
+- 建立邀請碼系統（/api/trips/[tripId]/invite + /api/trips/join）
+- 建立 BudgetProgress 元件（核心動畫：數字跳動 + 進度條 + 顏色狀態變化）
+- 建立首頁 Dashboard（行程列表、進行中脈動效果、加入行程表單）
+- 建立行程主頁（預算追蹤 + 快速記帳 + 花費列表 + 分類統計 + 成員列表）
+- 建立新增行程頁面（含幣種選擇、日期、預算設定）
+- 建立行程設定頁（邀請碼管理、狀態切換、刪除確認）
+- 建立導覽列元件（桌面版頂部 + 手機版漢堡選單 + 底部 Tab Bar）
+
+### 建立的檔案清單
+- `prisma/schema.prisma`
+- `src/lib/prisma.ts` — Prisma 7 adapter 模式
+- `src/lib/auth.ts` — NextAuth v5 設定
+- `src/lib/utils.ts` — 共用工具（格式化、分類、幣種定義）
+- `src/types/next-auth.d.ts` — 型別擴充
+- `src/middleware.ts` — 路由保護
+- `src/app/globals.css` — 設計系統
+- `src/app/layout.tsx` — 根 Layout
+- `src/app/page.tsx` — 首頁 Dashboard
+- `src/app/login/page.tsx` — 登入頁
+- `src/app/register/page.tsx` — 註冊頁
+- `src/app/trips/new/page.tsx` — 新增行程
+- `src/app/trips/[tripId]/page.tsx` — 行程主頁
+- `src/app/trips/[tripId]/settings/page.tsx` — 行程設定
+- `src/app/api/auth/[...nextauth]/route.ts`
+- `src/app/api/auth/register/route.ts`
+- `src/app/api/trips/route.ts`
+- `src/app/api/trips/[tripId]/route.ts`
+- `src/app/api/trips/[tripId]/expenses/route.ts`
+- `src/app/api/trips/[tripId]/deposits/route.ts`
+- `src/app/api/trips/[tripId]/invite/route.ts`
+- `src/app/api/trips/join/route.ts`
+- `src/components/navbar.tsx`
+- `src/components/budget-progress.tsx`
+- `.env` / `.env.example`
+
+## 2026-05-15 — 認證系統改為 Google + LINE OAuth
+
+### 改動概述
+- 移除 Credentials（帳號密碼）登入，改為 Google OAuth 唯一登入
+- 加入 LINE Login，登入後自動綁定 LINE User ID（用於推播通知）
+- 加入帳號合併邏輯：LINE-first 使用者後續用 Google 登入時自動合併
+- 加入 Vercel 部署設定
+
+### 修改的檔案
+- `src/lib/auth.ts` — 全面改用 Google + LINE Provider，移除 Credentials + bcrypt
+- `src/app/login/page.tsx` — 改為 Google 彩色 logo + LINE 綠色按鈕
+- `src/middleware.ts` — 移除 /register 路徑
+- `src/types/next-auth.d.ts` — 簡化型別擴充
+- `prisma/schema.prisma` — 移除 password 欄位、PasswordResetToken model
+- `.env` / `.env.example` — 加入 GOOGLE_CLIENT_ID/SECRET、LINE_CLIENT_ID/SECRET
+
+### 刪除的檔案
+- `src/app/register/page.tsx` — 不再需要註冊頁
+- `src/app/api/auth/register/route.ts` — 不再需要註冊 API
+
+### 新增的檔案
+- `vercel.json` — Vercel 部署設定（prisma generate + db push + next build）
+
+### 移除的依賴
+- `bcrypt` / `@types/bcrypt` — 不再需要密碼雜湊
+
+## 2026-05-15 — 使用者頭像下拉選單 + Vercel 部署
+
+### 改動概述
+- 右上角使用者區域改為 Google 頭像 + 名字 + 下拉箭頭
+- 點擊展開毛玻璃下拉選單，顯示帳號資訊（頭像、名字、Email）+ 登出按鈕
+- 手機版漢堡選單也整合頭像 + 登出
+- Prisma Client 改為 Proxy 延遲初始化（避免 Vercel build 時嘗試 DB 連線）
+- 部署至 Vercel：https://travel-expense-bot-steel.vercel.app
+
+### 修改的檔案
+- `src/components/navbar.tsx` — 頭像 + 下拉選單重構
+- `src/app/globals.css` — 新增 fadeInDown 動畫
+- `src/lib/prisma.ts` — Proxy 延遲初始化
+- `next.config.ts` — 加入 Google/LINE 圖片 domain 白名單
+- `vercel.json` — 簡化 buildCommand
+- `prisma.config.ts` — 移除不支援的 directUrl
+
+## 2026-05-15 — 主題切換 + 登入跳轉修正
+
+### 改動概述
+- 修正線上登入後跳 localhost 的問題（Vercel 加入 NEXTAUTH_URL 環境變數）
+- 加入深色/淺色/跟隨系統的主題切換功能
+- 主題選項整合在頭像下拉選單中，三個按鈕橫排（淺色 ☀️ / 深色 🌙 / 系統 🖥️）
+- 防閃爍：layout.tsx 加入 inline script，在 hydration 前就套用正確主題
+- 選擇儲存到 localStorage，下次開啟自動套用
+
+### 新增的檔案
+- `src/components/theme-provider.tsx` — 主題管理 Context + Provider
+
+### 修改的檔案
+- `src/app/globals.css` — 加入 [data-theme="light"] 淺色變數 + 淺色背景漸層
+- `src/app/layout.tsx` — 包裹 ThemeProvider + 防閃爍 script
+- `src/components/navbar.tsx` — 下拉選單加入主題切換區
+
+## 2026-05-16 — 修正 Vercel 生產環境 OAuth 登入
+
+### 問題描述
+Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 session 未被建立。
+
+### 根因分析
+1. Prisma Client 使用 Proxy 延遲初始化與 PrismaAdapter 不相容
+2. 自訂 cookies 設定（`__Secure-` + `sameSite: none`）導致 PKCE state 驗證異常
+3. middleware 使用 `getToken()` 無法正確讀取 NextAuth v5 在 HTTPS 下的 cookie
+
+### 修正內容
+- `src/lib/prisma.ts` — 移除 Proxy 模式，改回直接初始化 PrismaClient
+- `src/lib/auth.ts` — 移除自訂 cookies 設定，改用 NextAuth 預設值
+- `src/middleware.ts` — 改用 cookie 存在性檢查（同時支援 `__Secure-authjs.*` 和 `authjs.*`）
+- Vercel 環境變數加入 `NEXTAUTH_URL=https://travel-expense-bot-steel.vercel.app`
+
+## 2026-05-16 — 品牌更新 + i18n + 下拉子選單
+
+### 改動概述
+- 品牌名稱改為「小銘子旅行用記帳」/ "Ming's Travel Expense"
+- Logo 從 ✈️ emoji 改為黑色飛機剪影 SVG
+- Favicon 改為飛機剪影 SVG
+- 下拉選單：主題和語言改為 hover 展開子選單（二級選單）
+- 加入多語系（i18n）系統：繁體中文 + English
+
+### 新增的檔案
+- `src/lib/i18n.ts` — 翻譯字典（zh-TW / en）
+- `src/components/language-provider.tsx` — 語言管理 Context
+- `public/favicon.svg` — 飛機剪影 SVG favicon
+
+### 修改的檔案
+- `src/components/navbar.tsx` — 完全重寫：飛機 logo、hover 子選單、語言切換
+- `src/app/layout.tsx` — 加入 LanguageProvider + SVG favicon
+- `src/app/page.tsx` — 首頁文字改用 t() 翻譯
+- `src/app/login/page.tsx` — 登入頁文字改用 t() 翻譯
+
+## 2026-05-17 — 匯率 API 升級為每小時更新
+
+### 改動概述
+- 匯率來源從 open.er-api.com（每日更新）改為 CurrencyBeacon（每小時更新）
+- 新增 `/api/exchange-rate` API proxy route，前端不再直接呼叫外部 API
+- API key 安全存放在伺服器端，前端透過 proxy 查詢
+- 備用來源：當 CurrencyBeacon 異常時自動 fallback 到 open.er-api.com
+
+### 新增的檔案
+- `src/app/api/exchange-rate/route.ts` — 匯率查詢 API proxy
+
+### 修改的檔案
+- `src/lib/exchange-rate.ts` — 改用 CurrencyBeacon API + fallback 機制
+- `src/app/trips/[tripId]/page.tsx` — 前端改走 `/api/exchange-rate` proxy
+- `.env` — 加入 `EXCHANGE_RATE_API_KEY`
+
+## 2026-05-17 — 行程卡片視覺升級
+
+### 改動概述
+- 行程卡片改為全寬佈局（不再用 grid 卡片）
+- 日期格式加上年份（`yyyy/M/d`）
+- 行程排序改為由新到舊（`startDate desc`）
+- 卡片背景使用對應國家的城市風景照片（Unsplash）
+- 暗色遮罩確保文字可讀性，hover 時背景放大動畫
+- 顯示國旗 emoji
+
+### 修改的檔案
+- `src/app/page.tsx` — 全寬 TripCard + 城市背景照
+- `src/lib/countries.ts` — 新增 COUNTRY_COVER_IMAGES / getCountryCoverImage / getCountryFlags
+- `src/app/api/trips/route.ts` — 排序改為 startDate desc
+- `src/app/globals.css` — 新增 trip-card-bg hover 動畫
+
+## 2026-05-29 — 修正成員列表被記帳按鈕遮蓋
+
+### 問題描述
+行程主頁點擊「成員」標籤展開成員列表 popup 時，popup 被下方的「記帳」按鈕遮蓋（z-index 層疊問題）。
+
+### 根因分析
+成員列表 popup 使用 `position: absolute` + `zIndex: 30`，但它的父容器（`.glass-card`）沒有建立 stacking context，導致後續 DOM 元素（記帳按鈕）自然覆蓋在上面。
+
+### 修正內容
+- `src/app/trips/[tripId]/page.tsx`
+  - 行程標題卡片加上 `position: relative` + 動態 `zIndex`（展開成員列表時提高為 10）
+  - 成員列表 popup 的 `zIndex` 從 30 提高到 60
+  - popup 的 `boxShadow` 加深，視覺上更明確浮在上層
+
+## 2026-05-29 — Email 邀請加入行程
+
+### 改動概述
+新增 Email 邀請功能：在行程設定頁輸入對方 Email → 系統自動寄送精美邀請信 → 對方點連結一鍵加入行程。
+未註冊的使用者會被引導 Google 登入（自動註冊），登入後自動加入。
+
+### 新增的檔案
+- `src/app/api/trips/[tripId]/invite-email/route.ts` — Email 邀請 API（Resend 寄信 + HTML 模板）
+- `src/app/api/invite/accept/route.ts` — 接受邀請 API（GET 查詢邀請資訊 + POST 加入行程）
+- `src/app/invite/accept/page.tsx` — 邀請接受頁面（已登入自動加入 / 未登入引導 Google 登入）
+
+### 修改的檔案
+- `prisma/schema.prisma` — 新增 EmailInvite model + Trip relation
+- `src/app/trips/[tripId]/settings/page.tsx` — 加入 Email 邀請卡片（輸入框 + 發送按鈕 + 成功/錯誤提示）
+- `src/lib/i18n.ts` — 新增 Email 邀請相關翻譯（中/英）
+- `src/middleware.ts` — 將 `/invite` 路徑加入白名單（允許未登入存取）
+- `.env` — 新增 RESEND_API_KEY
+
+### 新增的依賴
+- `resend` — Email 寄送服務（免費方案 100 封/天）
+
+### 技術細節
+- 邀請 token 為 UUID，7 天有效
+- 重複邀請同一 Email 會重用既有 token（不重複建立）
+- Email HTML 模板：深色漸層風格，含行程資訊卡片 + CTA 按鈕
+- 寄件人：`小銘子記帳 <onboarding@resend.dev>`（Resend 免費方案）
+- Vercel 環境變數已設定 RESEND_API_KEY
+
+## 2026-06-12 — 專案清理：移除不必要檔案
+
+### 刪除的檔案
+- `過場動畫.mp4` — 與 `public/loading.mp4` 完全相同（MD5 一致），根目錄的是多餘複本
+- `.DS_Store` — macOS 系統產生的隱藏檔
+- `public/file.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/globe.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/next.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/vercel.svg` — Next.js 範本預設檔，程式碼中未引用
+- `public/window.svg` — Next.js 範本預設檔，程式碼中未引用
+- `.vscode/settings.json` — 內容為空物件 `{}`，無任何設定（整個 `.vscode` 目錄移除）
+- `CLAUDE.md` — 僅一行 `@AGENTS.md`，功能已由 AGENTS.md 覆蓋
+- `.next/` — 構建快取目錄（494MB），`npm run build` 可重新產生

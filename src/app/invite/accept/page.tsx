@@ -7,10 +7,12 @@
  */
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
+import { useCallback, useEffect, useState, Suspense } from "react"
 import { useSession, signIn } from "next-auth/react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, CheckCircle, XCircle, LogIn, Plane } from "lucide-react"
+import { useLanguage } from "@/components/language-provider"
+import { interpolate } from "@/lib/i18n"
 
 interface InviteInfo {
   tripName: string
@@ -26,17 +28,47 @@ function InviteAcceptContent() {
   const token = searchParams.get("token")
   const { data: session, status: sessionStatus } = useSession()
   const router = useRouter()
+  const { t } = useLanguage()
 
   const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null)
-  const [state, setState] = useState<"loading" | "info" | "joining" | "success" | "error">("loading")
-  const [errorMsg, setErrorMsg] = useState("")
+  const [state, setState] = useState<"loading" | "info" | "joining" | "success" | "error">(
+    token ? "loading" : "error",
+  )
+  const [errorMsg, setErrorMsg] = useState(token ? "" : t("invite.accept.error.missing"))
   const [hasAttempted, setHasAttempted] = useState(false)
+
+  const acceptInvite = useCallback(async () => {
+    if (!token) return
+    setHasAttempted(true)
+    setState("joining")
+
+    try {
+      const res = await fetch("/api/invite/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setState("success")
+        setTimeout(() => router.push(`/trips/${data.tripId}`), 1500)
+      } else if (data.message?.includes("已經是")) {
+        setState("success")
+        setTimeout(() => router.push(`/trips/${data.tripId}`), 1000)
+      } else {
+        setState("error")
+        setErrorMsg(data.error || t("invite.accept.error.joinFailed"))
+      }
+    } catch {
+      setState("error")
+      setErrorMsg(t("invite.accept.error.joinFailedRetry"))
+    }
+  }, [router, t, token])
 
   // 載入邀請資訊
   useEffect(() => {
     if (!token) {
-      setState("error")
-      setErrorMsg("缺少邀請連結")
       return
     }
 
@@ -53,61 +85,27 @@ function InviteAcceptContent() {
 
         if (!res.ok) {
           setState("error")
-          setErrorMsg(data.error || "邀請連結無效或已過期")
+          setErrorMsg(data.error || t("invite.accept.error.invalid"))
           return
         }
         setInviteInfo(data)
         setState("info")
       } catch {
         setState("error")
-        setErrorMsg("載入邀請資訊失敗")
+        setErrorMsg(t("invite.accept.error.loadFailed"))
       }
     }
 
     fetchInfo()
-  }, [token])
+  }, [router, token, t])
 
   // 已登入時自動加入
   useEffect(() => {
-    if (state === "info" && session?.user && !hasAttempted) {
-      acceptInvite()
-    }
-  }, [state, session, hasAttempted])
+    if (state !== "info" || !session?.user || hasAttempted) return
 
-  const acceptInvite = async () => {
-    if (!token) return
-    setHasAttempted(true)
-    setState("joining")
-    
-    try {
-      const res = await fetch("/api/invite/accept", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      })
-      const data = await res.json()
-
-      if (data.success) {
-        setState("success")
-        // 1.5 秒後跳轉
-        setTimeout(() => {
-          router.push(`/trips/${data.tripId}`)
-        }, 1500)
-      } else {
-        // 特殊情況：已經是成員，直接跳轉
-        if (data.message?.includes("已經是")) {
-          setState("success")
-          setTimeout(() => router.push(`/trips/${data.tripId}`), 1000)
-        } else {
-          setState("error")
-          setErrorMsg(data.error || "加入失敗")
-        }
-      }
-    } catch {
-      setState("error")
-      setErrorMsg("加入失敗，請稍後再試")
-    }
-  }
+    const timer = window.setTimeout(() => void acceptInvite(), 0)
+    return () => window.clearTimeout(timer)
+  }, [acceptInvite, state, session, hasAttempted])
 
   const handleLogin = () => {
     // 登入後導回本頁（帶 token）
@@ -152,7 +150,7 @@ function InviteAcceptContent() {
             color: "var(--text-primary)",
             letterSpacing: "-0.02em",
           }}>
-            小銘子旅行用記帳
+            {t("brand.name")}
           </div>
         </div>
 
@@ -170,7 +168,7 @@ function InviteAcceptContent() {
                 marginBottom: "1rem",
               }} />
               <p style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
-                載入邀請資訊⋯
+                {t("invite.accept.loading.info")}
               </p>
             </div>
           )}
@@ -193,17 +191,16 @@ function InviteAcceptContent() {
                 color: "var(--text-primary)",
                 marginBottom: "0.5rem",
               }}>
-                你被邀請加入行程
+                {t("invite.accept.title")}
               </h1>
 
               <p style={{
                 fontSize: "0.85rem", color: "var(--text-muted)",
                 marginBottom: "1.25rem",
               }}>
-                <strong style={{ color: "var(--text-secondary)" }}>
-                  {inviteInfo?.inviterName}
-                </strong>
-                {" "}邀請你一起記錄旅行花費
+                {interpolate(t("invite.accept.subtitle"), {
+                  inviterName: inviteInfo?.inviterName || "",
+                })}
               </p>
 
               {/* 行程卡片 */}
@@ -245,14 +242,14 @@ function InviteAcceptContent() {
                 }}
               >
                 <LogIn size={18} />
-                使用 Google 登入並加入
+                {t("invite.accept.loginBtn")}
               </button>
 
               <p style={{
                 fontSize: "0.72rem", color: "var(--text-muted)",
                 marginTop: "0.75rem",
               }}>
-                還沒有帳號？登入 Google 即可自動註冊
+                {t("invite.accept.loginTip")}
               </p>
             </div>
           )}
@@ -266,7 +263,7 @@ function InviteAcceptContent() {
                 marginBottom: "1rem",
               }} />
               <p style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
-                正在加入行程⋯
+                {t("invite.accept.joining")}
               </p>
             </div>
           )}
@@ -282,10 +279,10 @@ function InviteAcceptContent() {
                 fontSize: "1.1rem", fontWeight: 700,
                 color: "var(--text-primary)", marginBottom: "0.5rem",
               }}>
-                成功加入！
+                {t("invite.accept.success")}
               </h2>
               <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                正在跳轉到行程頁面⋯
+                {t("invite.accept.redirecting")}
               </p>
             </div>
           )}
@@ -301,7 +298,7 @@ function InviteAcceptContent() {
                 fontSize: "1.1rem", fontWeight: 700,
                 color: "var(--text-primary)", marginBottom: "0.5rem",
               }}>
-                無法加入
+                {t("invite.accept.failed")}
               </h2>
               <p style={{
                 fontSize: "0.85rem", color: "var(--text-muted)",
@@ -314,7 +311,7 @@ function InviteAcceptContent() {
                 className="btn-secondary"
                 style={{ justifyContent: "center", width: "100%" }}
               >
-                返回首頁
+                {t("invite.accept.backHome")}
               </button>
             </div>
           )}

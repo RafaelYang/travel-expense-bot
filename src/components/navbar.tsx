@@ -7,10 +7,9 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
-import { PlusCircle, Settings, LogOut, Menu, X, ChevronDown, ChevronRight, Sun, Moon, Monitor, Globe, Coins, MessageSquare, Loader2 } from "lucide-react"
-import { useState, useRef, useEffect } from "react"
+import { LogOut, Menu, X, ChevronDown, ChevronRight, Sun, Moon, Monitor, Globe, Coins, MessageSquare, Loader2 } from "lucide-react"
+import { useState, useRef, useEffect, useSyncExternalStore } from "react"
 import { useTheme } from "./theme-provider"
 import { useLanguage } from "./language-provider"
 import { ALL_CURRENCIES } from "@/lib/countries"
@@ -24,9 +23,64 @@ function PlaneIcon({ size = 20, className }: { size?: number; className?: string
   )
 }
 
+const CURRENCY_CHANGE_EVENT = "travel-expense-currency-change"
+const LINE_STATUS_CACHE_MS = 60_000
+
+interface LineStatus {
+  hasLinkedLine: boolean
+  activeTripName: string | null
+}
+
+let lineStatusCache: { userId: string; data: LineStatus; expiresAt: number } | null = null
+let lineStatusRequest: { userId: string; promise: Promise<LineStatus | null> } | null = null
+
+async function getLineStatus(userId: string): Promise<LineStatus | null> {
+  if (lineStatusCache?.userId === userId && lineStatusCache.expiresAt > Date.now()) {
+    return lineStatusCache.data
+  }
+
+  if (lineStatusRequest?.userId === userId) {
+    return lineStatusRequest.promise
+  }
+
+  const promise = fetch('/api/users/line-link')
+    .then(async (res) => res.ok ? res.json() as Promise<LineStatus> : null)
+    .then((data) => {
+      if (data) {
+        lineStatusCache = {
+          userId,
+          data,
+          expiresAt: Date.now() + LINE_STATUS_CACHE_MS,
+        }
+      }
+      return data
+    })
+    .finally(() => {
+      if (lineStatusRequest?.userId === userId) {
+        lineStatusRequest = null
+      }
+    })
+
+  lineStatusRequest = { userId, promise }
+  return promise
+}
+
+function getPreferredCurrencySnapshot() {
+  const saved = localStorage.getItem("preferredCurrency")
+  return saved && ALL_CURRENCIES[saved] ? saved : "TWD"
+}
+
+function subscribePreferredCurrency(onStoreChange: () => void) {
+  window.addEventListener("storage", onStoreChange)
+  window.addEventListener(CURRENCY_CHANGE_EVENT, onStoreChange)
+  return () => {
+    window.removeEventListener("storage", onStoreChange)
+    window.removeEventListener(CURRENCY_CHANGE_EVENT, onStoreChange)
+  }
+}
+
 export function Navbar() {
   const { data: session } = useSession()
-  const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [themeSubOpen, setThemeSubOpen] = useState(false)
@@ -41,28 +95,26 @@ export function Navbar() {
   const [activeTripName, setActiveTripName] = useState<string | null>(null)
   const [lineModalOpen, setLineModalOpen] = useState(false)
   const [lineCode, setLineCode] = useState("")
-  const [lineCodeExpires, setLineCodeExpires] = useState<string | null>(null)
   const [generatingLineCode, setGeneratingLineCode] = useState(false)
   const [copied, setCopied] = useState(false)
 
-  const fetchLineStatus = async () => {
-    try {
-      const res = await fetch('/api/users/line-link')
-      if (res.ok) {
-        const data = await res.json()
+  useEffect(() => {
+    const userId = session?.user?.id
+    if (!userId) return
+
+    let cancelled = false
+    getLineStatus(userId)
+      .then((data) => {
+        if (!data || cancelled) return
         setLineLinked(data.hasLinkedLine)
         setActiveTripName(data.activeTripName)
-      }
-    } catch (err) {
-      console.error("載入 LINE 狀態失敗", err)
-    }
-  }
+      })
+      .catch((error) => {
+        console.error("載入 LINE 狀態失敗", error)
+      })
 
-  useEffect(() => {
-    if (session) {
-      fetchLineStatus()
-    }
-  }, [session, pathname])
+    return () => { cancelled = true }
+  }, [session?.user?.id])
 
   const generateLineCode = async () => {
     setGeneratingLineCode(true)
@@ -71,7 +123,6 @@ export function Navbar() {
       const data = await res.json()
       if (res.ok) {
         setLineCode(data.token)
-        setLineCodeExpires(data.expires)
       } else {
         alert(data.error || "產生連動碼失敗")
       }
@@ -89,14 +140,14 @@ export function Navbar() {
   }
 
   // 偏好幣種（存 localStorage）
-  const [preferredCurrency, setPreferredCurrencyState] = useState('TWD')
-  useEffect(() => {
-    const saved = localStorage.getItem('preferredCurrency')
-    if (saved && ALL_CURRENCIES[saved]) setPreferredCurrencyState(saved)
-  }, [])
+  const preferredCurrency = useSyncExternalStore(
+    subscribePreferredCurrency,
+    getPreferredCurrencySnapshot,
+    () => "TWD",
+  )
   const setPreferredCurrency = (cur: string) => {
-    setPreferredCurrencyState(cur)
     localStorage.setItem('preferredCurrency', cur)
+    window.dispatchEvent(new Event(CURRENCY_CHANGE_EVENT))
   }
 
   // 常用幣種（在選單裡顯示的）
@@ -129,15 +180,7 @@ export function Navbar() {
 
   if (!session) return null
 
-  const navItems = [
-    { href: "/", label: t('nav.trips'), icon: PlaneIcon },
-    { href: "/trips/new", label: t('nav.newTrip'), icon: PlusCircle },
-  ]
 
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/"
-    return pathname.startsWith(href)
-  }
 
   const displayName = session.user?.name || session.user?.email?.split('@')[0] || t('menu.user.fallback')
   const userImage = session.user?.image
@@ -429,18 +472,7 @@ export function Navbar() {
             </span>
           </Link>
 
-          {/* 導覽連結 */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            {navItems.map(item => (
-              <Link key={item.href} href={item.href}
-                className={`nav-link ${isActive(item.href) ? 'active' : ''}`}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
-              >
-                {item.href === "/" ? <PlaneIcon size={16} /> : <item.icon size={16} />}
-                {item.label}
-              </Link>
-            ))}
-          </div>
+
 
           {/* 使用者頭像 + 下拉選單 */}
           <div ref={userMenuRef} style={{ position: 'relative' }}>
@@ -532,15 +564,7 @@ export function Navbar() {
             borderTop: '1px solid var(--border-color)',
             display: 'flex', flexDirection: 'column', gap: '0.25rem',
           }}>
-            {navItems.map(item => (
-              <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}
-                className={`nav-link ${isActive(item.href) ? 'active' : ''}`}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.75rem' }}
-              >
-                {item.href === "/" ? <PlaneIcon size={18} /> : <item.icon size={18} />}
-                {item.label}
-              </Link>
-            ))}
+
 
             {/* 主題切換 */}
             <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.5rem', paddingTop: '0.75rem' }}>

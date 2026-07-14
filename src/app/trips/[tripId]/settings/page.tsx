@@ -3,8 +3,7 @@
  */
 "use client"
 
-import { useEffect, useState, use } from "react"
-import { useSession } from "next-auth/react"
+import { useCallback, useEffect, useState, use } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import {
@@ -13,9 +12,8 @@ import {
   UserMinus,
 } from "lucide-react"
 import Link from "next/link"
-import { TRIP_STATUS, CURRENCIES } from "@/lib/utils"
 import { useLanguage } from "@/components/language-provider"
-import { getCountryCoverImage } from "@/lib/countries"
+import { getCountryCoverImage, COUNTRIES } from "@/lib/countries"
 
 interface TripSettings {
   id: string
@@ -39,7 +37,6 @@ interface TripSettings {
 
 export default function TripSettingsPage({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
-  const { data: session } = useSession()
   const router = useRouter()
   const [trip, setTrip] = useState<TripSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -55,142 +52,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState("")
   const [removingMember, setRemovingMember] = useState<string | null>(null)
-  const [lineCode, setLineCode] = useState("")
-  const [lineCodeExpires, setLineCodeExpires] = useState<string | null>(null)
-  const [generatingLineCode, setGeneratingLineCode] = useState(false)
-  const [lineCodeCopied, setLineCodeCopied] = useState(false)
-  const [hasLinkedLine, setHasLinkedLine] = useState(false)
-  const [isLineActive, setIsLineActive] = useState(false)
-  const [lineDayText, setLineDayText] = useState("")
-  const [settingDefault, setSettingDefault] = useState(false)
-  const [lineCurrency, setLineCurrency] = useState<string | null>(null)
   const { t, locale } = useLanguage()
 
   const [countriesList, setCountriesList] = useState<string[]>([])
   const [dailyCountries, setDailyCountries] = useState<string[]>([])
-
-  const COUNTRY_INFO_MAP: Record<string, { flag: string; name: string }> = {
-    TW: { flag: "🇹🇼", name: "台灣" },
-    JP: { flag: "🇯🇵", name: "日本" },
-    KR: { flag: "🇰🇷", name: "韓國" },
-    AT: { flag: "🇦🇹", name: "奧地利" },
-    DE: { flag: "🇩🇪", name: "德國" },
-    FR: { flag: "🇫🇷", name: "法國" },
-    IT: { flag: "🇮🇹", name: "義大利" },
-    ES: { flag: "🇪🇸", name: "西班牙" },
-    NL: { flag: "🇳🇱", name: "荷蘭" },
-    PT: { flag: "🇵🇹", name: "葡萄牙" },
-    GR: { flag: "🇬🇷", name: "希臘" },
-    FI: { flag: "🇫🇮", name: "芬蘭" },
-    CZ: { flag: "🇨🇿", name: "捷克" },
-    HU: { flag: "🇭🇺", name: "匈牙利" },
-    PL: { flag: "🇵🇱", name: "波蘭" },
-    CH: { flag: "🇨🇭", name: "瑞士" },
-    GB: { flag: "🇬🇧", name: "英國" },
-    SE: { flag: "🇸🇪", name: "瑞典" },
-    NO: { flag: "🇳🇴", name: "挪威" },
-    DK: { flag: "🇩🇰", name: "丹麥" },
-    IS: { flag: "🇮🇸", name: "冰島" },
-    HR: { flag: "🇭🇷", name: "克羅埃西亞" },
-    TR: { flag: "🇹🇷", name: "土耳其" },
-    CN: { flag: "🇨🇳", name: "中國" },
-    HK: { flag: "🇭🇰", name: "香港" },
-    MO: { flag: "🇲🇴", name: "澳門" },
-    TH: { flag: "🇹🇭", name: "泰國" },
-    VN: { flag: "🇻🇳", name: "越南" },
-    SG: { flag: "🇸🇬", name: "新加坡" },
-    MY: { flag: "🇲🇾", name: "馬來西亞" },
-    PH: { flag: "🇵🇭", name: "菲律賓" },
-    ID: { flag: "🇮🇩", name: "印尼" },
-    AU: { flag: "🇦🇺", name: "澳洲" },
-    NZ: { flag: "🇳🇿", name: "紐西蘭" },
-    CA: { flag: "🇨🇦", name: "加拿大" },
-  }
-
-  const COUNTRY_CURRENCY_MAP: Record<string, { code: string; name: string }> = {
-    TW: { code: "TWD", name: "台幣" },
-    JP: { code: "JPY", name: "日圓" },
-    US: { code: "USD", name: "美金" },
-    AT: { code: "EUR", name: "歐元" },
-    DE: { code: "EUR", name: "歐元" },
-    FR: { code: "EUR", name: "歐元" },
-    IT: { code: "EUR", name: "歐元" },
-    ES: { code: "EUR", name: "歐元" },
-    NL: { code: "EUR", name: "歐元" },
-    PT: { code: "EUR", name: "歐元" },
-    GR: { code: "EUR", name: "歐元" },
-    FI: { code: "EUR", name: "歐元" },
-    CZ: { code: "CZK", name: "克朗" },
-    HU: { code: "HUF", name: "福林" },
-    PL: { code: "PLN", name: "茲羅提" },
-    CH: { code: "CHF", name: "法郎" },
-    GB: { code: "GBP", name: "英鎊" },
-    SE: { code: "SEK", name: "克朗" },
-    NO: { code: "NOK", name: "克朗" },
-    DK: { code: "DKK", name: "克朗" },
-    IS: { code: "ISK", name: "克朗" },
-    HR: { code: "EUR", name: "歐元" },
-    TR: { code: "TRY", name: "里拉" },
-    KR: { code: "KRW", name: "韓元" },
-    CN: { code: "CNY", name: "人民幣" },
-    HK: { code: "HKD", name: "港幣" },
-    MO: { code: "MOP", name: "澳門幣" },
-    TH: { code: "THB", name: "泰銖" },
-    VN: { code: "VND", name: "越南盾" },
-    SG: { code: "SGD", name: "新幣" },
-    MY: { code: "MYR", name: "馬幣" },
-    PH: { code: "PHP", name: "披索" },
-    ID: { code: "IDR", name: "印尼盾" },
-    AU: { code: "AUD", name: "澳幣" },
-    NZ: { code: "NZD", name: "紐幣" },
-    CA: { code: "CAD", name: "加幣" },
-  }
-
-  const getTripCurrencies = () => {
-    const list: { code: string; name: string }[] = []
-    if (trip && trip.countries && Array.isArray(trip.countries)) {
-      trip.countries.forEach((c: string) => {
-        const match = COUNTRY_CURRENCY_MAP[c.toUpperCase()]
-        if (match) list.push(match)
-      })
-    }
-    const common = [
-      { code: "TWD", name: "台幣" },
-      { code: "JPY", name: "日圓" },
-      { code: "USD", name: "美金" },
-      { code: "EUR", name: "歐元" },
-    ]
-    common.forEach(item => list.push(item))
-    const result: { code: string; name: string }[] = []
-    const seen = new Set<string>()
-    list.forEach(item => {
-      if (!seen.has(item.code)) {
-        seen.add(item.code)
-        result.push(item)
-      }
-    })
-    return result
-  }
-
-  const updateLineCurrency = async (currencyCode: string) => {
-    try {
-      const res = await fetch(`/api/trips/${tripId}/line-link`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ currency: currencyCode }),
-      })
-      if (res.ok) {
-        setLineCurrency(currencyCode)
-      } else {
-        const data = await res.json()
-        alert(data.error || "更新失敗")
-      }
-    } catch {
-      alert("更新失敗")
-    }
-  }
 
   const [editForm, setEditForm] = useState({
     name: "",
@@ -201,37 +66,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     coverImage: "",
   })
 
-  useEffect(() => {
-    fetchTrip()
-    fetchLineLinkStatus()
-  }, [tripId])
-
-  // 自動根據 startDate / endDate 天數增減來補齊/裁切每日國家分配陣列
-  useEffect(() => {
-    if (!editForm.startDate || !editForm.endDate) return
-    const start = new Date(editForm.startDate)
-    const end = new Date(editForm.endDate)
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) return
-
-    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-    if (totalDays <= 0) return
-
-    setDailyCountries((prev) => {
-      const next = [...prev]
-      if (next.length < totalDays) {
-        const fallback = countriesList[0] || "TW"
-        const lastVal = next[next.length - 1] || fallback
-        while (next.length < totalDays) {
-          next.push(lastVal)
-        }
-      } else if (next.length > totalDays) {
-        return next.slice(0, totalDays)
-      }
-      return next
-    })
-  }, [editForm.startDate, editForm.endDate, countriesList])
-
-  const fetchTrip = async () => {
+  const fetchTrip = useCallback(async () => {
     try {
       const res = await fetch(`/api/trips/${tripId}`)
       if (!res.ok) { router.push("/"); return }
@@ -257,13 +92,15 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
               if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
                 return cleanExtractCountries(parsed.list)
               }
-              const list = (parsed.list || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
-              const daily = (parsed.daily || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+              const parsedList: unknown[] = Array.isArray(parsed.list) ? parsed.list : []
+              const parsedDaily: unknown[] = Array.isArray(parsed.daily) ? parsed.daily : []
+              const list = parsedList.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
+              const daily = parsedDaily.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
               return { list, daily }
             }
           } catch {}
         }
-        const list = input.filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+        const list = input.filter((c) => c.length === 2 && !c.includes("{"))
         return { list, daily: [] }
       }
 
@@ -295,6 +132,32 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     } finally {
       setLoading(false)
     }
+  }, [router, tripId])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void fetchTrip(), 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchTrip])
+
+  const resizeDailyCountries = (startDate: string, endDate: string) => {
+    const start = new Date(startDate)
+    const end = new Date(endDate)
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+    if (!startDate || !endDate || !Number.isFinite(totalDays) || totalDays <= 0) return
+
+    setDailyCountries((previous) => {
+      const next = previous.slice(0, totalDays)
+      const fallback = countriesList[0] || "TW"
+      const lastValue = next[next.length - 1] || fallback
+      while (next.length < totalDays) next.push(lastValue)
+      return next
+    })
+  }
+
+  const updateDate = (field: "startDate" | "endDate", value: string) => {
+    const nextForm = { ...editForm, [field]: value }
+    setEditForm(nextForm)
+    resizeDailyCountries(nextForm.startDate, nextForm.endDate)
   }
 
   const generateInviteCode = async () => {
@@ -373,7 +236,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   }
 
   const removeMember = async (memberId: string) => {
-    if (!confirm('確定要移除這位成員嗎？')) return
+    if (!confirm(locale === 'en' ? 'Are you sure you want to remove this member?' : '確定要移除這位成員嗎？')) return
     setRemovingMember(memberId)
     try {
       const res = await fetch(`/api/trips/${tripId}/members/${memberId}`, {
@@ -383,69 +246,12 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         fetchTrip()
       } else {
         const data = await res.json()
-        alert(data.error || '移除失敗')
+        alert(data.error || (locale === 'en' ? 'Failed to remove' : '移除失敗'))
       }
     } catch {
-      alert('移除失敗')
+      alert(locale === 'en' ? 'Failed to remove' : '移除失敗')
     } finally {
       setRemovingMember(null)
-    }
-  }
-
-  const fetchLineLinkStatus = async () => {
-    try {
-      const res = await fetch(`/api/trips/${tripId}/line-link`)
-      if (res.ok) {
-        const data = await res.json()
-        setHasLinkedLine(data.hasLinkedLine)
-        setIsLineActive(data.isActive)
-        setLineDayText(data.dayText)
-      }
-    } catch (err) {
-      console.error("載入 LINE 連動狀態失敗", err)
-    }
-  }
-
-  const generateLineCode = async () => {
-    setGeneratingLineCode(true)
-    try {
-      // 產生個人帳號連動碼
-      const res = await fetch(`/api/users/line-link`, { method: "POST" })
-      const data = await res.json()
-      if (res.ok) {
-        setLineCode(data.token)
-        setLineCodeExpires(data.expires)
-      } else {
-        alert(data.error || "產生連動碼失敗")
-      }
-    } catch {
-      alert("產生連動碼失敗")
-    } finally {
-      setGeneratingLineCode(false)
-    }
-  }
-
-  const copyLineCommand = () => {
-    navigator.clipboard.writeText(`/link ${lineCode}`)
-    setLineCodeCopied(true)
-    setTimeout(() => setLineCodeCopied(false), 2000)
-  }
-
-  const setAsDefaultTrip = async () => {
-    setSettingDefault(true)
-    try {
-      const res = await fetch(`/api/trips/${tripId}/line-link`, { method: "PUT" })
-      if (res.ok) {
-        fetchLineLinkStatus()
-        alert(t('settings.lineLink.setAsDefault.success') || "設定成功！")
-      } else {
-        const data = await res.json()
-        alert(data.error || "設定失敗")
-      }
-    } catch {
-      alert("設定失敗")
-    } finally {
-      setSettingDefault(false)
     }
   }
 
@@ -501,15 +307,19 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
                   {t('settings.startDate')}
                 </label>
-                <input type="date" className="input-field date-input" value={editForm.startDate}
-                  onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
+                <input type={editForm.startDate ? "date" : "text"} placeholder={t('settings.startDate')} className="input-field date-input" value={editForm.startDate}
+                  onChange={(e) => updateDate("startDate", e.target.value)}
+                  onFocus={(e) => (e.target.type = "date")}
+                  onBlur={(e) => { if (!e.target.value) e.target.type = "text" }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
                   {t('settings.endDate')}
                 </label>
-                <input type="date" className="input-field date-input" value={editForm.endDate}
-                  onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+                <input type={editForm.endDate ? "date" : "text"} placeholder={t('settings.endDate')} className="input-field date-input" value={editForm.endDate}
+                  onChange={(e) => updateDate("endDate", e.target.value)}
+                  onFocus={(e) => (e.target.type = "date")}
+                  onBlur={(e) => { if (!e.target.value) e.target.type = "text" }} />
               </div>
             </div>
 
@@ -517,10 +327,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             {dailyCountries.length > 0 && (
               <div style={{ marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
-                  🗺️ 每日目的地國家設定 (LINE 機器人風景圖與時區依據)
+                  {t('settings.dailyCountries.title')}
                 </label>
                 <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: 1.4 }}>
-                  如果您的行程橫跨多個國家，可以在此為每一天設定主要的國家。機器人會以此為依據來套用該國時區，並自動配置當天的精美風景底圖唷！
+                  {t('settings.dailyCountries.desc')}
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto', paddingRight: '0.25rem' }}>
@@ -550,7 +360,9 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
 
                         <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {countriesList.map((c) => {
-                            const info = COUNTRY_INFO_MAP[c.toUpperCase()] || { flag: "🌐", name: c }
+                            const matchedCountry = COUNTRIES.find(item => item.code.toUpperCase() === c.toUpperCase())
+                            const flag = matchedCountry?.flag || "🌐"
+                            const cName = matchedCountry ? (locale === 'en' ? matchedCountry.nameEn : matchedCountry.name) : c
                             const isSelected = countryCode.toUpperCase() === c.toUpperCase()
                             return (
                               <button
@@ -574,8 +386,8 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                                   minHeight: 'auto'
                                 }}
                               >
-                                <span>{info.flag}</span>
-                                <span>{info.name}</span>
+                                <span>{flag}</span>
+                                <span>{cName}</span>
                               </button>
                             )
                           })}
@@ -890,7 +702,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             display: 'flex', alignItems: 'center', gap: '0.5rem',
           }}>
             <Users size={16} />
-            成員管理
+            {t('settings.members.title')}
           </h3>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -952,7 +764,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                         borderRadius: '6px',
                         background: 'rgba(14, 165, 233, 0.12)',
                         color: 'var(--color-primary)',
-                      }}>擁有者</span>
+                      }}>{t('settings.members.owner')}</span>
                     ) : (
                       <button
                         onClick={() => removeMember(m.id)}
@@ -962,7 +774,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                         {isRemoving ? (
                           <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
                         ) : (
-                          <><UserMinus size={13} /> 移除</>
+                          <><UserMinus size={13} /> {t('settings.members.remove')}</>
                         )}
                       </button>
                     )}

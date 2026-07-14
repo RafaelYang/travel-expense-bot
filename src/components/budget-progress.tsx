@@ -30,7 +30,7 @@ function useCountUp(target: number, duration: number = 1500, enabled: boolean = 
 
   useEffect(() => {
     if (!enabled) {
-      setValue(target)
+      prevTarget.current = target
       return
     }
 
@@ -60,7 +60,7 @@ function useCountUp(target: number, duration: number = 1500, enabled: boolean = 
     }
   }, [target, duration, enabled])
 
-  return value
+  return enabled ? value : target
 }
 
 export function BudgetProgress({ totalBudget, totalSpent, currency, showLabels = true, size = "md" }: BudgetProgressProps) {

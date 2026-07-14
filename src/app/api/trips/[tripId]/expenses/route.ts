@@ -5,19 +5,21 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { convertExpenseAmount } from "@/lib/exchange-rate"
+import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
 import { z } from "zod"
 
+const imageDataUrlSchema = z.string()
+  .max(1_500_000)
+  .regex(/^data:image\/(?:jpeg|png|webp|gif);base64,[a-z0-9+/=]+$/i, "圖片格式錯誤")
+
 const expenseSchema = z.object({
-  category: z.string(),
-  item: z.string().min(1),
+  category: z.enum(["food", "transport", "accommodation", "shopping", "ticket", "other"]),
+  item: z.string().trim().min(1).max(200),
   amount: z.number().positive(),
-  currency: z.string(),
-  convertedAmount: z.number().optional(),
-  exchangeRate: z.number().optional(),
-  date: z.string().optional(),
-  note: z.string().optional(),
-  images: z.array(z.string()).max(3).default([]),
-  source: z.string().default("web"),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()),
+  date: z.string().datetime().optional(),
+  note: z.string().max(1_000).optional(),
+  images: z.array(imageDataUrlSchema).max(3).default([]),
 })
 
 // GET — 取得行程花費列表
@@ -61,7 +63,10 @@ export async function GET(
     orderBy: { date: 'desc' },
   })
 
-  return NextResponse.json(expenses)
+  return NextResponse.json(expenses.map((expense) => ({
+    ...expense,
+    images: createSignedExpenseImagePaths(expense.id, expense.images),
+  })))
 }
 
 // POST — 新增花費
@@ -93,19 +98,23 @@ export async function POST(
       where: { id: tripId },
       select: { baseCurrency: true },
     })
-    const baseCurrency = trip?.baseCurrency || 'TWD'
+    const baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
 
     // 自動查詢即時匯率並換算
-    let convertedAmount = data.convertedAmount
-    let exchangeRate = data.exchangeRate
+    let convertedAmount: number
+    let exchangeRate: number
 
-    if (!convertedAmount && data.currency !== baseCurrency) {
+    if (data.currency !== baseCurrency) {
       const conversion = await convertExpenseAmount(data.amount, data.currency, baseCurrency)
-      if (conversion) {
-        convertedAmount = conversion.convertedAmount
-        exchangeRate = conversion.exchangeRate
+      if (!conversion) {
+        return NextResponse.json(
+          { error: "匯率暫時無法取得，花費未新增" },
+          { status: 503 },
+        )
       }
-    } else if (data.currency === baseCurrency) {
+      convertedAmount = conversion.convertedAmount
+      exchangeRate = conversion.exchangeRate
+    } else {
       convertedAmount = data.amount
       exchangeRate = 1
     }
@@ -123,14 +132,17 @@ export async function POST(
         date: data.date ? new Date(data.date) : new Date(),
         note: data.note,
         images: data.images,
-        source: data.source,
+        source: "web",
       },
       include: {
         user: { select: { id: true, name: true } },
       },
     })
 
-    return NextResponse.json(expense)
+    return NextResponse.json({
+      ...expense,
+      images: createSignedExpenseImagePaths(expense.id, expense.images),
+    })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 })

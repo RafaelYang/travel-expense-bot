@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { verifyExpenseImageAccess } from "@/lib/expense-image-signing"
 
 export async function GET(
   req: NextRequest,
@@ -8,7 +9,16 @@ export async function GET(
   try {
     const { expenseId } = await params
     const { searchParams } = new URL(req.url)
-    const index = parseInt(searchParams.get("index") || "0", 10)
+    const index = Number(searchParams.get("index"))
+    const expires = Number(searchParams.get("expires"))
+    const signature = searchParams.get("signature") || ""
+
+    if (!verifyExpenseImageAccess(expenseId, index, expires, signature)) {
+      return new Response("Unauthorized", {
+        status: 401,
+        headers: { "Cache-Control": "private, no-store" },
+      })
+    }
 
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId },
@@ -42,7 +52,8 @@ export async function GET(
       return new Response(buffer, {
         headers: {
           "Content-Type": mimeType,
-          "Cache-Control": "public, max-age=86400", // 快取 1 天
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
         },
       })
     }
@@ -53,7 +64,8 @@ export async function GET(
     }
 
     return new Response("Unsupported Image Format", { status: 400 })
-  } catch (err: any) {
-    return new Response(err.message, { status: 500 })
+  } catch (error) {
+    console.error("[ExpenseImage] Failed to load image", error)
+    return new Response("Internal Server Error", { status: 500 })
   }
 }

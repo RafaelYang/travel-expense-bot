@@ -216,9 +216,13 @@ export async function PUT(
     try {
       const body = await req.json()
       if (body && body.currency) {
-        newActiveTripId = `${tripId}:${body.currency.toUpperCase()}`
+        const currency = String(body.currency).toUpperCase()
+        if (!/^[A-Z]{3}$/.test(currency)) {
+          return NextResponse.json({ error: "幣別格式錯誤" }, { status: 400 })
+        }
+        newActiveTripId = `${tripId}:${currency}`
       }
-    } catch (e) {
+    } catch {
       // 忽略無 JSON body 的情況
     }
 

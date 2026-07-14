@@ -20,7 +20,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true,
     }),
     Line({
       clientId: process.env.LINE_CLIENT_ID!,
@@ -50,7 +49,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           image: profile.picture,
         }
       },
-      allowDangerousEmailAccountLinking: true,
     }),
   ],
 
@@ -82,53 +80,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           }
         }
 
-        // ===== Google Login：合併 LINE-first 使用者 =====
-        if (account?.provider === "google" && user?.email) {
-          const googleEmail = user.email
-
-          // 查找佔位 email 的 LINE 使用者
-          const lineAccounts = await prisma.account.findMany({
-            where: { provider: "line" },
-            include: { user: true },
-          })
-
-          for (const lineAccount of lineAccounts) {
-            const lineUser = lineAccount.user
-            if (lineUser.email?.endsWith("@line.travel-expense.app")) {
-              const googleUser = await prisma.user.findUnique({
-                where: { email: googleEmail },
-              })
-
-              if (googleUser && googleUser.id !== lineUser.id) {
-                // 合併：LINE Account → Google User
-                await prisma.account.update({
-                  where: { id: lineAccount.id },
-                  data: { userId: googleUser.id },
-                })
-
-                // 搬 lineUserId
-                if (lineUser.lineUserId && !googleUser.lineUserId) {
-                  await prisma.user.update({
-                    where: { id: googleUser.id },
-                    data: { lineUserId: lineUser.lineUserId },
-                  })
-                }
-
-                // 清除佔位使用者
-                await prisma.account.deleteMany({
-                  where: { userId: lineUser.id },
-                })
-                await prisma.user.delete({
-                  where: { id: lineUser.id },
-                })
-
-                console.log(
-                  `[Auth] Merged LINE-first user (${lineUser.email}) → Google user (${googleEmail})`
-                )
-              }
-            }
-          }
-        }
+        // Google 與 LINE 帳號不在登入 callback 中自動合併。LINE Messaging
+        // 帳號一律使用一次性 /link 配對碼綁定，避免跨使用者誤合併。
       } catch (error) {
         console.error("[Auth] signIn callback error:", error)
         // 不因綁定失敗阻止登入

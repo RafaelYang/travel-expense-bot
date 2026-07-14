@@ -49,6 +49,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'home.card.people': '{count} 人',
     'home.card.expenses': '{count} 筆記錄',
     'home.card.detail': '查看詳情',
+    'home.total.incomplete': '有 {count} 筆外幣花費缺少匯率，未納入總計',
 
     // 登入頁
     'login.title': '小銘子記帳',
@@ -92,6 +93,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'trip.categories': '📊 花費分類',
     'trip.allExpenses': '💰 所有花費（{count} 筆）',
     'trip.allExpenses.count': '{count}筆',
+    'trip.total.incomplete': '⚠️ {expenses} 筆外幣支出缺少匯率、{deposits} 筆外幣收入尚未換算，因此未納入總計。',
     'trip.collapse': '收起',
     'trip.showAll': '顯示全部 {count} 筆',
     'trip.members': '👥 成員',
@@ -113,6 +115,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'form.amount': '金額',
     'form.submit.expense': '新增花費',
     'form.submit.income': '收入',
+    'form.submit.error': '新增失敗，請稍後再試',
     'form.currency': '💱 幣種',
     'form.currency.other': '其他幣種...',
     'form.note': '備註（選填）',
@@ -194,6 +197,31 @@ export const translations: Record<Locale, Record<string, string>> = {
     // 網頁標題
     'meta.title': '小銘子旅行用記帳 — 旅遊記帳好幫手',
     'meta.description': '出門旅遊的記帳好夥伴，支援多人共用行程、即時預算追蹤、匯率轉換、LINE 機器人記帳',
+
+    // 行程設定頁/新增行程頁每日目的地與成員
+    'settings.dailyCountries.title': '🗺️ 每日目的地國家設定 (LINE 機器人風景圖與時區依據)',
+    'settings.dailyCountries.desc': '如果您的行程橫跨多個國家，可以在此為每一天設定主要的國家。機器人會以此為依據來套用該國時區，並自動配置當天的精美風景底圖唷！',
+    'settings.members.title': '成員管理',
+    'settings.members.owner': '擁有者',
+    'settings.members.remove': '移除',
+    'newTrip.dailyCountries.title': '🗺️ 每日目的地國家設定',
+
+    // 邀請接受頁
+    'invite.accept.error.missing': '缺少邀請連結',
+    'invite.accept.error.invalid': '邀請連結無效或已過期',
+    'invite.accept.error.loadFailed': '載入邀請資訊失敗',
+    'invite.accept.error.joinFailed': '加入失敗',
+    'invite.accept.error.joinFailedRetry': '加入失敗，請稍後再試',
+    'invite.accept.loading.info': '載入邀請資訊⋯',
+    'invite.accept.title': '你被邀請加入行程',
+    'invite.accept.subtitle': '{inviterName} 邀請你一起記錄旅行花費',
+    'invite.accept.loginBtn': '使用 Google 登入並加入',
+    'invite.accept.loginTip': '還沒有帳號？登入 Google 即可自動註冊',
+    'invite.accept.joining': '正在加入行程⋯',
+    'invite.accept.success': '成功加入！',
+    'invite.accept.redirecting': '正在跳轉到行程頁面⋯',
+    'invite.accept.failed': '無法加入',
+    'invite.accept.backHome': '返回首頁',
   },
 
   'en': {
@@ -239,6 +267,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'home.card.people': '{count}',
     'home.card.expenses': '{count} expenses',
     'home.card.detail': 'Details',
+    'home.total.incomplete': '{count} foreign expenses are missing rates and excluded from the total',
 
     // 登入頁
     'login.title': "Ming's Expense",
@@ -282,6 +311,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'trip.categories': '📊 Categories',
     'trip.allExpenses': '💰 All Expenses ({count})',
     'trip.allExpenses.count': '{count}',
+    'trip.total.incomplete': '⚠️ {expenses} foreign expenses are missing rates and {deposits} foreign deposits are not converted, so they are excluded from totals.',
     'trip.collapse': 'Collapse',
     'trip.showAll': 'Show all {count}',
     'trip.members': '👥 Members',
@@ -303,6 +333,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'form.amount': 'Amount',
     'form.submit.expense': 'Add Expense',
     'form.submit.income': 'Income',
+    'form.submit.error': 'Failed to add. Please try again.',
     'form.currency': '💱 Currency',
     'form.currency.other': 'More...',
     'form.note': 'Note (optional)',
@@ -384,6 +415,31 @@ export const translations: Record<Locale, Record<string, string>> = {
     // 網頁標題
     'meta.title': "Ming's Travel Expense — Your Trip Companion",
     'meta.description': 'Track travel expenses with friends. Multi-user trips, real-time budgets, currency conversion, and LINE Bot logging.',
+
+    // 行程設定頁/新增行程頁每日目的地與成員
+    'settings.dailyCountries.title': '🗺️ Daily Destinations (LINE Bot Themes & Timezones)',
+    'settings.dailyCountries.desc': 'If your trip spans multiple countries, assign a main country for each day. The LINE Bot will use this to set correct timezones and update dynamic cover images!',
+    'settings.members.title': 'Member Management',
+    'settings.members.owner': 'Owner',
+    'settings.members.remove': 'Remove',
+    'newTrip.dailyCountries.title': '🗺️ Daily Destination Countries',
+
+    // 邀請接受頁
+    'invite.accept.error.missing': 'Missing invite link',
+    'invite.accept.error.invalid': 'Invite link is invalid or expired',
+    'invite.accept.error.loadFailed': 'Failed to load invite info',
+    'invite.accept.error.joinFailed': 'Failed to join',
+    'invite.accept.error.joinFailedRetry': 'Failed to join. Please try again.',
+    'invite.accept.loading.info': 'Loading invite details...',
+    'invite.accept.title': 'You are invited to join a trip',
+    'invite.accept.subtitle': '{inviterName} invites you to track travel expenses together',
+    'invite.accept.loginBtn': 'Sign in with Google to Join',
+    'invite.accept.loginTip': 'No account? Google sign-in registers you automatically',
+    'invite.accept.joining': 'Joining the trip...',
+    'invite.accept.success': 'Successfully Joined!',
+    'invite.accept.redirecting': 'Redirecting to trip page...',
+    'invite.accept.failed': 'Failed to Join',
+    'invite.accept.backHome': 'Back to Home',
   },
 }
 

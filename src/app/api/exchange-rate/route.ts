@@ -6,13 +6,22 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import { getExchangeRates } from "@/lib/exchange-rate"
+import { auth } from "@/lib/auth"
 
 export async function GET(req: NextRequest) {
-  const base = req.nextUrl.searchParams.get("base")
-  const target = req.nextUrl.searchParams.get("target")
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "未登入" }, { status: 401 })
+  }
 
-  if (!base) {
-    return NextResponse.json({ error: "缺少 base 參數" }, { status: 400 })
+  const base = req.nextUrl.searchParams.get("base")?.toUpperCase()
+  const target = req.nextUrl.searchParams.get("target")?.toUpperCase()
+
+  if (!base || !/^[A-Z]{3}$/.test(base)) {
+    return NextResponse.json({ error: "base 幣別格式錯誤" }, { status: 400 })
+  }
+  if (target && !/^[A-Z]{3}$/.test(target)) {
+    return NextResponse.json({ error: "target 幣別格式錯誤" }, { status: 400 })
   }
 
   try {

@@ -13,20 +13,29 @@ export async function GET(request: NextRequest) {
   }
 
   const q = request.nextUrl.searchParams.get("q")?.trim()
-  if (!q || q.length < 2) {
+  if (!q || q.length < 3) {
     return NextResponse.json({ users: [] })
   }
 
   try {
-    // 搜尋 email 或名稱包含關鍵字的使用者（排除自己）
+    // 只建議曾共同參與行程的使用者，避免把全站帳號當成公開目錄。
     const users = await prisma.user.findMany({
       where: {
         AND: [
           { id: { not: session.user.id } },
           {
+            tripMembers: {
+              some: {
+                trip: {
+                  members: { some: { userId: session.user.id } },
+                },
+              },
+            },
+          },
+          {
             OR: [
-              { email: { contains: q, mode: "insensitive" } },
-              { name: { contains: q, mode: "insensitive" } },
+              { email: { startsWith: q, mode: "insensitive" } },
+              { name: { startsWith: q, mode: "insensitive" } },
             ],
           },
         ],

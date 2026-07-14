@@ -209,7 +209,7 @@ const DEFAULT_COVER = 'https://images.unsplash.com/photo-1488646953014-85cb44e25
 /**
  * 遞迴解包與淨化目的地國家 (防止滾雪球式嵌套髒資料)
  */
-function extractCleanCountries(input: string[] | null | undefined): string[] {
+export function extractCleanCountries(input: string[] | null | undefined): string[] {
   if (!input || input.length === 0) return []
   
   const first = input[0]
@@ -220,11 +220,12 @@ function extractCleanCountries(input: string[] | null | undefined): string[] {
         if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
           return extractCleanCountries(parsed.list)
         }
-        return (parsed.list || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+        const parsedList: unknown[] = Array.isArray(parsed.list) ? parsed.list : []
+        return parsedList.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
       }
     } catch {}
   }
-  return input.filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+  return input.filter((c) => c.length === 2 && !c.includes("{"))
 }
 
 /**

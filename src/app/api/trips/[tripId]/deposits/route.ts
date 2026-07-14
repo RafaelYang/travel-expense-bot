@@ -10,6 +10,7 @@ const depositSchema = z.object({
   amount: z.number().positive("金額必須大於 0"),
   currency: z.string(),
   note: z.string().optional(),
+  date: z.string().optional(),
 })
 
 // POST — 新增收入
@@ -43,6 +44,7 @@ export async function POST(
         amount: data.amount,
         currency: data.currency,
         note: data.note,
+        createdAt: data.date ? new Date(data.date) : undefined,
       },
       include: {
         user: { select: { id: true, name: true } },

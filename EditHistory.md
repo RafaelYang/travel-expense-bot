@@ -1,239 +1,9 @@
-# EditHistory.md — 小銘子記帳機器人
+# 專案修改歷史紀錄 (Edit History)
 
-## 2026-05-15 — 專案初建
+> [!NOTE]
+> 2026-06-27 之前的早期修改歷史已轉移歸檔至 [EditHistory_archive.md](file:///Volumes/RafaelSSD/Antigravity/小銘子記帳機器人/EditHistory_archive.md)。
 
-### Phase 1: 基礎建設
-- 初始化 Next.js 16 專案（TypeScript + Tailwind CSS 4 + App Router）
-- 安裝核心依賴：Prisma 7 + @prisma/adapter-pg + NextAuth v5 + @line/bot-sdk + Radix UI + Lucide Icons + date-fns + zod
-- 建立 Prisma Schema（9 個模型：User, Account, Session, Trip, TripMember, Expense, Deposit, InviteCode, LineBotState, LineTripLink, ExchangeRateCache）
-- 設定 Prisma 7 adapter 模式（使用 @prisma/adapter-pg 連接 Supabase PostgreSQL）
-- 建立 NextAuth v5 認證系統（Credentials Provider + Prisma Adapter）
-- 建立登入/註冊頁面（深色毛玻璃卡片風格）
-- 建立 Middleware 路由保護
-- 建立全域 CSS 設計系統（深色主題、毛玻璃效果、進度條動畫、按鈕樣式）
-
-### Phase 2: 核心功能
-- 建立行程 CRUD API（/api/trips）
-- 建立花費記帳 API（/api/trips/[tripId]/expenses）
-- 建立儲值 API（/api/trips/[tripId]/deposits）
-- 建立邀請碼系統（/api/trips/[tripId]/invite + /api/trips/join）
-- 建立 BudgetProgress 元件（核心動畫：數字跳動 + 進度條 + 顏色狀態變化）
-- 建立首頁 Dashboard（行程列表、進行中脈動效果、加入行程表單）
-- 建立行程主頁（預算追蹤 + 快速記帳 + 花費列表 + 分類統計 + 成員列表）
-- 建立新增行程頁面（含幣種選擇、日期、預算設定）
-- 建立行程設定頁（邀請碼管理、狀態切換、刪除確認）
-- 建立導覽列元件（桌面版頂部 + 手機版漢堡選單 + 底部 Tab Bar）
-
-### 建立的檔案清單
-- `prisma/schema.prisma`
-- `src/lib/prisma.ts` — Prisma 7 adapter 模式
-- `src/lib/auth.ts` — NextAuth v5 設定
-- `src/lib/utils.ts` — 共用工具（格式化、分類、幣種定義）
-- `src/types/next-auth.d.ts` — 型別擴充
-- `src/middleware.ts` — 路由保護
-- `src/app/globals.css` — 設計系統
-- `src/app/layout.tsx` — 根 Layout
-- `src/app/page.tsx` — 首頁 Dashboard
-- `src/app/login/page.tsx` — 登入頁
-- `src/app/register/page.tsx` — 註冊頁
-- `src/app/trips/new/page.tsx` — 新增行程
-- `src/app/trips/[tripId]/page.tsx` — 行程主頁
-- `src/app/trips/[tripId]/settings/page.tsx` — 行程設定
-- `src/app/api/auth/[...nextauth]/route.ts`
-- `src/app/api/auth/register/route.ts`
-- `src/app/api/trips/route.ts`
-- `src/app/api/trips/[tripId]/route.ts`
-- `src/app/api/trips/[tripId]/expenses/route.ts`
-- `src/app/api/trips/[tripId]/deposits/route.ts`
-- `src/app/api/trips/[tripId]/invite/route.ts`
-- `src/app/api/trips/join/route.ts`
-- `src/components/navbar.tsx`
-- `src/components/budget-progress.tsx`
-- `.env` / `.env.example`
-
-## 2026-05-15 — 認證系統改為 Google + LINE OAuth
-
-### 改動概述
-- 移除 Credentials（帳號密碼）登入，改為 Google OAuth 唯一登入
-- 加入 LINE Login，登入後自動綁定 LINE User ID（用於推播通知）
-- 加入帳號合併邏輯：LINE-first 使用者後續用 Google 登入時自動合併
-- 加入 Vercel 部署設定
-
-### 修改的檔案
-- `src/lib/auth.ts` — 全面改用 Google + LINE Provider，移除 Credentials + bcrypt
-- `src/app/login/page.tsx` — 改為 Google 彩色 logo + LINE 綠色按鈕
-- `src/middleware.ts` — 移除 /register 路徑
-- `src/types/next-auth.d.ts` — 簡化型別擴充
-- `prisma/schema.prisma` — 移除 password 欄位、PasswordResetToken model
-- `.env` / `.env.example` — 加入 GOOGLE_CLIENT_ID/SECRET、LINE_CLIENT_ID/SECRET
-
-### 刪除的檔案
-- `src/app/register/page.tsx` — 不再需要註冊頁
-- `src/app/api/auth/register/route.ts` — 不再需要註冊 API
-
-### 新增的檔案
-- `vercel.json` — Vercel 部署設定（prisma generate + db push + next build）
-
-### 移除的依賴
-- `bcrypt` / `@types/bcrypt` — 不再需要密碼雜湊
-
-## 2026-05-15 — 使用者頭像下拉選單 + Vercel 部署
-
-### 改動概述
-- 右上角使用者區域改為 Google 頭像 + 名字 + 下拉箭頭
-- 點擊展開毛玻璃下拉選單，顯示帳號資訊（頭像、名字、Email）+ 登出按鈕
-- 手機版漢堡選單也整合頭像 + 登出
-- Prisma Client 改為 Proxy 延遲初始化（避免 Vercel build 時嘗試 DB 連線）
-- 部署至 Vercel：https://travel-expense-bot-steel.vercel.app
-
-### 修改的檔案
-- `src/components/navbar.tsx` — 頭像 + 下拉選單重構
-- `src/app/globals.css` — 新增 fadeInDown 動畫
-- `src/lib/prisma.ts` — Proxy 延遲初始化
-- `next.config.ts` — 加入 Google/LINE 圖片 domain 白名單
-- `vercel.json` — 簡化 buildCommand
-- `prisma.config.ts` — 移除不支援的 directUrl
-
-## 2026-05-15 — 主題切換 + 登入跳轉修正
-
-### 改動概述
-- 修正線上登入後跳 localhost 的問題（Vercel 加入 NEXTAUTH_URL 環境變數）
-- 加入深色/淺色/跟隨系統的主題切換功能
-- 主題選項整合在頭像下拉選單中，三個按鈕橫排（淺色 ☀️ / 深色 🌙 / 系統 🖥️）
-- 防閃爍：layout.tsx 加入 inline script，在 hydration 前就套用正確主題
-- 選擇儲存到 localStorage，下次開啟自動套用
-
-### 新增的檔案
-- `src/components/theme-provider.tsx` — 主題管理 Context + Provider
-
-### 修改的檔案
-- `src/app/globals.css` — 加入 [data-theme="light"] 淺色變數 + 淺色背景漸層
-- `src/app/layout.tsx` — 包裹 ThemeProvider + 防閃爍 script
-- `src/components/navbar.tsx` — 下拉選單加入主題切換區
-
-## 2026-05-16 — 修正 Vercel 生產環境 OAuth 登入
-
-### 問題描述
-Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 session 未被建立。
-
-### 根因分析
-1. Prisma Client 使用 Proxy 延遲初始化與 PrismaAdapter 不相容
-2. 自訂 cookies 設定（`__Secure-` + `sameSite: none`）導致 PKCE state 驗證異常
-3. middleware 使用 `getToken()` 無法正確讀取 NextAuth v5 在 HTTPS 下的 cookie
-
-### 修正內容
-- `src/lib/prisma.ts` — 移除 Proxy 模式，改回直接初始化 PrismaClient
-- `src/lib/auth.ts` — 移除自訂 cookies 設定，改用 NextAuth 預設值
-- `src/middleware.ts` — 改用 cookie 存在性檢查（同時支援 `__Secure-authjs.*` 和 `authjs.*`）
-- Vercel 環境變數加入 `NEXTAUTH_URL=https://travel-expense-bot-steel.vercel.app`
-
-## 2026-05-16 — 品牌更新 + i18n + 下拉子選單
-
-### 改動概述
-- 品牌名稱改為「小銘子旅行用記帳」/ "Ming's Travel Expense"
-- Logo 從 ✈️ emoji 改為黑色飛機剪影 SVG
-- Favicon 改為飛機剪影 SVG
-- 下拉選單：主題和語言改為 hover 展開子選單（二級選單）
-- 加入多語系（i18n）系統：繁體中文 + English
-
-### 新增的檔案
-- `src/lib/i18n.ts` — 翻譯字典（zh-TW / en）
-- `src/components/language-provider.tsx` — 語言管理 Context
-- `public/favicon.svg` — 飛機剪影 SVG favicon
-
-### 修改的檔案
-- `src/components/navbar.tsx` — 完全重寫：飛機 logo、hover 子選單、語言切換
-- `src/app/layout.tsx` — 加入 LanguageProvider + SVG favicon
-- `src/app/page.tsx` — 首頁文字改用 t() 翻譯
-- `src/app/login/page.tsx` — 登入頁文字改用 t() 翻譯
-
-## 2026-05-17 — 匯率 API 升級為每小時更新
-
-### 改動概述
-- 匯率來源從 open.er-api.com（每日更新）改為 CurrencyBeacon（每小時更新）
-- 新增 `/api/exchange-rate` API proxy route，前端不再直接呼叫外部 API
-- API key 安全存放在伺服器端，前端透過 proxy 查詢
-- 備用來源：當 CurrencyBeacon 異常時自動 fallback 到 open.er-api.com
-
-### 新增的檔案
-- `src/app/api/exchange-rate/route.ts` — 匯率查詢 API proxy
-
-### 修改的檔案
-- `src/lib/exchange-rate.ts` — 改用 CurrencyBeacon API + fallback 機制
-- `src/app/trips/[tripId]/page.tsx` — 前端改走 `/api/exchange-rate` proxy
-- `.env` — 加入 `EXCHANGE_RATE_API_KEY`
-
-## 2026-05-17 — 行程卡片視覺升級
-
-### 改動概述
-- 行程卡片改為全寬佈局（不再用 grid 卡片）
-- 日期格式加上年份（`yyyy/M/d`）
-- 行程排序改為由新到舊（`startDate desc`）
-- 卡片背景使用對應國家的城市風景照片（Unsplash）
-- 暗色遮罩確保文字可讀性，hover 時背景放大動畫
-- 顯示國旗 emoji
-
-### 修改的檔案
-- `src/app/page.tsx` — 全寬 TripCard + 城市背景照
-- `src/lib/countries.ts` — 新增 COUNTRY_COVER_IMAGES / getCountryCoverImage / getCountryFlags
-- `src/app/api/trips/route.ts` — 排序改為 startDate desc
-- `src/app/globals.css` — 新增 trip-card-bg hover 動畫
-
-## 2026-05-29 — 修正成員列表被記帳按鈕遮蓋
-
-### 問題描述
-行程主頁點擊「成員」標籤展開成員列表 popup 時，popup 被下方的「記帳」按鈕遮蓋（z-index 層疊問題）。
-
-### 根因分析
-成員列表 popup 使用 `position: absolute` + `zIndex: 30`，但它的父容器（`.glass-card`）沒有建立 stacking context，導致後續 DOM 元素（記帳按鈕）自然覆蓋在上面。
-
-### 修正內容
-- `src/app/trips/[tripId]/page.tsx`
-  - 行程標題卡片加上 `position: relative` + 動態 `zIndex`（展開成員列表時提高為 10）
-  - 成員列表 popup 的 `zIndex` 從 30 提高到 60
-  - popup 的 `boxShadow` 加深，視覺上更明確浮在上層
-
-## 2026-05-29 — Email 邀請加入行程
-
-### 改動概述
-新增 Email 邀請功能：在行程設定頁輸入對方 Email → 系統自動寄送精美邀請信 → 對方點連結一鍵加入行程。
-未註冊的使用者會被引導 Google 登入（自動註冊），登入後自動加入。
-
-### 新增的檔案
-- `src/app/api/trips/[tripId]/invite-email/route.ts` — Email 邀請 API（Resend 寄信 + HTML 模板）
-- `src/app/api/invite/accept/route.ts` — 接受邀請 API（GET 查詢邀請資訊 + POST 加入行程）
-- `src/app/invite/accept/page.tsx` — 邀請接受頁面（已登入自動加入 / 未登入引導 Google 登入）
-
-### 修改的檔案
-- `prisma/schema.prisma` — 新增 EmailInvite model + Trip relation
-- `src/app/trips/[tripId]/settings/page.tsx` — 加入 Email 邀請卡片（輸入框 + 發送按鈕 + 成功/錯誤提示）
-- `src/lib/i18n.ts` — 新增 Email 邀請相關翻譯（中/英）
-- `src/middleware.ts` — 將 `/invite` 路徑加入白名單（允許未登入存取）
-- `.env` — 新增 RESEND_API_KEY
-
-### 新增的依賴
-- `resend` — Email 寄送服務（免費方案 100 封/天）
-
-### 技術細節
-- 邀請 token 為 UUID，7 天有效
-- 重複邀請同一 Email 會重用既有 token（不重複建立）
-- Email HTML 模板：深色漸層風格，含行程資訊卡片 + CTA 按鈕
-- 寄件人：`小銘子記帳 <onboarding@resend.dev>`（Resend 免費方案）
-- Vercel 環境變數已設定 RESEND_API_KEY
-
-## 2026-06-12 — 專案清理：移除不必要檔案
-
-### 刪除的檔案
-- `過場動畫.mp4` — 與 `public/loading.mp4` 完全相同（MD5 一致），根目錄的是多餘複本
-- `.DS_Store` — macOS 系統產生的隱藏檔
-- `public/file.svg` — Next.js 範本預設檔，程式碼中未引用
-- `public/globe.svg` — Next.js 範本預設檔，程式碼中未引用
-- `public/next.svg` — Next.js 範本預設檔，程式碼中未引用
-- `public/vercel.svg` — Next.js 範本預設檔，程式碼中未引用
-- `public/window.svg` — Next.js 範本預設檔，程式碼中未引用
-- `.vscode/settings.json` — 內容為空物件 `{}`，無任何設定（整個 `.vscode` 目錄移除）
-- `CLAUDE.md` — 僅一行 `@AGENTS.md`，功能已由 AGENTS.md 覆蓋
-- `.next/` — 構建快取目錄（494MB），`npm run build` 可重新產生
+---
 
 ## 2026-06-27 — 新增防止 Supabase 暫停之自動化工作流
 
@@ -439,3 +209,159 @@ Google OAuth 在 Vercel 生產環境無法登入，callback 成功回來但 sess
   - **遮擋原因**：當在手機版（特別是 Notch 瀏海手機如 iPhone、或有頂部標題列的 LINE 內置瀏覽器）開啟 Modal（如分享行程、花費統計、花費詳情）時，若卡片太長（maxHeight 達 85vh）且缺乏安全區域偏移，Modal 會緊貼螢幕上緣，導致右上角的關閉叉叉按鈕剛好與手機系統列或瀏覽器返回鍵重合而關不掉。全螢幕 Lightbox 圖片檢視時的關閉叉叉也有同樣被瀏海蓋住的現象。
   - **安全偏移設計**：將所有 Modal 的 zIndex 從 `999` 大幅提升至 `20000`，並將遮罩層的 `padding` 升級為 `padding: 'calc(1.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem'`，配合將 `maxHeight` 微調至 `80vh`。這保證任何手機瀏覽器下 Modal 卡片都會被向下推移出頂部安全區，給予右上角叉叉按鈕寬裕的點擊空間。
   - **圖片 Lightbox 修正**：將全螢幕圖片 Lightbox 的遮罩 zIndex 提高至 `30000`，關閉按鈕 zIndex 提高至 `31000`，並將關閉按鈕的 `top` 屬性加上適配 Notch 的 `env(safe-area-inset-top)` 高度，保證大圖不會蓋過按鈕，且叉叉按鈕絕不被狀態列遮擋。
+
+## 2026-06-28 — 圖片滑動手勢與 Sticky Header 遮擋消除修正
+
+### 修改概述
+- **解除層疊上下文限制**：將 `showShareModal` 與 `showStatsModal` 移動至 `</main>` 的外部（與 `EditExpenseModal` 同級渲染），徹底擺脫同級 `<Navbar />` 的遮擋限制。
+- **行動版 Lightbox 左右滑動手勢 (Swipe Gestures)**：在主頁面的 Lightbox 與 `EditExpenseModal` 的兩個 Lightbox 中，透過 `onTouchStart`、`onTouchMove` 與 `onTouchEnd` 紀錄 `clientX` 滑動差值，當橫向滑動距離大於 50px 時，智慧切換至上一張/下一張照片，極致提升手機端相簿體驗。
+- **Modal 結構改版為 Sticky Header**：
+  - 重構 `showShareModal`、`showStatsModal` 與 `EditExpenseModal` 的 CSS 版面為 `flexDirection: 'column'` 與 `overflow: 'hidden'`。
+  - 將 Header 與關閉叉叉按鈕設定為固定不滾動區 (`flexShrink: 0`)，下方內容物或表單包裹在 `overflowY: 'auto'` 的獨立滾動容器中。這確保當花費統計圖表或表單內容過多時，頂部的關閉叉叉按鈕仍能恆定浮貼於 Modal 頂端，不隨滾動條移出螢幕。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證，無任何 TypeScript 與 JSX 標籤閉合問題。
+
+## 2026-06-28 — 解決詳情/編輯 Modal 的 Stacking Context 限制與 Safari 叉叉按壓區優化
+
+### 修改概述
+- **徹底解除 EditExpenseModal 的層疊上下文限制**：先前只移除了 `showShareModal` 和 `showStatsModal`，而 `EditExpenseModal` (詳情與編輯 Modal) 仍遺留在 `<main>` 內部。這導致網頁的 `<Navbar />` 依然會覆蓋在詳情 Modal 與全螢幕 Lightbox 的頂部，遮擋了右上角的關閉叉叉。現已將 `EditExpenseModal` 也移出 `<main>` 元素外，徹底讓所有彈窗與大圖 Lightbox 浮在最上層，不再被 Navbar 遮擋。
+- **調大 Modal 頂部安全距離 (Mobile Padding Offset)**：為了相容 iOS Safari 頂部 URL 列與系統狀態列（Notch 瀏海），將所有 Modal 遮罩層的頂部 padding 從 `calc(1.5rem + env(safe-area-inset-top))` 增加至更寬裕的 `calc(3.5rem + env(safe-area-inset-top))`，把卡片整體往下推，避免右上角叉叉緊貼頂端而難以按壓。
+- **調大圖片 Lightbox 關閉按鈕的安全間距**：將三個大圖 Lightbox 的關閉按鈕定位由 `top: 16px, right: 16px` 調為 `top: calc(28px + env(safe-area-inset-top)), right: 20px`。這為手機使用者留出了極為舒適的單手按壓區，且能徹底繞開 Safari 頂部的原生動作列與 iPhone 瀏海遮擋，讓「關閉大圖」的叉叉按鈕清晰重現。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+## 2026-06-28 — 圖片 Lightbox 點擊圖片直接切換下一張功能
+
+### 修改概述
+- **新增大圖點擊切換功能 (Click/Tap to Switch Next Image)**：在主網頁 Lightbox 以及 `EditExpenseModal` 的兩個 Lightbox 中，為 `<img>` 標籤添加了 `onClick` 點擊處理函數，並調用 `e.stopPropagation()` 阻止點擊事件向外傳遞而關閉彈窗。當使用者點擊大圖本身時，會智慧切換到下一張（若只有一張圖則不切換，多張圖時滑鼠會變成 `pointer`），為行動裝置及桌面端提供極佳的相簿瀏覽流暢度。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-28 — 解決目的地國家 JSON 髒資料導致外幣 Chip 無法顯示與切換的 Bug
+
+### 修改概述
+- **導出與全域套用 extractCleanCountries**：由於先前在「自訂每日目的地國家」改版中，我們將國家表以 JSON 結構包裝儲存在 Prisma 的 `countries` (PostgreSQL `String[]` 陣列的第一個元素中)。這導致在網頁端 **「快速記帳 (ExpenseForm)」** 與 **「編輯花費 (EditExpenseModal)」** 中，直接將其作為 raw string 傳給 `getCurrenciesFromCountries(countries)` 時解析失敗，進而造成網頁畫面上**完全沒有任何外幣 (如 EUR、JPY) 按鈕可以選，只剩下預設 TWD**。
+- **修復內容**：
+  1. 將 `src/lib/countries.ts` 中的 `extractCleanCountries` 導出為 `export`。
+  2. 在 `src/app/trips/[tripId]/page.tsx` 中將其引入。
+  3. 分別在 `ExpenseForm` 和 `EditExpenseModal` 的變數初始化中，使用 `extractCleanCountries` 將 `countries` 淨化解包，再丟給匯率/幣別 chip 生成器。
+  4. 同時將彈窗與記帳 Form 中三處 `getCurrencyChipLabel` 呼叫 the `countries` 參數替換為 `cleanCountries`。這不僅讓多國行程對應的歐元 `EUR` 等外幣 Chip 秒現身（點選高亮），且在點擊儲存修改後能成功改寫資料庫，並使幣別標籤能正確帶出 `歐元 (奧地利)` 的精緻標籤！
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-28 — 行程主頁花費列表依日期分組優化
+
+### 修改概述
+- **重構花費列表為依日期分組 (Group By Date)**：在主頁面的全部花費卡片中，將單一的花費項目列表改為雙層嵌套。按消費日期 `yyyy/M/d` 進行分組顯示，最上方顯示最新的日期組，實現更加層次分明的清單排版。
+- **日期 Header 與 Day X 標籤**：每個日期分組的頂部會繪製一條精緻的 Header，格式為 `yyyy/M/d (星期幾)`，並附有 Calendar 圖示。如果該日期屬於行程的區間，還會利用 `differenceInDays` 動態計算出 `Day X`（如 `Day 3`）並加上一個精美的淡藍色小徽章高亮標註。
+- **精簡單筆時間顯示**：為了配合日期分組並釋放卡片空間，我們將每一個消費項目內部的時間顯示由原先擁擠的 `yyyy/M/d HH:mm` 精簡為只顯示小時與分鐘 `HH:mm`。這徹底解決了手機版上字體重疊與資訊過多顯得擁擠的痛點。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-28 — 登入方式簡化：移除 LINE 登入，僅保留 Google 登入
+
+### 修改概述
+- **移除登入頁面的 LINE 登入功能**：在 `src/app/login/page.tsx` 中，徹底移去了 LINE 登入按鈕、分隔線以及底部的 LINE 綁定說明區塊。
+- **僅保留 Google 登入**：登入頁面目前僅展示單一的 Google 登入按鈕，視覺上極為簡潔清爽，降低使用者在註冊與登入時的混淆度。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-29 — 導覽列優化：移除 Navbar 中多餘的行程總覽與新增行程按鈕
+
+### 修改概述
+- **移除冗餘的導覽列連結**：在 `src/components/navbar.tsx` 中，移去了桌面版與手機展開版選單中對 `navItems` 的 map 渲染（即「✈️ 行程總覽」與「➕ 新增行程」兩個連結）。
+- **極簡化 Navbar 設計**：這使頂部導覽列看起來更加極簡，避免了與首頁（行程總覽）中的現有功能重複，同時清除了未使用的 `navItems` 與 `isActive` 變數。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-29 — 全站多語系 i18n 缺失審計與優化
+
+### 修改概述
+- **補充多語系翻譯字典**：在 `src/lib/i18n.ts` 的 `zh-TW` 與 `en` 中補充了缺失的接受邀請頁面、行程設定頁（成員管理、每日目的地國家）以及新增行程頁的每日目的地標題等中英文對照。
+- **重構接受邀請頁面**：將 `src/app/invite/accept/page.tsx` 中所有寫死的中文提示、錯誤字串、載入文字以及按鈕以 `useLanguage` 的 `t()` 重新包裝，並使用 `interpolate` 帶入動態參數。
+- **更新設定頁與新增行程頁**：
+  - 將 `src/app/trips/[tripId]/settings/page.tsx` 中「每日目的地設定」與「成員管理」等標題、擁有者角色、移除按鈕改為多語系。
+  - 將成員移除 confirm 提示框、成功與失敗 alert 修改為動態適配中英文。
+  - 將 `src/app/trips/new/page.tsx` 中的「每日目的地國家設定」標題改為多語系。
+- **專案建置驗證**：完美通過 `npx tsc --noEmit` 編譯檢測。
+
+## 2026-06-29 — 國家名稱多語系與日期輸入框語系優化
+
+### 修改概述
+- **國家名稱多語系化**：在 `src/app/trips/new/page.tsx` 中的已選 Chip、下拉搜尋清單，以及 `settings/page.tsx` 和 `new/page.tsx` 底部的「每日目的地國家配置」中，皆改為根據語系動態顯示英/中文名（如 `country.nameEn`）。
+- **日期輸入框 placeholder 優化**：
+  - 將 `new/page.tsx` 與 `settings/page.tsx` 中的日期 `<input>` 改為動態 `type` 屬性（未選時為 `text`，獲得焦點或已有值時切換為 `date`）。
+  - 這打破了中文瀏覽器在英文介面下硬性顯示中文「年/月/日」的缺陷，使其完美呈現 `Start Date` 與 `End Date` 或 `開始日期` 與 `結束日期` 的多語系 placeholder。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-29 — 支出與收入合併顯示及統計優化
+
+### 修改概述
+- **支出與收入數據合流**：在 `src/app/trips/[tripId]/page.tsx` 中將 `trip.expenses` 與 `trip.deposits` 合併為統一的 `allTransactions` 陣列，並按交易時間進行排序，使「收入」記錄能以正確的日期 Day 分組顯示在歷史清單中。
+- **交易行 (ExpenseRow) 渲染升級**：
+  - 若為收入項目，顯示綠色的「💰 收入」徽章、金額加上 `+` 號前綴，並將金額標為綠色，提供極佳的辨識度。
+  - 將收入項目的 `onEdit` 屬性設為 `undefined`，防止誤點開啟編輯面板。
+- **統計 Modal 新增公積金餘額**：
+  - 於花費統計 Modal 的底部加入對「總收入」的統計顯示，並自動結算並呈現「公積金餘額（總收入 - 總花費）」，對旅途公積金管理有重大提升。
+- **專案建置驗證**：完美通過 `npx tsc --noEmit` 編譯檢測。
+
+## 2026-06-29 — 行程主頁 SSR 秒開加速與記帳自訂日期優化
+
+### 修改概述
+- **行程主頁 Server Component 重構**：
+  - 將 `src/app/trips/[tripId]/page.tsx` 移去 `"use client"`，重構為 Server Component。
+  - 直接在後端使用 Prisma 拉取數據，並將 Date 物件序列化為 ISO String 以符合 Next.js 跨邊界傳遞的要求。
+  - 成功消除客戶端二階段載入的白屏飛機 Loading，實現網頁「秒開」極速體驗。
+- **引入客戶端容器**：
+  - 建立 `src/app/trips/[tripId]/trip-detail-client.tsx` 承接原本的全部客戶端狀態與 UI，以 `initialData` 為初始值。
+- **記帳自訂日期（支出與收入）**：
+  - 更新 `deposits` 收入 API 以支援可選的 `date` 寫入（對應 `createdAt` 覆寫），零風險繞過 migration。
+  - 於記帳表單 `ExpenseForm` 加上 `date` state（預設本地時間 yyyy-MM-ddTHH:mm 格式）。
+  - 不論是支出還是收入分頁，在表單中皆渲染一個漂亮的 `<input type="datetime-local">` 日期時間欄位，並於提交時將自訂 ISO 時間傳給 API。
+- **專案建置驗證**：完美通過 `npx tsc --noEmit` 編譯檢測。
+
+## 2026-06-29 — 實作收入項目編輯與刪除功能
+
+### 修改概述
+- **新增單筆收入 API 路由**：
+  - 建立 `src/app/api/trips/[tripId]/deposits/[depositId]/route.ts` API。
+  - 實作 `PATCH` 請求以修改單筆收入的金額、幣種、備註與記帳時間（覆寫 `createdAt`）。
+  - 實作 `DELETE` 請求以允許用戶從資料庫物理刪除特定收入數據。
+- **前端支援編輯與刪除**：
+  - 建立 `src/app/trips/[tripId]/trip-detail-client.tsx` 中的 `<EditDepositModal>` 元件，提供與支出類似的毛玻璃查看、修改與刪除介面。
+  - 歷史清單行 `onEdit` 事件在使用者具備編輯權限且為收入項目時，導向開啟 `EditDepositModal`。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-29 — 解決 Next.js 15+ 客戶端 fetch 快取不同步問題
+
+### 修改概述
+- **停用 API GET 快取**：
+  - 修改 `src/app/trips/[tripId]/trip-detail-client.tsx` 中的 `fetchTrip` 數據刷新請求。
+  - 將 URL 加上動態時間戳記 `?t=${Date.now()}`，並設定 fetch header `{ cache: 'no-store' }`。
+  - 這強迫瀏覽器與 Next.js 網絡執行期完全略過快取、直接自後端資料庫取得最新帳目數據，從而根治了編輯/刪除花費或收入後，頁面資料不即時更新、必須手動重新整理網頁的問題。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-29 — 實作圖片上傳與壓縮期間競態優化（修復圖片漏失 Bug）
+
+### 修改概述
+- **加入 compressing 鎖定機制**：
+  - 於 `ExpenseForm` (新增支出) 及 `EditExpenseModal` (編輯支出) 元件中，新增 `compressing` 狀態，用以表示非同步的圖片壓縮任務是否正在執行。
+  - 當點選圖片時，將 `compressing` 設為 `true`，防止使用者在照片讀取與 Canvas 壓縮期間提早提交表單，解決原先因為手速過快提交空圖片陣列的 Bug。
+- **UI 優化與 Loading 指示**：
+  - 當圖片正在處理時，新增圖片按鈕會被替換為精緻的 `Loader2` 轉圈狀態與「圖片處理中...」文字。
+  - 「確認記帳」與「儲存修改」按鈕在壓縮期間會被設為 `disabled` 狀態，且文字切換為「圖片處理中...」，提供明確的反饋提示。
+- **錯誤捕捉增強**：
+  - 移除原先靜默忽略（`catch { /* ignore */ }`）的設計，當圖片讀取解碼或壓縮失敗時，會在控制台印出 error 並彈窗告知使用者，避免使用者因不知情而提交不完全的資料。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-29 — 修復前端 parsedExpenses 對應遺漏 images 欄位 Bug
+
+### 修改概述
+- **補上 images 欄位映射**：
+  - 修改 `src/app/trips/[tripId]/trip-detail-client.tsx` 中的 `parsedExpenses` 資料轉換函數。
+  - 補上先前遺漏的 `images: e.images` 屬性映射。
+  - 這解決了因為欄位遺漏導致從伺服器端獲取的 `images` 資料無法成功流向 `EditExpenseModal` 詳情視窗的 Bug，使所有原本已存入資料庫的支出附圖得以正常顯示與展開。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。
+
+## 2026-06-29 — 電腦版（大螢幕）彈窗尺寸與字體大小適配優化
+
+### 修改概述
+- **新增 CSS 媒體查詢**：
+  - 於 `src/app/globals.css` 尾部，針對 `min-width: 768px` 的裝置（平板與電腦桌機版）新增彈窗覆寫樣式。
+  - 將一般彈窗（詳情、編輯、分享邀請）的 `max-width` 調整至大器的 `550px`，並將統計圖表彈窗（`stats-modal`）擴大適配至 `800px`，使電腦版排版更加協調。
+  - 全面性等比例放大電腦版彈窗內的字體（項目大標題、大金額、資訊欄目、輸入框與按鈕等），大幅提升長輩與桌機使用者的視覺舒適度與操作便利性。
+- **重構前端 CSS 類別**：
+  - 於 `trip-detail-client.tsx` 中，將 `EditExpenseModal`、`EditDepositModal`、`StatsModal` 以及分享邀請 Modal 的 `className` 改為標準的 `glass-card trip-modal`，以利 CSS 媒體查詢精確選取與渲染。
+- **專案建置驗證**：成功跑通 `npx tsc --noEmit` 驗證。

@@ -4,6 +4,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { summarizeDeposits, summarizeExpenses } from "@/lib/money"
+import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
+import { createTripVersion } from "@/lib/trip-version"
 
 // GET — 取得行程詳情
 export async function GET(
@@ -46,19 +49,34 @@ export async function GET(
     return NextResponse.json({ error: "行程不存在" }, { status: 404 })
   }
 
-  // 計算總花費
-  const totalSpent = trip.expenses.reduce(
-    (sum, e) => sum + (e.convertedAmount || e.amount),
-    0
-  )
-  // 計算總收入
-  const totalDeposits = trip.deposits.reduce((sum, d) => sum + d.amount, 0)
+  const expenseSummary = summarizeExpenses(trip.expenses, trip.baseCurrency)
+  const depositSummary = summarizeDeposits(trip.deposits, trip.baseCurrency)
 
   return NextResponse.json({
     ...trip,
-    totalSpent,
-    totalDeposits,
+    expenses: trip.expenses.map((expense) => ({
+      ...expense,
+      images: createSignedExpenseImagePaths(expense.id, expense.images),
+    })),
+    totalSpent: expenseSummary.total,
+    totalDeposits: depositSummary.total,
+    missingConversionCount: expenseSummary.missingConversionCount,
+    foreignCurrencyDepositCount: depositSummary.foreignCurrencyCount,
     userRole: member.role,
+    realtimeVersion: createTripVersion({
+      updatedAt: trip.updatedAt,
+      expenses: trip.expenses.map((expense) => ({
+        id: expense.id,
+        updatedAt: expense.updatedAt,
+      })),
+      deposits: trip.deposits.map((deposit) => ({
+        id: deposit.id,
+        amount: deposit.amount,
+        currency: deposit.currency,
+        note: deposit.note,
+        createdAt: deposit.createdAt,
+      })),
+    }),
   })
 }
 

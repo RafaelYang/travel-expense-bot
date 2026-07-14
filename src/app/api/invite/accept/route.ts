@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
 
 // POST — 接受邀請
 export async function POST(req: NextRequest) {
@@ -34,6 +35,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "此邀請已被使用" }, { status: 400 })
     }
 
+    const sessionEmail = session.user.email?.trim().toLowerCase()
+    if (!sessionEmail || sessionEmail !== invite.email.trim().toLowerCase()) {
+      return NextResponse.json({ error: "請使用收到邀請的 Email 帳號登入" }, { status: 403 })
+    }
+
     if (invite.expires < new Date()) {
       // 更新狀態為 expired
       await prisma.emailInvite.update({
@@ -54,6 +60,10 @@ export async function POST(req: NextRequest) {
     })
 
     if (existing) {
+      await prisma.emailInvite.updateMany({
+        where: { id: invite.id, status: "pending" },
+        data: { status: "accepted" },
+      })
       return NextResponse.json({
         success: true,
         tripId: invite.tripId,
@@ -62,20 +72,35 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // 加入行程 + 更新邀請狀態
-    await prisma.$transaction([
-      prisma.tripMember.create({
+    // 先在 transaction 內原子占用 token，避免同一邀請被並發重複兌換。
+    const accepted = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.emailInvite.updateMany({
+        where: {
+          id: invite.id,
+          status: "pending",
+          expires: { gt: new Date() },
+        },
+        data: { status: "accepted" },
+      })
+
+      if (claimed.count !== 1) {
+        return false
+      }
+
+      await tx.tripMember.create({
         data: {
           tripId: invite.tripId,
           userId: session.user.id,
           role: invite.role,
         },
-      }),
-      prisma.emailInvite.update({
-        where: { id: invite.id },
-        data: { status: "accepted" },
-      }),
-    ])
+      })
+
+      return true
+    })
+
+    if (!accepted) {
+      return NextResponse.json({ error: "此邀請已被使用或已過期" }, { status: 400 })
+    }
 
     return NextResponse.json({
       success: true,
@@ -83,6 +108,9 @@ export async function POST(req: NextRequest) {
       tripName: invite.trip.name,
     })
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json({ error: "你已經是此行程的成員" }, { status: 400 })
+    }
     console.error("[InviteAccept] Error:", error)
     return NextResponse.json({ error: "加入失敗" }, { status: 500 })
   }

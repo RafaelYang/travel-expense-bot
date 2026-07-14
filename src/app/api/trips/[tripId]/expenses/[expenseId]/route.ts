@@ -5,7 +5,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { convertExpenseAmount } from "@/lib/exchange-rate"
+import { findEditableExpense } from "@/lib/trip-access"
+import {
+  createSignedExpenseImagePaths,
+  resolveExpenseImageInputs,
+} from "@/lib/expense-image-signing"
 import { z } from "zod"
+
+const imageInputSchema = z.string().max(1_500_000)
 
 const updateSchema = z.object({
   category: z.string().optional(),
@@ -13,7 +20,7 @@ const updateSchema = z.object({
   amount: z.number().positive().optional(),
   currency: z.string().optional(),
   note: z.string().optional().nullable(),
-  images: z.array(z.string()).max(3).optional(),
+  images: z.array(imageInputSchema).max(3).optional(),
   date: z.string().optional(),
 })
 
@@ -29,12 +36,9 @@ export async function PATCH(
 
   const { tripId, expenseId } = await params
 
-  // 檢查成員權限
-  const member = await prisma.tripMember.findUnique({
-    where: { tripId_userId: { tripId, userId: session.user.id } },
-  })
-  if (!member || member.role === "viewer") {
-    return NextResponse.json({ error: "無編輯權限" }, { status: 403 })
+  const existing = await findEditableExpense(session.user.id, tripId, expenseId)
+  if (!existing) {
+    return NextResponse.json({ error: "找不到此筆花費或無編輯權限" }, { status: 404 })
   }
 
   try {
@@ -42,36 +46,42 @@ export async function PATCH(
     const data = updateSchema.parse(body)
 
     // 如果金額或幣種改變，重新計算匯率
-    const updateData: Record<string, unknown> = { ...data }
+    const { images, ...fields } = data
+    const updateData: Record<string, unknown> = { ...fields }
+
+    if (images) {
+      const resolvedImages = resolveExpenseImageInputs(expenseId, existing.images, images)
+      if (!resolvedImages) {
+        return NextResponse.json({ error: "圖片參照無效或已過期，請重新載入頁面" }, { status: 400 })
+      }
+      updateData.images = resolvedImages
+    }
 
     if (data.date) {
       updateData.date = new Date(data.date)
     }
 
-    if (data.amount || data.currency) {
-      const existing = await prisma.expense.findUnique({
-        where: { id: expenseId },
-        select: { amount: true, currency: true, tripId: true },
-      })
-      if (!existing) {
-        return NextResponse.json({ error: "找不到此筆花費" }, { status: 404 })
-      }
-
-      const newAmount = data.amount || existing.amount
-      const newCurrency = data.currency || existing.currency
+    if (data.amount !== undefined || data.currency !== undefined) {
+      const newAmount = data.amount ?? existing.amount
+      const newCurrency = data.currency ?? existing.currency
 
       // 查詢行程基準幣種
       const trip = await prisma.trip.findUnique({
         where: { id: tripId },
         select: { baseCurrency: true },
       })
-      const baseCurrency = trip?.baseCurrency || 'TWD'
+      const baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
 
       if (newCurrency !== baseCurrency) {
         const conversion = await convertExpenseAmount(newAmount, newCurrency, baseCurrency)
         if (conversion) {
           updateData.convertedAmount = conversion.convertedAmount
           updateData.exchangeRate = conversion.exchangeRate
+        } else {
+          return NextResponse.json(
+            { error: "匯率暫時無法取得，花費未更新" },
+            { status: 503 },
+          )
         }
       } else {
         updateData.convertedAmount = newAmount
@@ -80,14 +90,17 @@ export async function PATCH(
     }
 
     const expense = await prisma.expense.update({
-      where: { id: expenseId },
+      where: { id: expenseId, tripId },
       data: updateData,
       include: {
         user: { select: { id: true, name: true } },
       },
     })
 
-    return NextResponse.json(expense)
+    return NextResponse.json({
+      ...expense,
+      images: createSignedExpenseImagePaths(expense.id, expense.images),
+    })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
@@ -109,17 +122,14 @@ export async function DELETE(
 
   const { tripId, expenseId } = await params
 
-  // 檢查成員權限
-  const member = await prisma.tripMember.findUnique({
-    where: { tripId_userId: { tripId, userId: session.user.id } },
-  })
-  if (!member || member.role === "viewer") {
-    return NextResponse.json({ error: "無刪除權限" }, { status: 403 })
+  const existing = await findEditableExpense(session.user.id, tripId, expenseId)
+  if (!existing) {
+    return NextResponse.json({ error: "找不到此筆花費或無刪除權限" }, { status: 404 })
   }
 
   try {
     await prisma.expense.delete({
-      where: { id: expenseId },
+      where: { id: expenseId, tripId },
     })
     return NextResponse.json({ success: true })
   } catch (error) {

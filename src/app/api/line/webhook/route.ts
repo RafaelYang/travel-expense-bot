@@ -3,12 +3,71 @@
  * 處理 LINE 帳號連動、多行程 Carousel 切換、以及時間提示警示記帳功能
  */
 import { NextRequest } from "next/server"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import crypto from "crypto"
 import { convertExpenseAmount } from "@/lib/exchange-rate"
+import { summarizeExpenses } from "@/lib/money"
+import {
+  findLineEditableExpense,
+  findLineEditableExpenseByLineUserId,
+} from "@/lib/trip-access"
+import {
+  createSignedExpenseImagePath,
+  getPublicAppOrigin,
+} from "@/lib/expense-image-signing"
+import {
+  attachLineImageToExpense,
+  LineExpenseImageError,
+} from "@/lib/line-expense-image-service"
+
+type LinkedLineUser = Prisma.UserGetPayload<{ include: { lineBotState: true } }>
+type TripRecord = Prisma.TripGetPayload<object>
+type ExpenseRecord = Prisma.ExpenseGetPayload<object>
+
+type LineReplyMessage = {
+  type: string
+  quickReply?: { items?: unknown[] }
+  [key: string]: unknown
+}
+
+type LineTextMessageEvent = {
+  type: "message"
+  replyToken: string
+  source: { userId?: string }
+  message: { type: "text"; id: string; text: string }
+}
+
+type LineImageMessageEvent = {
+  type: "message"
+  replyToken: string
+  source: { userId?: string }
+  message: { type: "image"; id: string }
+}
+
+type LinePostbackEvent = {
+  type: "postback"
+  replyToken: string
+  source: { userId?: string }
+  postback: { data: string }
+}
+
+type SupportedLineEvent = LineTextMessageEvent | LineImageMessageEvent | LinePostbackEvent
+
+function isTextMessageEvent(event: SupportedLineEvent): event is LineTextMessageEvent {
+  return event.type === "message" && event.message.type === "text"
+}
+
+function isImageMessageEvent(event: SupportedLineEvent): event is LineImageMessageEvent {
+  return event.type === "message" && event.message.type === "image"
+}
+
+function getErrorMessage(error: unknown, fallback = "未知伺服器錯誤") {
+  return error instanceof Error ? error.message : fallback
+}
 
 // LINE 回覆訊息的共用 Fetch 函數
-async function replyMessage(replyToken: string, messages: any[]) {
+async function replyMessage(replyToken: string, messages: LineReplyMessage[]) {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
   if (!token) {
     console.error("[LINE Webhook] 未設定 LINE_CHANNEL_ACCESS_TOKEN")
@@ -18,8 +77,9 @@ async function replyMessage(replyToken: string, messages: any[]) {
   // 安全防呆：如果 messages 中的 quickReply.items 為空，則將其刪除以防 LINE 400 報錯
   const sanitizedMessages = messages.map((msg) => {
     if (msg.quickReply && (!msg.quickReply.items || msg.quickReply.items.length === 0)) {
-      const { quickReply, ...rest } = msg
-      return rest
+      const sanitized = { ...msg }
+      delete sanitized.quickReply
+      return sanitized
     }
     return msg
   })
@@ -101,12 +161,7 @@ function getTripDayInfo(startDateStr: string, endDateStr: string): {
   }
 }
 
-let currentOrigin = "https://travel-expense-bot-steel.vercel.app"
-
 export async function POST(req: NextRequest) {
-  const origin = new URL(req.url).origin
-  currentOrigin = origin
-
   const channelSecret = process.env.LINE_CHANNEL_SECRET || ""
   const signature = req.headers.get("x-line-signature") || ""
 
@@ -118,16 +173,14 @@ export async function POST(req: NextRequest) {
       return new Response("Unauthorized", { status: 401 })
     }
 
-    const payload = JSON.parse(bodyText)
-    const events = payload.events || []
+    const payload = JSON.parse(bodyText) as { events?: SupportedLineEvent[] }
+    const events = Array.isArray(payload.events) ? payload.events : []
 
     for (const event of events) {
-      if (event.type === "message") {
-        if (event.message.type === "text") {
-          await handleTextMessage(event)
-        } else if (event.message.type === "image") {
-          await handleImageMessage(event)
-        }
+      if (isTextMessageEvent(event)) {
+        await handleTextMessage(event)
+      } else if (isImageMessageEvent(event)) {
+        await handleImageMessage(event)
       } else if (event.type === "postback") {
         await handlePostbackEvent(event)
       }
@@ -141,7 +194,7 @@ export async function POST(req: NextRequest) {
 }
 
 // 處理文字訊息
-async function handleTextMessage(event: any) {
+async function handleTextMessage(event: LineTextMessageEvent) {
   const replyToken = event.replyToken
   const lineUserId = event.source.userId
   const text = event.message.text.trim()
@@ -174,7 +227,7 @@ async function handleTextMessage(event: any) {
       const field = parts[0]
       const expenseId = parts[1]
 
-      await handleDirectTextUpdate(replyToken, expenseId, field, text)
+      await handleDirectTextUpdate(replyToken, user.id, expenseId, field, text)
       return
     }
   }
@@ -279,7 +332,7 @@ async function handleTextMessage(event: any) {
       if (trip) {
         quickReply = await getQuickReply(trip, userActiveCurrency)
       }
-    } catch (e) {}
+    } catch {}
 
     await replyMessage(replyToken, [
       {
@@ -328,8 +381,15 @@ async function handleTextMessage(event: any) {
     // 匯率換算
     const baseCurrency = trip.baseCurrency || "TWD"
     const conversion = await convertExpenseAmount(amount, currency, baseCurrency)
-    const convertedAmount = conversion ? conversion.convertedAmount : amount
-    const exchangeRate = conversion ? conversion.exchangeRate : 1.0
+    if (!conversion) {
+      await replyMessage(replyToken, [{
+        type: "text",
+        text: "❌ 匯率暫時無法取得，本筆花費尚未寫入。請稍後再試，避免以錯誤的 1:1 匯率記帳。",
+      }])
+      return
+    }
+    const convertedAmount = conversion.convertedAmount
+    const exchangeRate = conversion.exchangeRate
 
     // 寫入 Expense 資料庫
     await prisma.expense.create({
@@ -368,12 +428,12 @@ async function handleTextMessage(event: any) {
         quickReply: await getQuickReply(trip, userActiveCurrency),
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Webhook Add Expense Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 記帳失敗：${err.message || "未知伺服器錯誤"}`,
+        text: `❌ 記帳失敗：${getErrorMessage(err)}`,
       },
     ])
   }
@@ -410,31 +470,44 @@ async function handleUserLinkCommand(replyToken: string, lineUserId: string, tok
     // 2. 解析出網頁端的 userId
     const userId = linkToken.identifier.replace(identifierPrefix, "")
 
-    // 3. 更新 User 紀錄
-    await prisma.user.update({
-      where: { id: userId },
-      data: { lineUserId },
-    })
+    // 3. 原子性消耗配對碼並綁定帳號，避免同一組碼被並行重複兌換。
+    const firstMember = await prisma.$transaction(async (tx) => {
+      const consumed = await tx.verificationToken.deleteMany({
+        where: {
+          id: linkToken.id,
+          token,
+          expires: { gt: new Date() },
+        },
+      })
 
-    // 4. 清除配對碼
-    await prisma.verificationToken.delete({
-      where: { id: linkToken.id },
-    })
+      if (consumed.count !== 1) {
+        throw new Error("LINE_LINK_TOKEN_ALREADY_CONSUMED")
+      }
 
-    // 5. 尋找使用者名下的第一個行程，並預設綁定
-    const firstMember = await prisma.tripMember.findFirst({
-      where: { userId },
-      include: { trip: true },
-      orderBy: { joinedAt: "desc" },
+      await tx.user.update({
+        where: { id: userId },
+        data: { lineUserId },
+      })
+
+      const member = await tx.tripMember.findFirst({
+        where: { userId },
+        include: { trip: true },
+        orderBy: { joinedAt: "desc" },
+      })
+
+      if (member) {
+        await tx.lineBotState.upsert({
+          where: { userId },
+          update: { activeTripId: member.tripId },
+          create: { userId, activeTripId: member.tripId },
+        })
+      }
+
+      return member
     })
 
     let activeTripText = "\n\n💡 您目前名下沒有任何行程，請前往網頁端建立行程後，在 LINE 傳送 `/list` 來連動您的行程。"
     if (firstMember) {
-      await prisma.lineBotState.upsert({
-        where: { userId },
-        update: { activeTripId: firstMember.tripId },
-        create: { userId, activeTripId: firstMember.tripId },
-      })
       activeTripText = `\n\n✈️ 系統已自動將您連動至最近的行程：\n【${firstMember.trip.name}】`
     }
 
@@ -444,19 +517,22 @@ async function handleUserLinkCommand(replyToken: string, lineUserId: string, tok
         text: `🎉 帳號連結成功！\n\n您的 LINE 帳號已順利與網頁端帳號連動。${activeTripText}\n\n📌 常用功能指令：\n- 直接輸入「品項 金額」即可記帳！\n- 傳送 /status 查詢目前鎖定的記帳行程。\n- 傳送 /list 可切換其他行程。`,
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE User Link Command Error]", err)
+    const isAlreadyLinked = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 連動過程中發生錯誤：${err.message}`,
+        text: isAlreadyLinked
+          ? "❌ 此 LINE 帳號已連結其他網頁帳號，請先解除原連結或聯絡管理者。"
+          : "❌ 配對碼已失效、已被使用，或連動暫時失敗。請在網頁重新產生配對碼後再試。",
       },
     ])
   }
 }
 
 // 處理 /list 輸出行程輪播選單
-async function handleListCommand(replyToken: string, user: any) {
+async function handleListCommand(replyToken: string, user: LinkedLineUser | null) {
   if (!user) {
     await replyMessage(replyToken, [
       {
@@ -527,19 +603,19 @@ async function handleListCommand(replyToken: string, user: any) {
         },
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE List Command Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 查詢行程清單失敗：${err.message}`,
+        text: `❌ 查詢行程清單失敗：${getErrorMessage(err)}`,
       },
     ])
   }
 }
 
 // 處理 /status 狀態查詢指令
-async function handleStatusCommand(replyToken: string, user: any) {
+async function handleStatusCommand(replyToken: string, user: LinkedLineUser | null) {
   if (!user) {
     await replyMessage(replyToken, [
       {
@@ -613,19 +689,19 @@ async function handleStatusCommand(replyToken: string, user: any) {
         quickReply: await getQuickReply(trip, userActiveCurrency),
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Status Command Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 查詢狀態失敗：${err.message}`,
+        text: `❌ 查詢狀態失敗：${getErrorMessage(err)}`,
       },
     ])
   }
 }
 
 // 處理 Postback 事件 (包含行程切換、圖片附加)
-async function handlePostbackEvent(event: any) {
+async function handlePostbackEvent(event: LinePostbackEvent) {
   const replyToken = event.replyToken
   const lineUserId = event.source.userId
   const data = event.postback.data
@@ -643,15 +719,15 @@ async function handlePostbackEvent(event: any) {
     const expenseId = params.get("expenseId")
     const msgId = params.get("msgId")
     if (!expenseId || !msgId) return
-    await saveLineImageToExpense(replyToken, expenseId, msgId)
+    await saveLineImageToExpense(replyToken, lineUserId, expenseId, msgId)
   } else if (action === "delete_expense") {
     const expenseId = params.get("expenseId")
     if (!expenseId) return
-    await handleDeleteExpense(replyToken, expenseId)
+    await handleDeleteExpense(replyToken, lineUserId, expenseId)
   } else if (action === "edit_expense_menu") {
     const expenseId = params.get("expenseId")
     if (!expenseId) return
-    await handleEditExpenseMenu(replyToken, expenseId)
+    await handleEditExpenseMenu(replyToken, lineUserId, expenseId)
   } else if (action === "edit_field") {
     const field = params.get("field")
     const expenseId = params.get("expenseId")
@@ -662,7 +738,7 @@ async function handlePostbackEvent(event: any) {
     const value = params.get("value")
     const expenseId = params.get("expenseId")
     if (!field || !value || !expenseId) return
-    await handleUpdateField(replyToken, field, value, expenseId)
+    await handleUpdateField(replyToken, lineUserId, field, value, expenseId)
   }
 }
 
@@ -734,12 +810,12 @@ async function handleSwitchTripPostback(replyToken: string, lineUserId: string, 
         text: replyText,
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Postback Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 切換行程失敗：${err.message}`,
+        text: `❌ 切換行程失敗：${getErrorMessage(err)}`,
       },
     ])
   }
@@ -793,7 +869,7 @@ function getAutoCategory(item: string): string {
 }
 
 // 處理 LINE 圖片訊息
-async function handleImageMessage(event: any) {
+async function handleImageMessage(event: LineImageMessageEvent) {
   const replyToken = event.replyToken
   const lineUserId = event.source.userId
   const messageId = event.message.id
@@ -841,7 +917,7 @@ async function handleImageMessage(event: any) {
     } else if (recentExpenses.length === 1) {
       // 情況 B：剛好 1 筆
       const expense = recentExpenses[0]
-      await saveLineImageToExpense(replyToken, expense.id, messageId)
+      await saveLineImageToExpense(replyToken, lineUserId, expense.id, messageId)
     } else {
       // 情況 C：多於 1 筆
       // LINE Buttons Template 限制最多 4 個 actions
@@ -871,96 +947,46 @@ async function handleImageMessage(event: any) {
         },
       ])
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Image Message Handling Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 處理圖片失敗：${err.message}`,
+        text: `❌ 處理圖片失敗：${getErrorMessage(err)}`,
       },
     ])
   }
 }
 
-// 下載 LINE 圖片，轉換為 Base64 Data URL 並附加在對應 Expense 的 images 欄位中
-async function saveLineImageToExpense(replyToken: string, expenseId: string, messageId: string) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
-  if (!token) {
-    await replyMessage(replyToken, [
-      {
-        type: "text",
-        text: "❌ 伺服器端未配置 LINE_CHANNEL_ACCESS_TOKEN，無法下載圖片內容。",
-      },
-    ])
-    return
-  }
-
+// LINE 圖片下載、大小驗證與並發寫入由獨立 service 處理。
+async function saveLineImageToExpense(
+  replyToken: string,
+  lineUserId: string,
+  expenseId: string,
+  messageId: string,
+) {
   try {
-    // 1. 取得該筆花費
-    const expense = await prisma.expense.findUnique({
-      where: { id: expenseId },
-    })
-
-    if (!expense) {
-      await replyMessage(replyToken, [
-        {
-          type: "text",
-          text: "⚠️ 找不到對應的花費項目，該項目可能已被刪除。",
-        },
-      ])
-      return
-    }
-
-    // 2. 檢查圖片數量上限 (最多 3 張)
-    const currentImages = Array.isArray(expense.images) ? (expense.images as string[]) : []
-    if (currentImages.length >= 3) {
-      await replyMessage(replyToken, [
-        {
-          type: "text",
-          text: `⚠️ 花費【${expense.item}】的圖片備註已達上限（最多 3 張），無法再加入更多圖片。`,
-        },
-      ])
-      return
-    }
-
-    // 3. 呼叫 LINE API 下載圖片二進位內容
-    const res = await fetch(`https://api-data.line.me/v2/bot/message/${messageId}/content`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-
-    if (!res.ok) {
-      const errText = await res.text()
-      throw new Error(`無法從 LINE 下載圖片内容 HTTP ${res.status}: ${errText}`)
-    }
-
-    const arrayBuffer = await res.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const base64Data = buffer.toString("base64")
-    const dataUrl = `data:image/jpeg;base64,${base64Data}`
-
-    // 4. 更新 Expense 資料庫
-    const updatedImages = [...currentImages, dataUrl]
-    await prisma.expense.update({
-      where: { id: expenseId },
-      data: {
-        images: updatedImages,
-      },
+    const result = await attachLineImageToExpense({
+      lineUserId,
+      expenseId,
+      messageId,
     })
 
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `📸 照片已成功附加至花費【${expense.item} ${expense.amount} ${expense.currency}】！（第 ${updatedImages.length}/3 張）`,
+        text: `📸 照片已成功附加至花費【${result.item} ${result.amount} ${result.currency}】！（第 ${result.imageCount}/3 張）`,
       },
     ])
-  } catch (err: any) {
-    console.error("[saveLineImageToExpense Error]", err)
+  } catch (error) {
+    console.error("[saveLineImageToExpense Error]", error)
+    const message = error instanceof LineExpenseImageError
+      ? error.message
+      : "LINE 圖片下載失敗，請稍後再試。"
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 下載或附加圖片失敗：${err.message}`,
+        text: `❌ 附加圖片失敗：${message}`,
       },
     ])
   }
@@ -1048,7 +1074,7 @@ const ALL_CURRENCY_NAMES: Record<string, string> = {
 }
 
 // 根據行程目的地和常用幣別，動態生成 LINE Quick Reply 項目
-async function getQuickReply(trip: any, userActiveCurrency: string | null) {
+async function getQuickReply(trip: TripRecord, userActiveCurrency: string | null) {
   const currencies: { currency: string; name: string }[] = []
 
   // 1. 加入行程基準幣別 (偏好貨幣)
@@ -1135,7 +1161,7 @@ const ALTERNATIVE_CURRENCIES = [
 ]
 
 // 獲取更多幣別的快速選單 (動態過濾已在常用選單出現的幣別，防止重複)
-async function getOtherQuickReply(trip: any, userActiveCurrency: string | null) {
+async function getOtherQuickReply(trip: TripRecord, userActiveCurrency: string | null) {
   const activeCurrencyCode = userActiveCurrency || trip.defaultCurrency || trip.baseCurrency || "TWD"
   
   // 1. 收集已在第一頁顯示的幣別
@@ -1183,7 +1209,7 @@ async function getOtherQuickReply(trip: any, userActiveCurrency: string | null) 
 }
 
 // 處理點選「其他」顯示更多常見幣別的指令
-async function handleCurrencyOtherCommand(replyToken: string, user: any) {
+async function handleCurrencyOtherCommand(replyToken: string, user: LinkedLineUser | null) {
   if (!user) return
 
   const activeTripState = user.lineBotState?.activeTripId
@@ -1215,13 +1241,13 @@ async function handleCurrencyOtherCommand(replyToken: string, user: any) {
         quickReply: await getOtherQuickReply(trip, userActiveCurrency),
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[handleCurrencyOtherCommand Error]", err)
   }
 }
 
 // 處理 /currency 指令
-async function handleCurrencyCommand(replyToken: string, user: any, targetCurrency: string | null) {
+async function handleCurrencyCommand(replyToken: string, user: LinkedLineUser | null, targetCurrency: string | null) {
   if (!user) {
     await replyMessage(replyToken, [
       {
@@ -1314,12 +1340,12 @@ async function handleCurrencyCommand(replyToken: string, user: any, targetCurren
         quickReply: await getQuickReply(trip, targetCurrency),
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Currency Command Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 切換幣別失敗：${err.message}`,
+        text: `❌ 切換幣別失敗：${getErrorMessage(err)}`,
       },
     ])
   }
@@ -1433,13 +1459,15 @@ function parseTripCountries(countriesInput: string[] | null | undefined, current
             if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
               return cleanExtract(parsed.list)
             }
-            const list = (parsed.list || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
-            const daily = (parsed.daily || []).filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+            const parsedList: unknown[] = Array.isArray(parsed.list) ? parsed.list : []
+            const parsedDaily: unknown[] = Array.isArray(parsed.daily) ? parsed.daily : []
+            const list = parsedList.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
+            const daily = parsedDaily.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
             return { list, daily }
           }
         } catch {}
       }
-      const list = input.filter((c: any) => typeof c === "string" && c.length === 2 && !c.includes("{"))
+      const list = input.filter((c) => c.length === 2 && !c.includes("{"))
       return { list, daily: [] }
     }
 
@@ -1467,13 +1495,13 @@ function parseTripCountries(countriesInput: string[] | null | undefined, current
     }
 
     return { list: cleanList, active }
-  } catch (err) {
+  } catch {
     return { list: [], active: "TW" }
   }
 }
 
 // 智慧判定行程時區偏移：如果所有目的地國家皆為同一個時區，則統一使用該時區，避免天數分配偏差
-function getTripTimezoneOffset(trip: any, activeCountry: string): number {
+function getTripTimezoneOffset(trip: TripRecord, activeCountry: string): number {
   try {
     const { list } = parseTripCountries(trip?.countries, 1, 1)
     if (list && list.length > 0) {
@@ -1486,21 +1514,21 @@ function getTripTimezoneOffset(trip: any, activeCountry: string): number {
         return uniqueOffsets[0]
       }
     }
-  } catch (err) {
+  } catch {
     // 忽略錯誤，Fallback
   }
   return COUNTRY_TIMEZONE_MAP[activeCountry.toUpperCase()] ?? 8
 }
 
 // 根據記帳紀錄，動態生成行程日期 Quick Reply 項目 (考慮行程目的地當地時區)
-async function getExpensesDatesQuickReply(activeTripId: string, userId: string, trip: any) {
+async function getExpensesDatesQuickReply(activeTripId: string, userId: string, trip: TripRecord) {
   try {
     // 1. 取得行程目的地時區偏移量 (預設台北 UTC+8，若無跨時區則統一時區)
     let activeCountry = "TW"
     try {
       const { active } = parseTripCountries(trip?.countries, 1, 1)
       activeCountry = active
-    } catch (e) {}
+    } catch {}
     const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
 
     // 2. 查詢該行程下該使用者有記帳的日期
@@ -1524,7 +1552,7 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
             seenDates.add(dStr)
             uniqueDateStrs.push(dStr)
           }
-        } catch (err) {
+        } catch {
           // 忽略單筆異常
         }
       }
@@ -1538,7 +1566,7 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
       if (!uniqueDateStrs.includes(todayStr)) {
         uniqueDateStrs.push(todayStr)
       }
-    } catch (e) {
+    } catch {
       // 忽略異常
     }
 
@@ -1560,7 +1588,7 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
             uniqueDateStrs.push(d.toISOString().split("T")[0])
           }
         }
-      } catch (e) {
+      } catch {
         // 忽略異常
       }
     }
@@ -1585,7 +1613,7 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
             text: `/expenses_date ${dateStr}`,
           }
         }
-      } catch (err) {
+      } catch {
         return {
           type: "action",
           action: {
@@ -1628,7 +1656,7 @@ async function getExpensesDatesQuickReply(activeTripId: string, userId: string, 
 }
 
 // 處理 /expenses 查詢，輸出當前行程的所有日期 Quick Reply
-async function handleExpensesCommand(replyToken: string, user: any) {
+async function handleExpensesCommand(replyToken: string, user: LinkedLineUser | null) {
   if (!user) {
     await replyMessage(replyToken, [
       {
@@ -1680,19 +1708,19 @@ async function handleExpensesCommand(replyToken: string, user: any) {
         quickReply,
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Expenses Command Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 載入行程日期失敗：${err.message}`,
+        text: `❌ 載入行程日期失敗：${getErrorMessage(err)}`,
       },
     ])
   }
 }
 
 // 處理 /expenses_other_dates，列出該行程中實際有記帳紀錄的所有日期
-async function handleOtherDatesCommand(replyToken: string, user: any) {
+async function handleOtherDatesCommand(replyToken: string, user: LinkedLineUser | null) {
   if (!user) return
 
   const activeTripState = user.lineBotState?.activeTripId
@@ -1703,12 +1731,13 @@ async function handleOtherDatesCommand(replyToken: string, user: any) {
     const trip = await prisma.trip.findUnique({
       where: { id: activeTripId },
     })
+    if (!trip) return
 
     let activeCountry = "TW"
     try {
       const { active } = parseTripCountries(trip?.countries, 1, 1)
       activeCountry = active
-    } catch (e) {}
+    } catch {}
     const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
 
     // 查詢有記帳記錄的日期
@@ -1730,7 +1759,7 @@ async function handleOtherDatesCommand(replyToken: string, user: any) {
             seenDates.add(dStr)
             uniqueDates.push(dStr)
           }
-        } catch (err) {}
+        } catch {}
       }
     })
 
@@ -1767,13 +1796,13 @@ async function handleOtherDatesCommand(replyToken: string, user: any) {
         quickReply: { items },
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Other Dates Error]", err)
   }
 }
 
 // 處理日期花費卡片輪播查詢
-async function buildDateExpensesMessages(user: any, queryDateStr: string): Promise<any[]> {
+async function buildDateExpensesMessages(user: LinkedLineUser | null, queryDateStr: string): Promise<LineReplyMessage[]> {
   if (!user) return []
 
   const activeTripState = user.lineBotState?.activeTripId
@@ -1792,7 +1821,7 @@ async function buildDateExpensesMessages(user: any, queryDateStr: string): Promi
   const queryDate = new Date(queryDateStr)
   const currentDay = Math.ceil((queryDate.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
 
-  const { list: tripCountries, active: activeCountry } = parseTripCountries(trip.countries, currentDay, totalDays)
+  const { active: activeCountry } = parseTripCountries(trip.countries, currentDay, totalDays)
 
   const tzOffsetHours = getTripTimezoneOffset(trip, activeCountry)
 
@@ -1827,12 +1856,10 @@ async function buildDateExpensesMessages(user: any, queryDateStr: string): Promi
   const defaultCover = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80"
   const countrySceneryUrl = COUNTRY_SCENERY_MAP[activeCountry.toUpperCase()] || defaultCover
 
-  // 4. 計算本日總額
-  let dailyTotalTwd = 0
-  expenses.forEach((exp) => {
-    dailyTotalTwd += exp.convertedAmount || exp.amount
-  })
-  dailyTotalTwd = Math.round(dailyTotalTwd * 100) / 100
+  // 4. 計算本日總額；缺少匯率的外幣不得當成 1:1 混入。
+  const baseCurrency = trip.baseCurrency || "TWD"
+  const dailySummary = summarizeExpenses(expenses, baseCurrency)
+  const dailyTotal = Math.round(dailySummary.total * 100) / 100
 
   const categoryMap: Record<string, string> = {
     food: "🍜 餐飲",
@@ -1843,8 +1870,7 @@ async function buildDateExpensesMessages(user: any, queryDateStr: string): Promi
     other: "📦 其他",
   }
 
-  const baseCurrency = trip.baseCurrency || "TWD"
-  const columns: any[] = []
+  const columns: Array<Record<string, unknown>> = []
 
   // 決定要放入實體消費卡片的筆數 (Carousel 限制 10 筆)
   const displayLimit = expenses.length > 9 ? 8 : expenses.length
@@ -1855,7 +1881,9 @@ async function buildDateExpensesMessages(user: any, queryDateStr: string): Promi
     
     let textFmt = `分類: ${categoryMap[exp.category] || "其他"}\n金額: ${exp.amount} ${exp.currency}`
     if (exp.currency !== baseCurrency) {
-      textFmt += `\n台幣: ${exp.convertedAmount} TWD`
+      textFmt += exp.convertedAmount === null
+        ? `\n換算: 匯率缺失`
+        : `\n換算: ${exp.convertedAmount} ${baseCurrency}`
     }
 
     // 卡片圖片安全判定：
@@ -1869,7 +1897,7 @@ async function buildDateExpensesMessages(user: any, queryDateStr: string): Promi
       if (images[0].startsWith("http")) {
         imageUrl = images[0]
       } else if (images[0].startsWith("data:image")) {
-        imageUrl = `${currentOrigin}/api/trips/expenses/images/${exp.id}?index=0`
+        imageUrl = `${getPublicAppOrigin()}${createSignedExpenseImagePath(exp.id, 0)}`
       }
     } else {
       if (exp.category === "transport") {
@@ -1931,7 +1959,7 @@ async function buildDateExpensesMessages(user: any, queryDateStr: string): Promi
     thumbnailImageUrl: countrySceneryUrl,
     imageBackgroundColor: "#0F172A",
     title: `📊 今日結算 (${queryDateStr.replace(/-/g, "/")})`,
-    text: `本日總花費: ${dailyTotalTwd} TWD\n已記錄花費共 ${expenses.length} 筆。`,
+    text: `本日總花費: ${dailyTotal} ${baseCurrency}\n已記錄花費共 ${expenses.length} 筆。${dailySummary.missingConversionCount > 0 ? `\n⚠️ ${dailySummary.missingConversionCount} 筆外幣缺少匯率，未納入總計。` : ""}`,
     actions: [
       {
         type: "uri",
@@ -1961,7 +1989,7 @@ async function buildDateExpensesMessages(user: any, queryDateStr: string): Promi
   ]
 }
 
-async function handleDateExpensesQuery(replyToken: string, user: any, queryDateStr: string) {
+async function handleDateExpensesQuery(replyToken: string, user: LinkedLineUser | null, queryDateStr: string) {
   if (!user) return
 
   try {
@@ -1969,24 +1997,33 @@ async function handleDateExpensesQuery(replyToken: string, user: any, queryDateS
     if (messages.length > 0) {
       await replyMessage(replyToken, messages)
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error("[LINE Date Expenses Error]", err)
     try {
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: `❌ 載入消費卡片失敗，請稍候重試。錯誤詳情：${err.message || err}`,
+          text: `❌ 載入消費卡片失敗，請稍候重試。錯誤詳情：${getErrorMessage(err)}`,
         },
       ])
-    } catch (e) {}
+    } catch {}
   }
 }
 
 // 處理一鍵刪除
-async function handleDeleteExpense(replyToken: string, expenseId: string) {
+async function handleDeleteExpense(replyToken: string, lineUserId: string, expenseId: string) {
   try {
+    const editableExpense = await findLineEditableExpenseByLineUserId(lineUserId, expenseId)
+    if (!editableExpense) {
+      await replyMessage(replyToken, [{
+        type: "text",
+        text: "⚠️ 找不到可刪除的花費，或您已沒有此行程的編輯權限。",
+      }])
+      return
+    }
+
     const expense = await prisma.expense.delete({
-      where: { id: expenseId },
+      where: { id: expenseId, userId: editableExpense.userId },
     })
 
     const user = await prisma.user.findUnique({
@@ -2017,7 +2054,7 @@ async function handleDeleteExpense(replyToken: string, expenseId: string) {
       },
       ...dateMsgs
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[handleDeleteExpense Error]", err)
     await replyMessage(replyToken, [
       {
@@ -2029,17 +2066,15 @@ async function handleDeleteExpense(replyToken: string, expenseId: string) {
 }
 
 // 處理編輯選單 (彈出欄位選擇 Quick Reply)
-async function handleEditExpenseMenu(replyToken: string, expenseId: string) {
+async function handleEditExpenseMenu(replyToken: string, lineUserId: string, expenseId: string) {
   try {
-    const expense = await prisma.expense.findUnique({
-      where: { id: expenseId },
-    })
+    const expense = await findLineEditableExpenseByLineUserId(lineUserId, expenseId)
 
     if (!expense) {
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: "⚠️ 找不到該花費記錄，可能已被刪除。",
+          text: "⚠️ 找不到可編輯的花費，或您已沒有此行程的編輯權限。",
         },
       ])
       return
@@ -2100,7 +2135,7 @@ async function handleEditExpenseMenu(replyToken: string, expenseId: string) {
         },
       },
     ])
-  } catch (err: any) {
+  } catch (err) {
     console.error("[handleEditExpenseMenu Error]", err)
   }
 }
@@ -2108,22 +2143,20 @@ async function handleEditExpenseMenu(replyToken: string, expenseId: string) {
 // 處理編輯欄位動作 (品項名稱/金額 ➡️ 啟動對話攔截鎖定；分類 ➡️ 彈出分類選單)
 async function handleEditField(replyToken: string, lineUserId: string, field: string, expenseId: string) {
   try {
-    // 查詢 User
-    const user = await prisma.user.findUnique({
-      where: { lineUserId },
-    })
-    if (!user) return
-
-    const expense = await prisma.expense.findUnique({
-      where: { id: expenseId },
-    })
-    if (!expense) return
+    const expense = await findLineEditableExpenseByLineUserId(lineUserId, expenseId)
+    if (!expense) {
+      await replyMessage(replyToken, [{
+        type: "text",
+        text: "⚠️ 找不到可編輯的花費，或您已沒有此行程的編輯權限。",
+      }])
+      return
+    }
 
     if (field === "item") {
       const expires = new Date(Date.now() + 5 * 60 * 1000)
       await prisma.verificationToken.create({
         data: {
-          identifier: `edit-prompt:${user.id}`,
+          identifier: `edit-prompt:${expense.userId}`,
           token: `item:${expenseId}`,
           expires,
         },
@@ -2139,7 +2172,7 @@ async function handleEditField(replyToken: string, lineUserId: string, field: st
       const expires = new Date(Date.now() + 5 * 60 * 1000)
       await prisma.verificationToken.create({
         data: {
-          identifier: `edit-prompt:${user.id}`,
+          identifier: `edit-prompt:${expense.userId}`,
           token: `amount:${expenseId}`,
           expires,
         },
@@ -2234,7 +2267,7 @@ async function handleEditField(replyToken: string, lineUserId: string, field: st
       const end = new Date(trip.endDate)
       const dateList: string[] = []
       
-      let current = new Date(start)
+      const current = new Date(start)
       let count = 0
       // LINE 的 Quick Reply 最多只支援 13 個按鈕，為防萬一限制在 12 個
       while (current <= end && count < 12) {
@@ -2261,7 +2294,7 @@ async function handleEditField(replyToken: string, lineUserId: string, field: st
       const expires = new Date(Date.now() + 5 * 60 * 1000)
       await prisma.verificationToken.create({
         data: {
-          identifier: `edit-prompt:${user.id}`,
+          identifier: `edit-prompt:${expense.userId}`,
           token: `date:${expenseId}`,
           expires,
         },
@@ -2275,14 +2308,29 @@ async function handleEditField(replyToken: string, lineUserId: string, field: st
         },
       ])
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error("[handleEditField Error]", err)
   }
 }
 
 // 處理分類的直接修改寫入
-async function handleUpdateField(replyToken: string, field: string, value: string, expenseId: string) {
+async function handleUpdateField(
+  replyToken: string,
+  lineUserId: string,
+  field: string,
+  value: string,
+  expenseId: string,
+) {
   try {
+    const editableExpense = await findLineEditableExpenseByLineUserId(lineUserId, expenseId)
+    if (!editableExpense) {
+      await replyMessage(replyToken, [{
+        type: "text",
+        text: "⚠️ 找不到可編輯的花費，或您已沒有此行程的編輯權限。",
+      }])
+      return
+    }
+
     if (field === "category") {
       const categoryMap: Record<string, string> = {
         food: "🍜 餐飲",
@@ -2293,8 +2341,13 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
         other: "📦 其他",
       }
 
+      if (!categoryMap[value]) {
+        await replyMessage(replyToken, [{ type: "text", text: "❌ 不支援的花費分類。" }])
+        return
+      }
+
       const expense = await prisma.expense.update({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: editableExpense.userId },
         data: { category: value },
       })
 
@@ -2312,22 +2365,35 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
         ...dateMsgs
       ])
     } else if (field === "currency") {
+      const normalizedCurrency = value.toUpperCase()
+      if (!/^[A-Z]{3}$/.test(normalizedCurrency)) {
+        await replyMessage(replyToken, [{ type: "text", text: "❌ 不支援的幣別格式。" }])
+        return
+      }
+
       const expense = await prisma.expense.findUnique({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: editableExpense.userId },
         include: { trip: true },
       })
       if (!expense) return
 
       const trip = expense.trip
       const baseCurrency = trip.baseCurrency || "TWD"
-      const conversion = await convertExpenseAmount(expense.amount, value, baseCurrency)
-      const convertedAmount = conversion ? conversion.convertedAmount : expense.amount
-      const exchangeRate = conversion ? conversion.exchangeRate : 1.0
+      const conversion = await convertExpenseAmount(expense.amount, normalizedCurrency, baseCurrency)
+      if (!conversion) {
+        await replyMessage(replyToken, [{
+          type: "text",
+          text: "❌ 匯率暫時無法取得，本筆花費未更新。",
+        }])
+        return
+      }
+      const convertedAmount = conversion.convertedAmount
+      const exchangeRate = conversion.exchangeRate
 
       await prisma.expense.update({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: editableExpense.userId },
         data: {
-          currency: value,
+          currency: normalizedCurrency,
           convertedAmount,
           exchangeRate,
         },
@@ -2343,8 +2409,8 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
         userActiveCurrency = activeTripState.split(":")[1]
       }
 
-      const currencyName = ALL_CURRENCY_NAMES[value.toUpperCase()] || ""
-      const displayName = currencyName ? `${currencyName} (${value})` : value
+      const currencyName = ALL_CURRENCY_NAMES[normalizedCurrency] || ""
+      const displayName = currencyName ? `${currencyName} (${normalizedCurrency})` : normalizedCurrency
 
       const dateMsgs = await getExpenseDateQueryMessages(expense, user)
       if (dateMsgs.length > 0) {
@@ -2356,7 +2422,7 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: `💱 幣別修改成功！\n\n【${expense.item}】的記帳幣別已改為 ${displayName}。\n💰 金額：${expense.amount} ${value}\n💱 換算台幣：${convertedAmount} TWD (匯率 ${exchangeRate})`,
+          text: `💱 幣別修改成功！\n\n【${expense.item}】的記帳幣別已改為 ${displayName}。\n💰 金額：${expense.amount} ${normalizedCurrency}\n💱 換算：${convertedAmount} ${baseCurrency} (匯率 ${exchangeRate})`,
         },
         ...dateMsgs
       ])
@@ -2373,12 +2439,12 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
       }
 
       await prisma.expense.update({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: editableExpense.userId },
         data: { date: parsedDate },
       })
 
       const updatedExpense = await prisma.expense.findUnique({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: editableExpense.userId },
         include: { trip: true },
       })
       if (!updatedExpense) return
@@ -2399,16 +2465,31 @@ async function handleUpdateField(replyToken: string, field: string, value: strin
         ...dateMsgs
       ])
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error("[handleUpdateField Error]", err)
   }
 }
 
 // 處理對話式文字直接寫入
-async function handleDirectTextUpdate(replyToken: string, expenseId: string, field: string, text: string) {
+async function handleDirectTextUpdate(
+  replyToken: string,
+  actorUserId: string,
+  expenseId: string,
+  field: string,
+  text: string,
+) {
   try {
+    const editableExpense = await findLineEditableExpense(actorUserId, expenseId)
+    if (!editableExpense) {
+      await replyMessage(replyToken, [{
+        type: "text",
+        text: "⚠️ 找不到可編輯的花費，或您已沒有此行程的編輯權限。",
+      }])
+      return
+    }
+
     const expense = await prisma.expense.findUnique({
-      where: { id: expenseId },
+      where: { id: expenseId, userId: actorUserId },
       include: { trip: true },
     })
 
@@ -2435,7 +2516,7 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
 
     if (field === "item") {
       const updated = await prisma.expense.update({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: actorUserId },
         data: { item: text },
         include: { trip: true }
       })
@@ -2468,11 +2549,18 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
       const trip = expense.trip
       const baseCurrency = trip.baseCurrency || "TWD"
       const conversion = await convertExpenseAmount(newAmount, expense.currency, baseCurrency)
-      const convertedAmount = conversion ? conversion.convertedAmount : newAmount
-      const exchangeRate = conversion ? conversion.exchangeRate : 1.0
+      if (!conversion) {
+        await replyMessage(replyToken, [{
+          type: "text",
+          text: "❌ 匯率暫時無法取得，本筆花費未更新。",
+        }])
+        return
+      }
+      const convertedAmount = conversion.convertedAmount
+      const exchangeRate = conversion.exchangeRate
 
       const updated = await prisma.expense.update({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: actorUserId },
         data: {
           amount: newAmount,
           convertedAmount,
@@ -2490,7 +2578,7 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
       await replyMessage(replyToken, [
         {
           type: "text",
-          text: `💰 金額已成功修改為：【${newAmount} ${expense.currency}】！\n💱 換算台幣：${convertedAmount} TWD`,
+          text: `💰 金額已成功修改為：【${newAmount} ${expense.currency}】！\n💱 換算：${convertedAmount} ${baseCurrency}`,
         },
         ...dateMsgs
       ])
@@ -2507,7 +2595,7 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
       }
 
       const updated = await prisma.expense.update({
-        where: { id: expenseId },
+        where: { id: expenseId, userId: actorUserId },
         data: { date: parsedDate },
         include: { trip: true }
       })
@@ -2527,12 +2615,12 @@ async function handleDirectTextUpdate(replyToken: string, expenseId: string, fie
         ...dateMsgs
       ])
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error("[handleDirectTextUpdate Error]", err)
     await replyMessage(replyToken, [
       {
         type: "text",
-        text: `❌ 修改失敗：${err.message}`,
+        text: `❌ 修改失敗：${getErrorMessage(err)}`,
       },
     ])
   }
@@ -2585,7 +2673,10 @@ function parseUserDateInput(text: string, tripStartDate: Date): Date | null {
 }
 
 // 輔助函數：藉由消費物件與使用者，安全算出 queryDateStr 並回傳對應日期的 LINE 花費訊息
-async function getExpenseDateQueryMessages(expense: any, user: any): Promise<any[]> {
+async function getExpenseDateQueryMessages(
+  expense: ExpenseRecord,
+  user: LinkedLineUser | null,
+): Promise<LineReplyMessage[]> {
   try {
     const trip = await prisma.trip.findUnique({
       where: { id: expense.tripId },

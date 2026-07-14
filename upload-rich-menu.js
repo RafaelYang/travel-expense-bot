@@ -2,9 +2,12 @@
  * LINE Bot 圖文選單自動上傳與設定腳本
  * 一鍵讀取本地「圖文選單.png」，解析尺寸，並自動四等份對齊設定動作，最後設定為預設選單。
  */
-require('dotenv').config();
-const fs = require('fs');
-const path = require('path');
+import 'dotenv/config';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
 const IMAGE_PATH = path.join(__dirname, '圖文選單.png');
