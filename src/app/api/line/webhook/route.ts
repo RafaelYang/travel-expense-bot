@@ -20,6 +20,10 @@ import {
   attachLineImageToExpense,
   LineExpenseImageError,
 } from "@/lib/line-expense-image-service"
+import {
+  creditCashWallet,
+  replaceCashExpenseReservation,
+} from "@/lib/cash-wallet"
 
 type LinkedLineUser = Prisma.UserGetPayload<{ include: { lineBotState: true } }>
 type TripRecord = Prisma.TripGetPayload<object>
@@ -2022,8 +2026,13 @@ async function handleDeleteExpense(replyToken: string, lineUserId: string, expen
       return
     }
 
-    const expense = await prisma.expense.delete({
-      where: { id: expenseId, userId: editableExpense.userId },
+    const expense = await prisma.$transaction(async (tx) => {
+      if (editableExpense.paymentMethod === "cash") {
+        await creditCashWallet(tx, editableExpense)
+      }
+      return tx.expense.delete({
+        where: { id: expenseId, userId: editableExpense.userId },
+      })
     })
 
     const user = await prisma.user.findUnique({
@@ -2379,24 +2388,47 @@ async function handleUpdateField(
 
       const trip = expense.trip
       const baseCurrency = trip.baseCurrency || "TWD"
-      const conversion = await convertExpenseAmount(expense.amount, normalizedCurrency, baseCurrency)
+      const cashRate = expense.paymentMethod === "cash"
+        ? await prisma.cashExchange.findFirst({
+            where: {
+              tripId: expense.tripId,
+              userId: expense.userId,
+              type: "buy",
+              foreignCurrency: normalizedCurrency,
+            },
+            orderBy: { date: "desc" },
+            select: { exchangeRate: true },
+          })
+        : null
+      const conversion = expense.paymentMethod === "cash"
+        ? (cashRate
+            ? { convertedAmount: expense.amount * cashRate.exchangeRate, exchangeRate: cashRate.exchangeRate }
+            : null)
+        : await convertExpenseAmount(expense.amount, normalizedCurrency, baseCurrency)
       if (!conversion) {
         await replyMessage(replyToken, [{
           type: "text",
-          text: "❌ 匯率暫時無法取得，本筆花費未更新。",
+          text: expense.paymentMethod === "cash"
+            ? "❌ 此幣別沒有足夠的現金餘額，請先在網頁版換匯。"
+            : "❌ 匯率暫時無法取得，本筆花費未更新。",
         }])
         return
       }
-      const convertedAmount = conversion.convertedAmount
-      const exchangeRate = conversion.exchangeRate
+      const { convertedAmount, exchangeRate } = conversion
 
-      await prisma.expense.update({
-        where: { id: expenseId, userId: editableExpense.userId },
-        data: {
+      await prisma.$transaction(async (tx) => {
+        await replaceCashExpenseReservation(tx, expense, {
+          ...expense,
           currency: normalizedCurrency,
-          convertedAmount,
-          exchangeRate,
-        },
+        })
+        await tx.expense.update({
+          where: { id: expenseId, userId: editableExpense.userId },
+          data: {
+            currency: normalizedCurrency,
+            convertedAmount,
+            exchangeRate,
+          },
+        })
       })
 
       const user = await prisma.user.findUnique({
@@ -2548,25 +2580,40 @@ async function handleDirectTextUpdate(
 
       const trip = expense.trip
       const baseCurrency = trip.baseCurrency || "TWD"
-      const conversion = await convertExpenseAmount(newAmount, expense.currency, baseCurrency)
+      const conversion = expense.paymentMethod === "cash"
+        ? (expense.exchangeRate
+            ? {
+                convertedAmount: newAmount * expense.exchangeRate,
+                exchangeRate: expense.exchangeRate,
+              }
+            : null)
+        : await convertExpenseAmount(newAmount, expense.currency, baseCurrency)
       if (!conversion) {
         await replyMessage(replyToken, [{
           type: "text",
-          text: "❌ 匯率暫時無法取得，本筆花費未更新。",
+          text: expense.paymentMethod === "cash"
+            ? "❌ 找不到此現金記帳的換匯成本，請改用網頁版編輯。"
+            : "❌ 匯率暫時無法取得，本筆花費未更新。",
         }])
         return
       }
       const convertedAmount = conversion.convertedAmount
       const exchangeRate = conversion.exchangeRate
 
-      const updated = await prisma.expense.update({
-        where: { id: expenseId, userId: actorUserId },
-        data: {
+      const updated = await prisma.$transaction(async (tx) => {
+        await replaceCashExpenseReservation(tx, expense, {
+          ...expense,
           amount: newAmount,
-          convertedAmount,
-          exchangeRate,
-        },
-        include: { trip: true }
+        })
+        return tx.expense.update({
+          where: { id: expenseId, userId: actorUserId },
+          data: {
+            amount: newAmount,
+            convertedAmount,
+            exchangeRate,
+          },
+          include: { trip: true }
+        })
       })
 
       const dateMsgs = await getExpenseDateQueryMessages(updated, user)

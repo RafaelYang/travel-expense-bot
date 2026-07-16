@@ -9,7 +9,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect, notFound } from "next/navigation"
 import TripDetailClient, { type TripData } from "./trip-detail-client"
-import { summarizeDeposits, summarizeExpenses } from "@/lib/money"
+import { summarizeDeposits, summarizeTripSpending } from "@/lib/money"
 import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
 import { createTripVersion } from "@/lib/trip-version"
 
@@ -44,6 +44,13 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
         include: { user: { select: { id: true, name: true } } },
         orderBy: { createdAt: 'desc' },
       },
+      cashWallets: {
+        orderBy: { currency: 'asc' },
+      },
+      cashExchanges: {
+        include: { user: { select: { id: true, name: true } } },
+        orderBy: { date: 'desc' },
+      },
     },
   })
 
@@ -52,7 +59,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
   }
 
   // 3. 計算總支出與總收入
-  const expenseSummary = summarizeExpenses(trip.expenses, trip.baseCurrency)
+  const expenseSummary = summarizeTripSpending(
+    trip.expenses,
+    trip.cashExchanges,
+    trip.baseCurrency,
+  )
   const depositSummary = summarizeDeposits(trip.deposits, trip.baseCurrency)
 
   // 4. 手動序列化為 React 伺服器傳送給客戶端元件所允許的純資料格式 (Plain JSON with ISO Strings)
@@ -83,6 +94,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
         note: deposit.note,
         createdAt: deposit.createdAt,
       })),
+      cashWallets: trip.cashWallets.map((wallet) => ({
+        id: wallet.id,
+        balance: wallet.balance,
+        updatedAt: wallet.updatedAt,
+      })),
+      cashExchanges: trip.cashExchanges.map((exchange) => ({
+        id: exchange.id,
+        type: exchange.type,
+        foreignAmount: exchange.foreignAmount,
+        baseAmount: exchange.baseAmount,
+        createdAt: exchange.createdAt,
+      })),
     }),
     totalSpent: expenseSummary.total,
     totalDeposits: depositSummary.total,
@@ -111,6 +134,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
       note: e.note || undefined,
       images: createSignedExpenseImagePaths(e.id, e.images),
       source: e.source,
+      paymentMethod: e.paymentMethod,
       user: {
         id: e.user.id,
         name: e.user.name,
@@ -126,7 +150,27 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
         id: d.user.id,
         name: d.user.name,
       }
-    }))
+    })),
+    cashWallets: trip.cashWallets.filter(wallet => wallet.userId === session.user.id).map(wallet => ({
+      id: wallet.id,
+      currency: wallet.currency,
+      balance: wallet.balance,
+      updatedAt: wallet.updatedAt.toISOString(),
+    })),
+    cashExchanges: trip.cashExchanges.map(exchange => ({
+      id: exchange.id,
+      type: exchange.type,
+      foreignCurrency: exchange.foreignCurrency,
+      foreignAmount: exchange.foreignAmount,
+      baseAmount: exchange.baseAmount,
+      exchangeRate: exchange.exchangeRate,
+      date: exchange.date.toISOString(),
+      note: exchange.note || undefined,
+      user: {
+        id: exchange.user.id,
+        name: exchange.user.name,
+      },
+    })),
   }
 
   return <TripDetailClient initialData={serializedTrip as TripData} tripId={tripId} />

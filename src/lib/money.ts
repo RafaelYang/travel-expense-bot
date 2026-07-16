@@ -2,11 +2,17 @@ export interface ExpenseAmount {
   amount: number
   currency: string
   convertedAmount?: number | null
+  paymentMethod?: string | null
 }
 
 export interface DepositAmount {
   amount: number
   currency: string
+}
+
+export interface CashExchangeAmount {
+  type: string
+  baseAmount: number
 }
 
 export function getExpenseBaseAmount(
@@ -39,6 +45,30 @@ export function summarizeExpenses(
   }
 
   return { total, missingConversionCount }
+}
+
+/**
+ * 旅程的實際基準幣淨流出：刷卡／額外支出 + 換入外幣 - 換回款項。
+ * 現金消費已在換入外幣時認列，因此不在此重複加總。
+ */
+export function summarizeTripSpending(
+  expenses: ExpenseAmount[],
+  exchanges: CashExchangeAmount[],
+  baseCurrency: string,
+) {
+  const expenseSummary = summarizeExpenses(
+    expenses.filter((expense) => expense.paymentMethod !== "cash"),
+    baseCurrency,
+  )
+  const exchangeNet = exchanges.reduce((total, exchange) => {
+    return total + (exchange.type === "sell" ? -exchange.baseAmount : exchange.baseAmount)
+  }, 0)
+
+  return {
+    total: expenseSummary.total + exchangeNet,
+    missingConversionCount: expenseSummary.missingConversionCount,
+    exchangeNet,
+  }
 }
 
 export function summarizeDeposits(

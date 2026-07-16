@@ -39,6 +39,20 @@ export async function GET(
         },
         orderBy: { id: "asc" },
       },
+      cashWallets: {
+        select: { id: true, balance: true, updatedAt: true },
+        orderBy: { id: "asc" },
+      },
+      cashExchanges: {
+        select: {
+          id: true,
+          type: true,
+          foreignAmount: true,
+          baseAmount: true,
+          createdAt: true,
+        },
+        orderBy: { id: "asc" },
+      },
     },
   })
 

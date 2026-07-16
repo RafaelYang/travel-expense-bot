@@ -19,3 +19,18 @@ Recommended rollout:
 
 `20260714_money_decimal_rollback.sql` is safe only before step 3 starts writing
 the new columns. Never run either script automatically against production.
+
+## Cash-wallet feature
+
+`20260716_cash_wallet.sql` adds per-user foreign-cash wallets, immutable
+buy/sell exchange records, and the `Expense.paymentMethod` field. Run it
+manually on a backed-up staging database before deploying code that reads these
+fields, then run the verification queries at the bottom of the file. The paired
+rollback drops all cash-wallet and exchange data, so it is only safe before the
+feature contains data that must be retained.
+
+Use `node scripts/cash-wallet-migration.mjs` for a transactional dry run. After
+the dry run reports a verified rollback, use
+`node scripts/cash-wallet-migration.mjs --apply` to apply and verify the
+expand-only schema change. The runner reads `DIRECT_URL` first and falls back to
+`DATABASE_URL`; it never prints either value.

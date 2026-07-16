@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { summarizeDeposits, summarizeExpenses } from "@/lib/money"
+import { summarizeDeposits, summarizeTripSpending } from "@/lib/money"
 import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
 import { createTripVersion } from "@/lib/trip-version"
 
@@ -42,6 +42,13 @@ export async function GET(
         include: { user: { select: { id: true, name: true } } },
         orderBy: { createdAt: 'desc' },
       },
+      cashWallets: {
+        orderBy: { currency: 'asc' },
+      },
+      cashExchanges: {
+        include: { user: { select: { id: true, name: true } } },
+        orderBy: { date: 'desc' },
+      },
     },
   })
 
@@ -49,7 +56,11 @@ export async function GET(
     return NextResponse.json({ error: "行程不存在" }, { status: 404 })
   }
 
-  const expenseSummary = summarizeExpenses(trip.expenses, trip.baseCurrency)
+  const expenseSummary = summarizeTripSpending(
+    trip.expenses,
+    trip.cashExchanges,
+    trip.baseCurrency,
+  )
   const depositSummary = summarizeDeposits(trip.deposits, trip.baseCurrency)
 
   return NextResponse.json({
@@ -58,6 +69,7 @@ export async function GET(
       ...expense,
       images: createSignedExpenseImagePaths(expense.id, expense.images),
     })),
+    cashWallets: trip.cashWallets.filter((wallet) => wallet.userId === session.user.id),
     totalSpent: expenseSummary.total,
     totalDeposits: depositSummary.total,
     missingConversionCount: expenseSummary.missingConversionCount,
@@ -75,6 +87,18 @@ export async function GET(
         currency: deposit.currency,
         note: deposit.note,
         createdAt: deposit.createdAt,
+      })),
+      cashWallets: trip.cashWallets.map((wallet) => ({
+        id: wallet.id,
+        balance: wallet.balance,
+        updatedAt: wallet.updatedAt,
+      })),
+      cashExchanges: trip.cashExchanges.map((exchange) => ({
+        id: exchange.id,
+        type: exchange.type,
+        foreignAmount: exchange.foreignAmount,
+        baseAmount: exchange.baseAmount,
+        createdAt: exchange.createdAt,
       })),
     }),
   })

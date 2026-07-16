@@ -21,12 +21,14 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  accounts     Account[]
-  sessions     Session[]
-  tripMembers  TripMember[]
-  expenses     Expense[]
-  deposits     Deposit[]
-  lineBotState LineBotState?
+  accounts      Account[]
+  sessions      Session[]
+  tripMembers   TripMember[]
+  expenses      Expense[]
+  deposits      Deposit[]
+  cashWallets   CashWallet[]
+  cashExchanges CashExchange[]
+  lineBotState  LineBotState?
 }
 
 model Account {
@@ -65,28 +67,28 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-
-
 // ======= 行程相關 =======
 
 model Trip {
   id              String   @id @default(uuid())
-  name            String   // 行程名稱
-  description     String?  // 描述
+  name            String // 行程名稱
+  description     String? // 描述
   startDate       DateTime // 開始日期
   endDate         DateTime // 結束日期
   defaultCurrency String   @default("TWD") // 花費預設幣種（向後相容）
   baseCurrency    String   @default("TWD") // 換算基準幣種
-  budgetAmount    Float?   // 預算上限（保留但前端不再顯示）
-  countries       String[] @default([])    // 目的地國家代碼（ISO 3166-1 alpha-2）
+  budgetAmount    Float? // 預算上限（保留但前端不再顯示）
+  countries       String[] @default([]) // 目的地國家代碼（ISO 3166-1 alpha-2）
   status          String   @default("planning") // planning, active, completed
-  coverImage      String?  // 封面圖片 URL
+  coverImage      String? // 封面圖片 URL
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   members       TripMember[]
   expenses      Expense[]
   deposits      Deposit[]
+  cashWallets   CashWallet[]
+  cashExchanges CashExchange[]
   inviteCodes   InviteCode[]
   emailInvites  EmailInvite[]
   lineTripLinks LineTripLink[]
@@ -115,20 +117,58 @@ model Expense {
   id              String   @id @default(uuid())
   tripId          String
   trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  userId          String   // 記帳人
+  userId          String // 記帳人
   user            User     @relation(fields: [userId], references: [id])
-  category        String   // food, transport, accommodation, shopping, ticket, other
-  item            String   // 項目名稱
-  amount          Float    // 原始金額
-  currency        String   // 原始幣種
-  convertedAmount Float?   // 換算後金額（基準幣種）
-  exchangeRate    Float?   // 當時匯率
+  category        String // food, transport, accommodation, shopping, ticket, other
+  item            String // 項目名稱
+  amount          Float // 原始金額
+  currency        String // 原始幣種
+  convertedAmount Float? // 換算後金額（基準幣種）
+  exchangeRate    Float? // 當時匯率
   date            DateTime @default(now()) // 花費日期
-  note            String?  // 備註
+  note            String? // 備註
   images          Json     @default("[]") // 圖片 data URL 陣列，最多 3 張
   source          String   @default("web") // web, line
+  paymentMethod   String   @default("card") // card, cash
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([tripId, date])
+  @@index([userId])
+}
+
+// 使用者在單一旅程中的外幣現金餘額。每位成員、每種幣別各自獨立。
+model CashWallet {
+  id        String   @id @default(uuid())
+  tripId    String
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency  String
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tripId, userId, currency])
+  @@index([tripId])
+  @@index([userId])
+}
+
+// 換匯流水：buy = 用基準幣換入外幣；sell = 將外幣換回基準幣。
+model CashExchange {
+  id              String   @id @default(uuid())
+  tripId          String
+  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  type            String
+  foreignCurrency String
+  foreignAmount   Float
+  baseAmount      Float
+  exchangeRate    Float
+  date            DateTime @default(now())
+  note            String?
+  createdAt       DateTime @default(now())
 
   @@index([tripId, date])
   @@index([userId])
@@ -141,9 +181,9 @@ model Deposit {
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id])
-  amount    Float    // 儲值金額
-  currency  String   // 儲值幣種
-  note      String?  // 備註
+  amount    Float // 儲值金額
+  currency  String // 儲值幣種
+  note      String? // 備註
   createdAt DateTime @default(now())
 
   @@index([tripId])
@@ -171,10 +211,10 @@ model EmailInvite {
   id        String   @id @default(uuid())
   tripId    String
   trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  email     String   // 受邀人 email
+  email     String // 受邀人 email
   token     String   @unique // UUID token，用於邀請連結
   role      String   @default("member")
-  invitedBy String   // 邀請人 userId
+  invitedBy String // 邀請人 userId
   status    String   @default("pending") // pending, accepted, expired
   expires   DateTime
   createdAt DateTime @default(now())
@@ -190,7 +230,7 @@ model LineBotState {
   id           String   @id @default(uuid())
   userId       String   @unique
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activeTripId String?  // 目前綁定的行程 ID
+  activeTripId String? // 目前綁定的行程 ID
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -212,6 +252,6 @@ model LineTripLink {
 model ExchangeRateCache {
   id           String   @id @default(uuid())
   baseCurrency String   @unique
-  rates        Json     // { "JPY": 154.5, "USD": 1, ... }
+  rates        Json // { "JPY": 154.5, "USD": 1, ... }
   fetchedAt    DateTime @default(now())
 }
