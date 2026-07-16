@@ -46,6 +46,7 @@ export interface TripData {
   status: string
   realtimeVersion: string
   totalSpent: number
+  exchangeNet: number
   totalDeposits: number
   missingConversionCount?: number
   foreignCurrencyDepositCount?: number
@@ -82,9 +83,13 @@ export interface TripData {
   cashExchanges: CashExchangeData[]
 }
 
-type ExpenseDisplayTransaction = TripData["expenses"][number] & { isIncome: false }
+type ExpenseDisplayTransaction = TripData["expenses"][number] & {
+  kind: "expense"
+  isIncome: false
+}
 type DepositDisplayTransaction = {
   id: string
+  kind: "deposit"
   isIncome: true
   category: "income"
   item: string
@@ -96,7 +101,11 @@ type DepositDisplayTransaction = {
   user: TripData["deposits"][number]["user"]
   source: "web"
 }
-type DisplayTransaction = ExpenseDisplayTransaction | DepositDisplayTransaction
+type ExchangeDisplayTransaction = TripData["cashExchanges"][number] & {
+  kind: "exchange"
+}
+type ExpenseOrDepositDisplayTransaction = ExpenseDisplayTransaction | DepositDisplayTransaction
+type DisplayTransaction = ExpenseOrDepositDisplayTransaction | ExchangeDisplayTransaction
 type CreatedTransaction =
   | { kind: "expense"; record: TripData["expenses"][number] }
   | { kind: "deposit"; record: TripData["deposits"][number] }
@@ -399,9 +408,10 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   }).filter(c => c.count > 0).sort((a, b) => b.total - a.total)
   const categorizedExpenseTotal = categoryStats.reduce((sum, category) => sum + category.total, 0)
 
-  // 合併支出與收入並依時間倒序
+  // 合併支出、收入與換匯並依時間倒序
   const parsedExpenses: ExpenseDisplayTransaction[] = trip.expenses.map(e => ({
     id: e.id,
+    kind: 'expense',
     isIncome: false,
     category: e.category,
     item: e.item,
@@ -418,6 +428,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
   const parsedDeposits: DepositDisplayTransaction[] = trip.deposits.map(d => ({
     id: d.id,
+    kind: 'deposit',
     isIncome: true,
     category: 'income',
     item: d.note || t('form.tab.income'),
@@ -430,7 +441,16 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     source: 'web',
   }))
 
-  const allTransactions = [...parsedExpenses, ...parsedDeposits].sort(
+  const parsedExchanges: ExchangeDisplayTransaction[] = trip.cashExchanges.map(exchange => ({
+    ...exchange,
+    kind: 'exchange',
+  }))
+
+  const allTransactions: DisplayTransaction[] = [
+    ...parsedExpenses,
+    ...parsedDeposits,
+    ...parsedExchanges,
+  ].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   )
 
@@ -454,28 +474,28 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     return null
   }
 
-  const groupedExpenses: {
+  const groupedTransactions: {
     dateStr: string
     dayLabel: string | null
     weekday: string
-    expenses: typeof displayTransactions
+    transactions: typeof displayTransactions
   }[] = []
 
   displayTransactions.forEach(tx => {
     const d = new Date(tx.date)
     const dateStr = format(d, 'yyyy/M/d')
     const weekday = format(d, 'eee', { locale: locale === 'en' ? enUS : zhTW })
-    let group = groupedExpenses.find(g => g.dateStr === dateStr)
+    let group = groupedTransactions.find(g => g.dateStr === dateStr)
     if (!group) {
       group = {
         dateStr,
         dayLabel: getDayLabel(dateStr),
         weekday: `(${weekday})`,
-        expenses: [],
+        transactions: [],
       }
-      groupedExpenses.push(group)
+      groupedTransactions.push(group)
     }
-    group.expenses.push(tx)
+    group.transactions.push(tx)
   })
 
   return (
@@ -567,7 +587,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
           <div style={{
             display: 'flex', gap: '1rem', flexWrap: 'wrap',
-            fontSize: '0.8rem', color: 'var(--text-secondary)',
+            fontSize: '0.9rem', color: 'var(--text-secondary)',
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <Calendar size={13} />
@@ -700,43 +720,56 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           />
         )}
 
-        {/* 全部花費列表 */}
+        {/* 全部交易列表 */}
         {allTransactions.length > 0 && (
           <div className="glass-card" style={{
             padding: '1.25rem',
             marginBottom: '1rem',
           }}>
             <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '0.75rem',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+              gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem',
             }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 700 }}>
-                {t('trip.allExpenses', { count: String(allTransactions.length) })}
+              <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>
+                {t('trip.allTransactions', { count: String(allTransactions.length) })}
               </h3>
-              <span style={{
-                fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary-light)',
-              }}>
-                {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
-              </span>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{
+                  fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-primary-light)',
+                }}>
+                  {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
+                </div>
+                {trip.exchangeNet !== 0 && (
+                  <div style={{
+                    marginTop: '0.15rem', fontSize: '0.76rem',
+                    color: 'var(--text-secondary)', fontWeight: 600,
+                  }}>
+                    {t('trip.exchangeIncluded')}{' '}
+                    <span style={{ color: trip.exchangeNet > 0 ? 'var(--color-spend-increase)' : 'var(--color-spend-decrease)' }}>
+                      {trip.exchangeNet > 0 ? '+' : '−'}{getCurrencySymbol(trip.baseCurrency)}{Math.abs(trip.exchangeNet).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {groupedExpenses.map(group => (
+              {groupedTransactions.map(group => (
                 <div key={group.dateStr} style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                   {/* 日期分組 Header */}
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '0.375rem',
-                    fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)',
+                    fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-secondary)',
                     paddingLeft: '0.25rem',
                   }}>
-                    <Calendar size={13} style={{ color: 'var(--color-primary)' }} />
+                    <Calendar size={16} style={{ color: 'var(--color-primary-light)' }} />
                     <span>{group.dateStr}</span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{group.weekday}</span>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{group.weekday}</span>
                     {group.dayLabel && (
                       <span style={{
                         padding: '0.1rem 0.4rem', borderRadius: '4px',
                         background: 'rgba(14, 165, 233, 0.1)',
-                        color: 'var(--color-primary)',
-                        fontSize: '0.68rem', fontWeight: 600,
+                        color: 'var(--color-primary-text)',
+                        fontSize: '0.76rem', fontWeight: 700,
                         marginLeft: '0.25rem',
                       }}>
                         {group.dayLabel}
@@ -744,21 +777,29 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                     )}
                   </div>
 
-                  {/* 該日的所有消費 */}
+                  {/* 該日的所有交易 */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {group.expenses.map(expense => (
-                      <ExpenseRow
-                        key={expense.id}
-                        expense={expense}
-                        currency={trip.baseCurrency}
-                        onEdit={
-                          !canEdit
-                            ? undefined
-                            : expense.isIncome
-                            ? () => setEditingDeposit(expense)
-                            : () => setEditingExpense(expense)
-                        }
-                      />
+                    {group.transactions.map(transaction => (
+                      transaction.kind === 'exchange' ? (
+                        <ExchangeRow
+                          key={`exchange:${transaction.id}`}
+                          exchange={transaction}
+                          baseCurrency={trip.baseCurrency}
+                        />
+                      ) : (
+                        <ExpenseRow
+                          key={`${transaction.kind}:${transaction.id}`}
+                          expense={transaction}
+                          currency={trip.baseCurrency}
+                          onEdit={
+                            !canEdit
+                              ? undefined
+                              : transaction.kind === 'deposit'
+                              ? () => setEditingDeposit(transaction)
+                              : () => setEditingExpense(transaction)
+                          }
+                        />
+                      )
                     ))}
                   </div>
                 </div>
@@ -771,7 +812,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   gap: '0.25rem', width: '100%', padding: '0.5rem',
                   marginTop: '0.75rem', background: 'none', border: 'none',
-                  color: 'var(--color-primary)', fontSize: '0.8rem', fontWeight: 500,
+                  color: 'var(--color-primary-text)', fontSize: '0.8rem', fontWeight: 500,
                   cursor: 'pointer',
                 }}
               >
@@ -1264,11 +1305,22 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                 display: 'flex', flexDirection: 'column', gap: '0.5rem',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>總花費（{trip.expenses.length} 筆）</span>
+                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('trip.totalSpent')}</span>
                   <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
                     {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
                   </span>
                 </div>
+                {trip.exchangeNet !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{t('trip.exchangeIncluded')}</span>
+                    <span style={{
+                      fontSize: '0.88rem', fontWeight: 700,
+                      color: trip.exchangeNet > 0 ? 'var(--color-spend-increase)' : 'var(--color-spend-decrease)',
+                    }}>
+                      {trip.exchangeNet > 0 ? '+' : '−'}{getCurrencySymbol(trip.baseCurrency)}{Math.abs(trip.exchangeNet).toLocaleString()}
+                    </span>
+                  </div>
+                )}
                 {((trip.missingConversionCount || 0) > 0 || (trip.foreignCurrencyDepositCount || 0) > 0) && (
                   <div style={{
                     padding: '0.6rem 0.75rem', borderRadius: '8px',
@@ -1314,9 +1366,63 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   )
 }
 
+// === 換匯列表行 ===
+function ExchangeRow({ exchange, baseCurrency }: {
+  exchange: ExchangeDisplayTransaction
+  baseCurrency: string
+}) {
+  const { t } = useLanguage()
+  const isBuy = exchange.type === 'buy'
+
+  return (
+    <div className="exchange-transaction-row" style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      gap: '0.75rem', padding: '0.75rem', borderRadius: 'var(--radius)',
+      background: 'var(--bg-card-hover)',
+    }}>
+      <div className="exchange-transaction-main" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+        <span className="category-badge" style={{
+          background: 'rgba(14, 165, 233, 0.12)',
+          borderColor: 'rgba(56, 189, 248, 0.45)',
+          color: 'var(--text-primary)', flexShrink: 0,
+        }}>
+          {t('trip.exchange')}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontSize: '0.95rem', fontWeight: 500,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {t(isBuy ? 'trip.exchange.buy' : 'trip.exchange.sell')}{' '}
+            {exchange.foreignCurrency} {getCurrencySymbol(exchange.foreignCurrency)}{exchange.foreignAmount.toLocaleString()}
+          </div>
+          <div style={{
+            fontSize: '0.8rem', color: 'var(--text-muted)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {exchange.user?.name} · {format(new Date(exchange.date), 'HH:mm')}
+            {exchange.note && ` · ${exchange.note}`}
+          </div>
+        </div>
+      </div>
+      <div className="exchange-transaction-amount" style={{ flexShrink: 0, textAlign: 'right' }}>
+        <div style={{
+          fontSize: '0.95rem', fontWeight: 700,
+          color: isBuy ? 'var(--color-spend-increase)' : 'var(--color-spend-decrease)',
+        }}>
+          {isBuy ? '+' : '−'}{getCurrencySymbol(baseCurrency)}{exchange.baseAmount.toLocaleString()}
+        </div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '1px' }}>
+          {t(isBuy ? 'trip.exchange.increase' : 'trip.exchange.decrease')}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // === 花費列表行 ===
 function ExpenseRow({ expense, currency, onEdit }: {
-  expense: DisplayTransaction
+  expense: ExpenseOrDepositDisplayTransaction
   currency: string
   onEdit?: () => void
 }) {
@@ -1343,19 +1449,20 @@ function ExpenseRow({ expense, currency, onEdit }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
         <span className="category-badge" style={{
           background: isIncome ? 'rgba(34, 197, 94, 0.12)' : `${cat.color}18`,
-          color: isIncome ? '#22c55e' : cat.color,
+          color: 'var(--text-primary)',
+          borderColor: isIncome ? 'rgba(34, 197, 94, 0.45)' : `${cat.color}66`,
           flexShrink: 0,
         }}>
           {isIncome ? t('form.tab.income') : t(`cat.${expense.category}`)}
         </span>
         <div style={{ minWidth: 0 }}>
           <div style={{
-            fontSize: '0.85rem', fontWeight: 500,
+            fontSize: '0.95rem', fontWeight: 500,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>
             {expense.item}
           </div>
-          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
             {expense.user?.name} · {format(new Date(expense.date), 'HH:mm')}
             {!isIncome && expense.source === 'line' && ' · 📱'}
             {!isIncome && expense.paymentMethod === 'cash' && ` · ${t('form.payment.cash')}`}
@@ -1364,13 +1471,13 @@ function ExpenseRow({ expense, currency, onEdit }: {
       </div>
       <div style={{ flexShrink: 0, textAlign: 'right' }}>
           <span style={{
-            fontSize: '0.9rem', fontWeight: 700,
+            fontSize: '0.95rem', fontWeight: 700,
             color: isIncome ? '#22c55e' : 'var(--text-primary)',
           }}>
             {isIncome ? '+' : ''}{getCurrencySymbol(displayCurrency)}{expense.amount.toLocaleString()}
           </span>
           {expense.convertedAmount && expense.currency !== currency && (
-            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '1px' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '1px' }}>
               ≈ {getCurrencySymbol(currency)}{expense.convertedAmount.toLocaleString()}
             </div>
           )}
@@ -1641,7 +1748,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
                   border: form.category === cat.value ? `1.5px solid ${cat.color}` : '1.5px solid transparent',
                   fontWeight: form.category === cat.value ? 600 : 500,
                   background: form.category === cat.value ? `${cat.color}25` : 'var(--bg-card-hover)',
-                  color: form.category === cat.value ? cat.color : 'var(--text-secondary)',
+                  color: form.category === cat.value ? 'var(--text-primary)' : 'var(--text-secondary)',
                   transition: 'all 0.2s',
                   transform: form.category === cat.value ? 'scale(1.05)' : 'scale(1)',
                   boxShadow: form.category === cat.value ? `0 2px 8px ${cat.color}30` : 'none',
@@ -1756,7 +1863,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
                   fontWeight: form.currency === cur ? 600 : 400,
                   cursor: 'pointer',
                   background: form.currency === cur ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
-                  color: form.currency === cur ? 'var(--color-primary)' : 'var(--text-secondary)',
+                  color: form.currency === cur ? 'var(--color-primary-text)' : 'var(--text-secondary)',
                   transition: 'all 0.15s',
                 }}
               >
@@ -1770,7 +1877,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
               style={{
                 padding: '0.375rem 0.5rem', fontSize: '0.8rem',
                 width: 'auto', minWidth: '100px', borderRadius: '9999px',
-                color: !chipCurrencies.includes(form.currency) ? 'var(--color-primary)' : 'var(--text-muted)',
+                color: !chipCurrencies.includes(form.currency) ? 'var(--color-primary-text)' : 'var(--text-muted)',
                 fontWeight: !chipCurrencies.includes(form.currency) ? 600 : 400,
               }}
             >
@@ -2249,7 +2356,8 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
               <span style={{
                 padding: '0.3rem 0.75rem', borderRadius: '9999px',
                 fontSize: '0.8rem', fontWeight: 600,
-                background: `${cat.color}20`, color: cat.color,
+                background: `${cat.color}20`, color: 'var(--text-primary)',
+                border: `1px solid ${cat.color}66`,
               }}>
                 {t(`cat.${expense.category}`)}
               </span>
@@ -2419,7 +2527,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                       border: form.category === c.value ? `1.5px solid ${c.color}` : '1.5px solid transparent',
                       fontWeight: form.category === c.value ? 600 : 500,
                       background: form.category === c.value ? `${c.color}25` : 'var(--bg-card-hover)',
-                      color: form.category === c.value ? c.color : 'var(--text-secondary)',
+                      color: form.category === c.value ? 'var(--text-primary)' : 'var(--text-secondary)',
                       transition: 'all 0.2s',
                     }}
                   >
@@ -2482,7 +2590,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                       fontWeight: form.currency === cur ? 600 : 400,
                       cursor: 'pointer',
                       background: form.currency === cur ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
-                      color: form.currency === cur ? 'var(--color-primary)' : 'var(--text-secondary)',
+                      color: form.currency === cur ? 'var(--color-primary-text)' : 'var(--text-secondary)',
                       transition: 'all 0.15s',
                     }}
                   >
@@ -3115,7 +3223,7 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
                         fontWeight: form.currency === cur ? 600 : 400,
                         cursor: 'pointer',
                         background: form.currency === cur ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
-                        color: form.currency === cur ? 'var(--color-primary)' : 'var(--text-secondary)',
+                        color: form.currency === cur ? 'var(--color-primary-text)' : 'var(--text-secondary)',
                       }}
                     >
                       {getCurrencyChipLabel(cur, cleanCountries, locale)}
@@ -3128,7 +3236,7 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
                     style={{
                       padding: '0.375rem 0.5rem', fontSize: '0.8rem',
                       width: 'auto', minWidth: '100px', borderRadius: '9999px',
-                      color: !chipCurrencies.includes(form.currency) ? 'var(--color-primary)' : 'var(--text-muted)',
+                      color: !chipCurrencies.includes(form.currency) ? 'var(--color-primary-text)' : 'var(--text-muted)',
                       fontWeight: !chipCurrencies.includes(form.currency) ? 600 : 400,
                     }}
                   >

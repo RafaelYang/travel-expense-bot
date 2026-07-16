@@ -16,7 +16,7 @@ export interface CashWalletData {
 
 export interface CashExchangeData {
   id: string
-  type: string
+  type: "buy" | "sell"
   foreignCurrency: string
   foreignAmount: number
   baseAmount: number
@@ -131,7 +131,7 @@ export function CashWalletPanel({
           <Banknote size={18} style={{ color: "#22c55e" }} />
           {zh ? "我的旅程現金" : "My trip cash"}
         </span>
-        <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.75rem" }}>
+        <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.82rem" }}>
           {wallets.length === 0
             ? (zh ? "尚未換匯" : "No cash yet")
             : `${wallets.length} ${zh ? "種幣別" : "currencies"}`}
@@ -146,7 +146,7 @@ export function CashWalletPanel({
               padding: "0.35rem 0.65rem", borderRadius: "9999px",
               background: wallet.balance > 0 ? "rgba(34,197,94,0.12)" : "var(--bg-card-hover)",
               color: wallet.balance > 0 ? "#22c55e" : "var(--text-muted)",
-              fontSize: "0.8rem", fontWeight: 700,
+              fontSize: "0.88rem", fontWeight: 700,
             }}>
               {wallet.currency} {getCurrencySymbol(wallet.currency)}{wallet.balance.toLocaleString()}
             </span>
@@ -178,19 +178,19 @@ export function CashWalletPanel({
                 </button>
               </div>
 
-              <p style={{ margin: 0, fontSize: "0.75rem", lineHeight: 1.5, color: "var(--text-muted)" }}>
+              <p style={{ margin: 0, fontSize: "0.82rem", lineHeight: 1.5, color: "var(--text-muted)" }}>
                 {type === "buy"
                   ? (zh ? `換入時 ${baseCurrency} 會計入旅程支出；之後用現金記帳只扣餘額，不會重複增加花費。` : `Buying cash counts as ${baseCurrency} spending. Cash-paid expenses only reduce the wallet balance.`)
                   : (zh ? `換回收到的 ${baseCurrency} 會沖減旅程總花費。` : `The ${baseCurrency} received reduces net trip spending.`)}
               </p>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: "0.5rem", alignItems: "center" }}>
-                <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.82rem", color: "var(--text-muted)" }}>
                   {type === "buy" ? `${zh ? "付出" : "Paid"} (${baseCurrency})` : `${zh ? "收到" : "Received"} (${baseCurrency})`}
                   <input className="input-field" type="number" min="0" step="any" required value={baseAmount} onChange={(event) => setBaseAmount(event.target.value)} />
                 </label>
                 <ArrowDownUp size={18} style={{ color: "var(--color-primary)", marginTop: "1rem" }} />
-                <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: "0.25rem", fontSize: "0.82rem", color: "var(--text-muted)" }}>
                   {type === "buy" ? (zh ? "取得外幣" : "Foreign cash") : (zh ? "交回外幣" : "Foreign cash sold")}
                   <input className="input-field" type="number" min="0" step="any" required value={foreignAmount} onChange={(event) => setForeignAmount(event.target.value)} />
                 </label>
@@ -206,18 +206,18 @@ export function CashWalletPanel({
               </div>
 
               {type === "sell" && selectedWallet && (
-                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                   {zh ? "可換回餘額" : "Available"}: {selectedWallet.currency} {selectedWallet.balance.toLocaleString()}
                 </div>
               )}
               {effectiveRate && (
-                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                   1 {foreignCurrency} = {effectiveRate.toLocaleString(undefined, { maximumFractionDigits: 6 })} {baseCurrency}
                 </div>
               )}
 
               <input className="input-field" value={note} onChange={(event) => setNote(event.target.value)} placeholder={zh ? "備註（例如機場換匯）" : "Note (e.g. airport exchange)"} />
-              {error && <div role="alert" style={{ color: "var(--color-danger)", fontSize: "0.78rem" }}>{error}</div>}
+              {error && <div role="alert" style={{ color: "var(--color-danger)", fontSize: "0.82rem" }}>{error}</div>}
               <button className="btn-primary" type="submit" disabled={submitting || currencyOptions.length === 0} style={{ justifyContent: "center" }}>
                 {submitting ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : (type === "buy" ? (zh ? "記錄換匯" : "Record exchange") : (zh ? "記錄換回" : "Record sell-back"))}
               </button>
@@ -226,12 +226,12 @@ export function CashWalletPanel({
 
           {exchanges.length > 0 && (
             <div style={{ marginTop: "1rem" }}>
-              <div style={{ fontSize: "0.75rem", fontWeight: 700, marginBottom: "0.5rem" }}>{zh ? "最近換匯" : "Recent exchanges"}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.5rem" }}>{zh ? "最近換匯" : "Recent exchanges"}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                 {exchanges.slice(0, 5).map((exchange) => (
                   <div key={exchange.id} style={{
                     display: "flex", justifyContent: "space-between", gap: "0.75rem",
-                    padding: "0.55rem 0.65rem", borderRadius: "8px", background: "var(--bg-card-hover)", fontSize: "0.75rem",
+                    padding: "0.55rem 0.65rem", borderRadius: "8px", background: "var(--bg-card-hover)", fontSize: "0.82rem",
                   }}>
                     <span>
                       {exchange.type === "buy" ? (zh ? "換入" : "Bought") : (zh ? "換回" : "Sold")}{" "}

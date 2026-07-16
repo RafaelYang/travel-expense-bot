@@ -9,6 +9,7 @@
   --color-primary: #0ea5e9;
   --color-primary-dark: #0284c7;
   --color-primary-light: #38bdf8;
+  --color-primary-text: #7dd3fc;
 
   /* 強調色 */
   --color-accent: #8b5cf6;
@@ -18,6 +19,8 @@
   --color-success: #22c55e;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
+  --color-spend-increase: #fda4af;
+  --color-spend-decrease: #86efac;
 
   /* 背景 */
   --bg-primary: #0f172a;
@@ -28,8 +31,8 @@
   
   /* 文字 */
   --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-secondary: #cbd5e1;
+  --text-muted: #a8b4c6;
   
   /* 邊框 */
   --border-color: #334155;
@@ -53,6 +56,9 @@
 
 /* ===== 淺色主題 ===== */
 [data-theme="light"] {
+  --color-primary-text: #0369a1;
+  --color-spend-increase: #be123c;
+  --color-spend-decrease: #15803d;
   --bg-primary: #f8fafc;
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
@@ -84,15 +90,29 @@
 
 html {
   scroll-behavior: smooth;
+  font-size: 17px;
+}
+
+@media (min-width: 769px) {
+  html {
+    font-size: 18px;
+  }
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-huninn), 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 /* 全域背景漸層 */
@@ -392,7 +412,7 @@ body::before {
 }
 
 .nav-link.active {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   background: rgba(14, 165, 233, 0.15);
 }
 
@@ -403,10 +423,11 @@ body::before {
   gap: 0.25rem;
   padding: 0.25rem 0.625rem;
   border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
+  font-size: 0.78rem;
+  font-weight: 700;
   background: rgba(14, 165, 233, 0.1);
-  color: var(--color-primary-light);
+  color: var(--text-primary);
+  border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
 /* ===== 滾動條美化 ===== */
@@ -435,6 +456,18 @@ body::before {
   
   .mobile-full {
     width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .exchange-transaction-row {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+  }
+
+  .exchange-transaction-main,
+  .exchange-transaction-amount {
+    width: 100%;
   }
 }
 

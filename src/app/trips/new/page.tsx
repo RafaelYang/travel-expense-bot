@@ -243,7 +243,7 @@ export default function NewTripPage() {
                         display: 'flex', alignItems: 'center', gap: '0.25rem',
                         padding: '0.3rem 0.625rem', borderRadius: '9999px',
                         background: 'rgba(14, 165, 233, 0.15)', border: '1px solid rgba(14, 165, 233, 0.3)',
-                        color: 'var(--color-primary)', fontSize: '0.8rem',
+                        color: 'var(--color-primary-text)', fontSize: '0.8rem',
                         fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
                       }}
                     >

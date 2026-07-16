@@ -312,7 +312,7 @@ function TripCard({ trip, featured }: { trip: Trip; featured?: boolean }) {
               display: 'flex',
               alignItems: 'center',
               gap: '0.75rem',
-              fontSize: '0.8rem',
+              fontSize: '0.9rem',
               color: 'rgba(255,255,255,0.85)',
             }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>

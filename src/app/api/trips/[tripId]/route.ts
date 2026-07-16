@@ -71,6 +71,7 @@ export async function GET(
     })),
     cashWallets: trip.cashWallets.filter((wallet) => wallet.userId === session.user.id),
     totalSpent: expenseSummary.total,
+    exchangeNet: expenseSummary.exchangeNet,
     totalDeposits: depositSummary.total,
     missingConversionCount: expenseSummary.missingConversionCount,
     foreignCurrencyDepositCount: depositSummary.foreignCurrencyCount,

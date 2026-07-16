@@ -2,10 +2,19 @@
  * 根 Layout — 全站共用框架
  */
 import type { Metadata } from "next"
+import { Huninn } from "next/font/google"
 import { SessionProvider } from "next-auth/react"
 import { ThemeProvider } from "@/components/theme-provider"
 import { LanguageProvider } from "@/components/language-provider"
 import "./globals.css"
+
+const huninn = Huninn({
+  weight: "400",
+  display: "swap",
+  variable: "--font-huninn",
+  preload: false,
+  fallback: ["PingFang TC", "Microsoft JhengHei", "sans-serif"],
+})
 
 export const metadata: Metadata = {
   title: "小銘子旅行用記帳 — 旅遊記帳好幫手",
@@ -21,12 +30,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-TW" suppressHydrationWarning>
+    <html lang="zh-TW" className={huninn.variable} suppressHydrationWarning>
       <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
-          rel="stylesheet"
-        />
         {/* 防止主題切換閃爍 */}
         <script
           dangerouslySetInnerHTML={{
