@@ -7,6 +7,11 @@ import { prisma } from "@/lib/prisma"
 import { convertExpenseAmount } from "@/lib/exchange-rate"
 import { findEditableExpense } from "@/lib/trip-access"
 import {
+  creditCashWallet,
+  InsufficientCashBalanceError,
+  replaceCashExpenseReservation,
+} from "@/lib/cash-wallet"
+import {
   createSignedExpenseImagePaths,
   resolveExpenseImageInputs,
 } from "@/lib/expense-image-signing"
@@ -18,7 +23,8 @@ const updateSchema = z.object({
   category: z.string().optional(),
   item: z.string().min(1).optional(),
   amount: z.number().positive().optional(),
-  currency: z.string().optional(),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
+  paymentMethod: z.enum(["card", "cash"]).optional(),
   note: z.string().optional().nullable(),
   images: z.array(imageInputSchema).max(3).optional(),
   date: z.string().optional(),
@@ -61,10 +67,15 @@ export async function PATCH(
       updateData.date = new Date(data.date)
     }
 
-    if (data.amount !== undefined || data.currency !== undefined) {
-      const newAmount = data.amount ?? existing.amount
-      const newCurrency = data.currency ?? existing.currency
+    const newAmount = data.amount ?? existing.amount
+    const newCurrency = data.currency ?? existing.currency
+    const newPaymentMethod = data.paymentMethod ?? existing.paymentMethod
 
+    if (
+      data.amount !== undefined ||
+      data.currency !== undefined ||
+      data.paymentMethod !== undefined
+    ) {
       // 查詢行程基準幣種
       const trip = await prisma.trip.findUnique({
         where: { id: tripId },
@@ -72,7 +83,22 @@ export async function PATCH(
       })
       const baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
 
-      if (newCurrency !== baseCurrency) {
+      if (newPaymentMethod === "cash" && newCurrency !== baseCurrency) {
+        const latestBuy = await prisma.cashExchange.findFirst({
+          where: {
+            tripId,
+            userId: existing.userId,
+            type: "buy",
+            foreignCurrency: newCurrency,
+          },
+          orderBy: { date: "desc" },
+          select: { exchangeRate: true },
+        })
+        updateData.exchangeRate = latestBuy?.exchangeRate ?? null
+        updateData.convertedAmount = latestBuy
+          ? newAmount * latestBuy.exchangeRate
+          : null
+      } else if (newCurrency !== baseCurrency) {
         const conversion = await convertExpenseAmount(newAmount, newCurrency, baseCurrency)
         if (conversion) {
           updateData.convertedAmount = conversion.convertedAmount
@@ -89,12 +115,22 @@ export async function PATCH(
       }
     }
 
-    const expense = await prisma.expense.update({
-      where: { id: expenseId, tripId },
-      data: updateData,
-      include: {
-        user: { select: { id: true, name: true } },
-      },
+    const expense = await prisma.$transaction(async (tx) => {
+      await replaceCashExpenseReservation(tx, existing, {
+        tripId,
+        userId: existing.userId,
+        paymentMethod: newPaymentMethod,
+        currency: newCurrency,
+        amount: newAmount,
+      })
+
+      return tx.expense.update({
+        where: { id: expenseId, tripId },
+        data: updateData,
+        include: {
+          user: { select: { id: true, name: true } },
+        },
+      })
     })
 
     return NextResponse.json({
@@ -104,6 +140,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
+    }
+    if (error instanceof InsufficientCashBalanceError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
     }
     console.error("Update expense error:", error)
     return NextResponse.json({ error: "更新失敗" }, { status: 500 })
@@ -128,8 +167,13 @@ export async function DELETE(
   }
 
   try {
-    await prisma.expense.delete({
-      where: { id: expenseId, tripId },
+    await prisma.$transaction(async (tx) => {
+      if (existing.paymentMethod === "cash") {
+        await creditCashWallet(tx, existing)
+      }
+      await tx.expense.delete({
+        where: { id: expenseId, tripId },
+      })
     })
     return NextResponse.json({ success: true })
   } catch (error) {

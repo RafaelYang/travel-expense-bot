@@ -1,7 +1,11 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { summarizeDeposits, summarizeExpenses } from "../src/lib/money.ts"
+import {
+  summarizeDeposits,
+  summarizeExpenses,
+  summarizeTripSpending,
+} from "../src/lib/money.ts"
 
 test("expense totals never treat a missing foreign exchange rate as 1:1", () => {
   const result = summarizeExpenses([
@@ -20,4 +24,29 @@ test("deposit totals only include values already denominated in the base currenc
   ], "TWD")
 
   assert.deepEqual(result, { total: 500, foreignCurrencyCount: 1 })
+})
+
+test("cash spending is recognized once at exchange time and sell-back reduces net spending", () => {
+  const result = summarizeTripSpending([
+    { amount: 300, currency: "TWD", convertedAmount: 300, paymentMethod: "card" },
+    { amount: 1_000, currency: "JPY", convertedAmount: 220, paymentMethod: "cash" },
+  ], [
+    { type: "buy", baseAmount: 6_200 },
+    { type: "sell", baseAmount: 1_100 },
+  ], "TWD")
+
+  assert.deepEqual(result, {
+    total: 5_400,
+    missingConversionCount: 0,
+    exchangeNet: 5_100,
+  })
+})
+
+test("missing conversion on a cash expense does not make the net total incomplete", () => {
+  const result = summarizeTripSpending([
+    { amount: 500, currency: "JPY", convertedAmount: null, paymentMethod: "cash" },
+  ], [{ type: "buy", baseAmount: 1_000 }], "TWD")
+
+  assert.equal(result.total, 1_000)
+  assert.equal(result.missingConversionCount, 0)
 })

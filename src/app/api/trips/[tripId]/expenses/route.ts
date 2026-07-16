@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { convertExpenseAmount } from "@/lib/exchange-rate"
 import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
+import { debitCashWallet, InsufficientCashBalanceError } from "@/lib/cash-wallet"
 import { z } from "zod"
 
 const imageDataUrlSchema = z.string()
@@ -20,6 +21,7 @@ const expenseSchema = z.object({
   date: z.string().datetime().optional(),
   note: z.string().max(1_000).optional(),
   images: z.array(imageDataUrlSchema).max(3).default([]),
+  paymentMethod: z.enum(["card", "cash"]).default("card"),
 })
 
 // GET — 取得行程花費列表
@@ -101,10 +103,23 @@ export async function POST(
     const baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
 
     // 自動查詢即時匯率並換算
-    let convertedAmount: number
-    let exchangeRate: number
+    let convertedAmount: number | null
+    let exchangeRate: number | null
 
-    if (data.currency !== baseCurrency) {
+    if (data.paymentMethod === "cash" && data.currency !== baseCurrency) {
+      const latestBuy = await prisma.cashExchange.findFirst({
+        where: {
+          tripId,
+          userId: session.user.id,
+          type: "buy",
+          foreignCurrency: data.currency,
+        },
+        orderBy: { date: "desc" },
+        select: { exchangeRate: true },
+      })
+      exchangeRate = latestBuy?.exchangeRate ?? null
+      convertedAmount = exchangeRate === null ? null : data.amount * exchangeRate
+    } else if (data.currency !== baseCurrency) {
       const conversion = await convertExpenseAmount(data.amount, data.currency, baseCurrency)
       if (!conversion) {
         return NextResponse.json(
@@ -119,24 +134,36 @@ export async function POST(
       exchangeRate = 1
     }
 
-    const expense = await prisma.expense.create({
-      data: {
-        tripId,
-        userId: session.user.id,
-        category: data.category,
-        item: data.item,
-        amount: data.amount,
-        currency: data.currency,
-        convertedAmount,
-        exchangeRate,
-        date: data.date ? new Date(data.date) : new Date(),
-        note: data.note,
-        images: data.images,
-        source: "web",
-      },
-      include: {
-        user: { select: { id: true, name: true } },
-      },
+    const expense = await prisma.$transaction(async (tx) => {
+      if (data.paymentMethod === "cash") {
+        await debitCashWallet(tx, {
+          tripId,
+          userId: session.user.id,
+          currency: data.currency,
+          amount: data.amount,
+        })
+      }
+
+      return tx.expense.create({
+        data: {
+          tripId,
+          userId: session.user.id,
+          category: data.category,
+          item: data.item,
+          amount: data.amount,
+          currency: data.currency,
+          convertedAmount,
+          exchangeRate,
+          date: data.date ? new Date(data.date) : new Date(),
+          note: data.note,
+          images: data.images,
+          source: "web",
+          paymentMethod: data.paymentMethod,
+        },
+        include: {
+          user: { select: { id: true, name: true } },
+        },
+      })
     })
 
     return NextResponse.json({
@@ -146,6 +173,9 @@ export async function POST(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 })
+    }
+    if (error instanceof InsufficientCashBalanceError) {
+      return NextResponse.json({ error: error.message }, { status: 409 })
     }
     console.error("Create expense error:", error)
     return NextResponse.json({ error: "記帳失敗" }, { status: 500 })

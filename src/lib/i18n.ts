@@ -121,6 +121,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     'form.note': '備註（選填）',
     'form.converting': '換算中...',
     'form.rateUpdate': '💱 匯率更新：{time}（UTC+8）',
+    'form.payment.card': '刷卡／額外支出',
+    'form.payment.cash': '現金',
 
     // 行程設定頁
     'settings.back': '返回行程',
@@ -189,6 +191,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'expense.detail.recordedBy': '記帳人',
     'expense.detail.time': '時間',
     'expense.detail.currency': '幣種',
+    'expense.detail.payment': '付款方式',
     'expense.detail.note': '備註',
     'expense.detail.source': '來源',
     'expense.detail.source.line': '📱 LINE',
@@ -339,6 +342,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     'form.note': 'Note (optional)',
     'form.converting': 'Converting...',
     'form.rateUpdate': '💱 Rate updated: {time} (UTC+8)',
+    'form.payment.card': 'Card / extra spend',
+    'form.payment.cash': 'Cash',
 
     // 行程設定頁
     'settings.back': 'Back to trip',
@@ -407,6 +412,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'expense.detail.recordedBy': 'Created By',
     'expense.detail.time': 'Time',
     'expense.detail.currency': 'Currency',
+    'expense.detail.payment': 'Payment method',
     'expense.detail.note': 'Note',
     'expense.detail.source': 'Source',
     'expense.detail.source.line': '📱 LINE',

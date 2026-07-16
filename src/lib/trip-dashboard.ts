@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { summarizeExpenses } from "@/lib/money"
+import { summarizeTripSpending } from "@/lib/money"
 
 export interface DashboardTrip {
   id: string
@@ -60,7 +60,15 @@ export async function getTripDashboard(userId: string): Promise<DashboardTrip[]>
           amount: true,
           currency: true,
           convertedAmount: true,
+          paymentMethod: true,
         },
+      })
+    : []
+
+  const cashExchanges = trips.length > 0
+    ? await prisma.cashExchange.findMany({
+        where: { tripId: { in: trips.map((trip) => trip.id) } },
+        select: { tripId: true, type: true, baseAmount: true },
       })
     : []
 
@@ -71,8 +79,19 @@ export async function getTripDashboard(userId: string): Promise<DashboardTrip[]>
     expensesByTrip.set(expense.tripId, group)
   }
 
+  const exchangesByTrip = new Map<string, typeof cashExchanges>()
+  for (const exchange of cashExchanges) {
+    const group = exchangesByTrip.get(exchange.tripId) ?? []
+    group.push(exchange)
+    exchangesByTrip.set(exchange.tripId, group)
+  }
+
   return trips.map((trip) => {
-    const summary = summarizeExpenses(expensesByTrip.get(trip.id) ?? [], trip.baseCurrency)
+    const summary = summarizeTripSpending(
+      expensesByTrip.get(trip.id) ?? [],
+      exchangesByTrip.get(trip.id) ?? [],
+      trip.baseCurrency,
+    )
 
     return {
       id: trip.id,

@@ -27,6 +27,11 @@ import {
 } from "@/lib/utils"
 import { getCurrenciesFromCountries, ALL_CURRENCIES, getCurrencyChipLabel, extractCleanCountries } from "@/lib/countries"
 import { getExpenseBaseAmount } from "@/lib/money"
+import {
+  CashWalletPanel,
+  type CashExchangeData,
+  type CashWalletData,
+} from "@/components/cash-wallet-panel"
 
 export interface TripData {
   id: string
@@ -62,6 +67,7 @@ export interface TripData {
     note?: string
     images?: string[]
     source: string
+    paymentMethod: "card" | "cash"
     user: { id: string; name: string }
   }[]
   deposits: {
@@ -72,6 +78,8 @@ export interface TripData {
     createdAt: string
     user: { id: string; name: string }
   }[]
+  cashWallets: CashWalletData[]
+  cashExchanges: CashExchangeData[]
 }
 
 type ExpenseDisplayTransaction = TripData["expenses"][number] & { isIncome: false }
@@ -252,12 +260,18 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     setTrip((current) => {
       if (created.kind === "expense") {
         const baseAmount = getExpenseBaseAmount(created.record, current.baseCurrency)
+        const paidFromCash = created.record.paymentMethod === "cash"
         return {
           ...current,
           expenses: [created.record, ...current.expenses],
-          totalSpent: current.totalSpent + (baseAmount ?? 0),
+          cashWallets: paidFromCash
+            ? current.cashWallets.map((wallet) => wallet.currency === created.record.currency
+                ? { ...wallet, balance: wallet.balance - created.record.amount }
+                : wallet)
+            : current.cashWallets,
+          totalSpent: current.totalSpent + (paidFromCash ? 0 : (baseAmount ?? 0)),
           missingConversionCount:
-            (current.missingConversionCount ?? 0) + (baseAmount === null ? 1 : 0),
+            (current.missingConversionCount ?? 0) + (!paidFromCash && baseAmount === null ? 1 : 0),
         }
       }
 
@@ -383,6 +397,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     )
     return { ...cat, label: t(`cat.${cat.value}`), total, count: expenses.length }
   }).filter(c => c.count > 0).sort((a, b) => b.total - a.total)
+  const categorizedExpenseTotal = categoryStats.reduce((sum, category) => sum + category.total, 0)
 
   // 合併支出與收入並依時間倒序
   const parsedExpenses: ExpenseDisplayTransaction[] = trip.expenses.map(e => ({
@@ -398,6 +413,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     images: e.images,
     user: e.user,
     source: e.source,
+    paymentMethod: e.paymentMethod,
   }))
 
   const parsedDeposits: DepositDisplayTransaction[] = trip.deposits.map(d => ({
@@ -640,6 +656,16 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
 
 
+        <CashWalletPanel
+          tripId={tripId}
+          baseCurrency={trip.baseCurrency}
+          defaultForeignCurrency={trip.defaultCurrency}
+          wallets={trip.cashWallets}
+          exchanges={trip.cashExchanges}
+          canEdit={canEdit}
+          onChanged={() => fetchTrip(false)}
+        />
+
         {/* 預算進度條已移至統計 Modal */}
 
         {/* 快速記帳按鈕 */}
@@ -668,6 +694,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
             defaultCurrency={trip.defaultCurrency}
             baseCurrency={trip.baseCurrency}
             countries={trip.countries}
+            cashWallets={trip.cashWallets}
             onClose={() => setShowExpenseForm(false)}
             onSubmit={handleCreatedTransaction}
           />
@@ -768,6 +795,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           tripId={tripId}
           defaultCurrency={trip.defaultCurrency}
           countries={trip.countries}
+          cashWallets={trip.cashWallets}
           onClose={() => setEditingExpense(null)}
           onSave={() => { setEditingExpense(null); fetchTrip() }}
         />
@@ -1193,7 +1221,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {categoryStats.map(cat => {
-                      const percent = trip.totalSpent > 0 ? (cat.total / trip.totalSpent) * 100 : 0
+                      const percent = categorizedExpenseTotal > 0 ? (cat.total / categorizedExpenseTotal) * 100 : 0
                       return (
                         <div key={cat.value} style={{
                           display: 'flex', alignItems: 'center', gap: '0.75rem',
@@ -1330,6 +1358,7 @@ function ExpenseRow({ expense, currency, onEdit }: {
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
             {expense.user?.name} · {format(new Date(expense.date), 'HH:mm')}
             {!isIncome && expense.source === 'line' && ' · 📱'}
+            {!isIncome && expense.paymentMethod === 'cash' && ` · ${t('form.payment.cash')}`}
           </div>
         </div>
       </div>
@@ -1351,11 +1380,12 @@ function ExpenseRow({ expense, currency, onEdit }: {
 }
 
 // === 記帳表單 ===
-function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose, onSubmit }: {
+function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWallets, onClose, onSubmit }: {
   tripId: string
   defaultCurrency: string
   baseCurrency: string
   countries: string[]
+  cashWallets: CashWalletData[]
   onClose: () => void
   onSubmit: (created: CreatedTransaction) => void
 }) {
@@ -1377,9 +1407,14 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
     item: '',
     amount: '',
     currency: tripCurrencies[0] || defaultCurrency,
+    paymentMethod: 'card' as 'card' | 'cash',
     note: '',
     date: getLocalDateTimeInputValue(),
   }))
+  const spendableCashWallets = cashWallets.filter(wallet => wallet.balance > 0.000001)
+  const paymentCurrencies = mode === 'expense' && form.paymentMethod === 'cash'
+    ? spendableCashWallets.map(wallet => wallet.currency)
+    : chipCurrencies
   const [images, setImages] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [submitError, setSubmitError] = useState("")
@@ -1444,8 +1479,8 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
     getPreferredCurrencySnapshot,
     () => "TWD",
   )
-  const rateKey = `${form.currency}:${preferredCur}:${form.amount}`
-  const shouldPreviewRate = form.currency !== preferredCur && Boolean(form.amount)
+  const rateKey = `${mode}:${form.paymentMethod}:${form.currency}:${preferredCur}:${form.amount}`
+  const shouldPreviewRate = (mode === 'deposit' || form.paymentMethod === 'card') && form.currency !== preferredCur && Boolean(form.amount)
   const previewRate = shouldPreviewRate && ratePreview?.key === rateKey ? ratePreview.rate : null
   const rateUpdatedAt = shouldPreviewRate && ratePreview?.key === rateKey ? ratePreview.updatedAt : null
   const previewLoading = shouldPreviewRate && loadingRateKey === rateKey
@@ -1523,6 +1558,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
             note: data.note ?? undefined,
             images: Array.isArray(data.images) ? data.images : [],
             source: data.source,
+            paymentMethod: data.paymentMethod,
             user: {
               id: data.user.id,
               name: data.user.name ?? '',
@@ -1565,7 +1601,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
       }}>
         {/* 支出/收入 Tab */}
         <div style={{ display: 'flex', gap: '0.25rem', background: 'var(--bg-card-hover)', borderRadius: '8px', padding: '2px' }}>
-          <button type="button" onClick={() => { setMode('expense'); setForm(f => ({ ...f, currency: tripCurrencies[0] || defaultCurrency })) }} style={{
+          <button type="button" onClick={() => { setMode('expense'); setForm(f => ({ ...f, currency: tripCurrencies[0] || defaultCurrency, paymentMethod: 'card' })) }} style={{
             padding: '0.35rem 0.75rem', borderRadius: '6px', border: 'none',
             fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
             background: isExpense ? 'var(--color-primary)' : 'transparent',
@@ -1574,7 +1610,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
           }}>
             {t('form.tab.expense')}
           </button>
-          <button type="button" onClick={() => { setMode('deposit'); setForm(f => ({ ...f, currency: preferredCur })) }} style={{
+          <button type="button" onClick={() => { setMode('deposit'); setForm(f => ({ ...f, currency: preferredCur, paymentMethod: 'card' })) }} style={{
             padding: '0.35rem 0.75rem', borderRadius: '6px', border: 'none',
             fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
             background: !isExpense ? 'var(--color-success)' : 'transparent',
@@ -1614,6 +1650,46 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
                 {t(`cat.${cat.value}`)}
               </button>
             ))}
+          </div>
+        )}
+
+        {isExpense && (
+          <div>
+            <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
+              {locale === 'en' ? 'Payment method' : '付款方式'}
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+              <button type="button" onClick={() => setForm(current => ({ ...current, paymentMethod: 'card' }))} style={{
+                padding: '0.55rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700,
+                border: form.paymentMethod === 'card' ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
+                background: form.paymentMethod === 'card' ? 'rgba(14,165,233,0.12)' : 'transparent',
+                color: form.paymentMethod === 'card' ? 'var(--color-primary)' : 'var(--text-secondary)',
+              }}>
+                {locale === 'en' ? 'Card / extra spend' : '刷卡／額外支出'}
+              </button>
+              <button type="button" disabled={spendableCashWallets.length === 0} onClick={() => {
+                const wallet = spendableCashWallets[0]
+                if (wallet) setForm(current => ({ ...current, paymentMethod: 'cash', currency: wallet.currency }))
+              }} style={{
+                padding: '0.55rem', borderRadius: '8px', fontWeight: 700,
+                cursor: spendableCashWallets.length ? 'pointer' : 'not-allowed',
+                border: form.paymentMethod === 'cash' ? '1px solid #22c55e' : '1px solid var(--border-color)',
+                background: form.paymentMethod === 'cash' ? 'rgba(34,197,94,0.12)' : 'transparent',
+                color: form.paymentMethod === 'cash' ? '#22c55e' : 'var(--text-secondary)',
+                opacity: spendableCashWallets.length ? 1 : 0.5,
+              }}>
+                {locale === 'en' ? 'Cash from wallet' : '使用已換現金'}
+              </button>
+            </div>
+            {form.paymentMethod === 'cash' ? (
+              <div style={{ marginTop: '0.35rem', fontSize: '0.72rem', color: '#22c55e' }}>
+                {locale === 'en' ? 'Only the cash balance is reduced; trip spending is not counted again.' : '只扣除外幣現金餘額，不會再次增加旅程總花費。'}
+              </div>
+            ) : spendableCashWallets.length === 0 ? (
+              <div style={{ marginTop: '0.35rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                {locale === 'en' ? 'Exchange cash above before using cash payment.' : '請先在上方換匯，才可選擇現金付款。'}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -1666,7 +1742,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
             {t('form.currency')}
           </label>
           <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            {chipCurrencies.map(cur => (
+            {paymentCurrencies.map(cur => (
               <button
                 key={cur}
                 type="button"
@@ -1687,7 +1763,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
                 {getCurrencyChipLabel(cur, cleanCountries, locale)}
               </button>
             ))}
-            <select
+            {form.paymentMethod !== 'cash' && <select
               className="input-field"
               value={chipCurrencies.includes(form.currency) ? '' : form.currency}
               onChange={(e) => { if (e.target.value) setForm({ ...form, currency: e.target.value }) }}
@@ -1702,8 +1778,14 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
               {otherCurrencies.map(cur => (
                 <option key={cur} value={cur}>{ALL_CURRENCIES[cur]?.label || cur}</option>
               ))}
-            </select>
+            </select>}
           </div>
+          {isExpense && form.paymentMethod === 'cash' && (
+            <div style={{ marginTop: '0.35rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              {locale === 'en' ? 'Available' : '可用餘額'}: {form.currency}{' '}
+              {(spendableCashWallets.find(wallet => wallet.currency === form.currency)?.balance ?? 0).toLocaleString()}
+            </div>
+          )}
         </div>
 
         {/* 備註（僅限支出） */}
@@ -1998,11 +2080,12 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, onClose
 }
 
 // === 花費詳情 / 編輯 Modal ===
-function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose, onSave }: {
+function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWallets, onClose, onSave }: {
   expense: TripData['expenses'][0]
   tripId: string
   defaultCurrency: string
   countries: string[]
+  cashWallets: CashWalletData[]
   onClose: () => void
   onSave: () => void
 }) {
@@ -2012,11 +2095,13 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
     item: expense.item,
     amount: String(expense.amount),
     currency: expense.currency,
+    paymentMethod: expense.paymentMethod,
     note: expense.note || '',
     date: format(new Date(expense.date), "yyyy-MM-dd'T'HH:mm"),
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [saveError, setSaveError] = useState("")
   const [compressing, setCompressing] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const touchStartX = useRef<number | null>(null)
@@ -2071,6 +2156,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
   }
 
   const handleSave = async () => {
+    setSaveError("")
     setSaving(true)
     try {
       const res = await fetch(`/api/trips/${tripId}/expenses/${expense.id}`, {
@@ -2081,12 +2167,20 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
           item: form.item,
           amount: parseFloat(form.amount),
           currency: form.currency,
+          paymentMethod: form.paymentMethod,
           note: form.note || null,
           images: editImages,
           date: new Date(form.date).toISOString(),
         }),
       })
-      if (res.ok) onSave()
+      if (res.ok) {
+        onSave()
+      } else {
+        const data = await res.json().catch(() => null)
+        setSaveError(data?.error || t('form.submit.error'))
+      }
+    } catch {
+      setSaveError(t('form.submit.error'))
     } finally {
       setSaving(false)
     }
@@ -2111,6 +2205,13 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
   const chipCurrencies = [...tripCurrencies]
   if (!chipCurrencies.includes('TWD')) chipCurrencies.push('TWD')
   if (!chipCurrencies.includes(defaultCurrency)) chipCurrencies.push(defaultCurrency)
+  const spendableCashCurrencies = cashWallets
+    .filter(wallet => wallet.balance > 0.000001)
+    .map(wallet => wallet.currency)
+  if (expense.paymentMethod === 'cash' && !spendableCashCurrencies.includes(expense.currency)) {
+    spendableCashCurrencies.push(expense.currency)
+  }
+  const editCurrencyOptions = form.paymentMethod === 'cash' ? spendableCashCurrencies : chipCurrencies
 
   const isBusy = saving || deleting
 
@@ -2230,6 +2331,12 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
                     {getCurrencyChipLabel(expense.currency, cleanCountries, locale)}
                   </span>
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('expense.detail.payment')}</span>
+                  <span style={{ fontWeight: 500 }}>
+                    {expense.paymentMethod === 'cash' ? t('form.payment.cash') : t('form.payment.card')}
+                  </span>
+                </div>
                 {expense.note && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{t('expense.detail.note')}</span>
@@ -2321,6 +2428,26 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
                 ))}
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <button type="button" onClick={() => setForm({ ...form, paymentMethod: 'card' })} style={{
+                  padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700,
+                  border: form.paymentMethod === 'card' ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
+                  background: form.paymentMethod === 'card' ? 'rgba(14,165,233,0.12)' : 'transparent',
+                  color: form.paymentMethod === 'card' ? 'var(--color-primary)' : 'var(--text-secondary)',
+                }}>{t('form.payment.card')}</button>
+                <button type="button" disabled={spendableCashCurrencies.length === 0} onClick={() => {
+                  const currency = spendableCashCurrencies.includes(form.currency) ? form.currency : spendableCashCurrencies[0]
+                  if (currency) setForm({ ...form, paymentMethod: 'cash', currency })
+                }} style={{
+                  padding: '0.5rem', borderRadius: '8px', fontWeight: 700,
+                  cursor: spendableCashCurrencies.length ? 'pointer' : 'not-allowed',
+                  border: form.paymentMethod === 'cash' ? '1px solid #22c55e' : '1px solid var(--border-color)',
+                  background: form.paymentMethod === 'cash' ? 'rgba(34,197,94,0.12)' : 'transparent',
+                  color: form.paymentMethod === 'cash' ? '#22c55e' : 'var(--text-secondary)',
+                  opacity: spendableCashCurrencies.length ? 1 : 0.5,
+                }}>{t('form.payment.cash')}</button>
+              </div>
+
               {/* 品名 + 金額 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <input
@@ -2341,7 +2468,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
 
               {/* 幣種 */}
               <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                {chipCurrencies.map(cur => (
+                {editCurrencyOptions.map(cur => (
                   <button
                     key={cur}
                     type="button"
@@ -2452,6 +2579,12 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, onClose
                   </>
                 )}
               </div>
+
+              {saveError && (
+                <div role="alert" style={{ color: 'var(--color-danger)', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+                  {saveError}
+                </div>
+              )}
 
               {/* 操作按鈕 */}
               <div style={{ display: 'flex', gap: '0.75rem' }}>
