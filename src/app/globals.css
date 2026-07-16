@@ -518,6 +518,449 @@ a:hover .trip-card-bg {
   transform: scale(1.05);
 }
 
+/* ===== 行程參考匯率 ===== */
+.exchange-rate-card {
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.exchange-rate-header,
+.exchange-rate-title-row,
+.exchange-rate-refresh-chip,
+.exchange-rate-pair-controls,
+.exchange-rate-main-quote,
+.exchange-rate-meta,
+.exchange-rate-trend-heading,
+.exchange-rate-change,
+.exchange-rate-range,
+.exchange-rate-state,
+.exchange-rate-error button,
+.exchange-rate-calculator-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.exchange-rate-header {
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.exchange-rate-title-row {
+  gap: 0.45rem;
+  color: var(--color-primary-text);
+}
+
+.exchange-rate-title-row h2 {
+  color: var(--text-primary);
+  font-size: 1.08rem;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+.exchange-rate-header p {
+  margin-top: 0.2rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.exchange-rate-refresh-chip {
+  flex-shrink: 0;
+  gap: 0.3rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid rgba(14, 165, 233, 0.28);
+  border-radius: 999px;
+  background: rgba(14, 165, 233, 0.08);
+  color: var(--color-primary-text);
+  font-size: 0.73rem;
+  font-weight: 750;
+}
+
+.exchange-rate-pair-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.exchange-rate-pair-controls label,
+.exchange-rate-calculator label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.32rem;
+  color: var(--text-secondary);
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.exchange-rate-pair-controls select {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  padding: 0 0.65rem;
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  outline: none;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.exchange-rate-pair-controls select:focus-visible,
+.exchange-rate-amount-input:focus-within,
+.exchange-rate-swap:focus-visible,
+.exchange-rate-calculator-toggle:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
+.exchange-rate-swap {
+  align-self: end;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  border-radius: 50%;
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--color-primary-text);
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.exchange-rate-swap:hover {
+  background: rgba(14, 165, 233, 0.18);
+  transform: rotate(180deg);
+}
+
+.exchange-rate-state {
+  min-height: 150px;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 12px;
+  background: rgba(100, 116, 139, 0.08);
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+.exchange-rate-spinner {
+  animation: spin 0.8s linear infinite;
+  color: var(--color-primary-text);
+}
+
+.exchange-rate-error {
+  flex-direction: column;
+}
+
+.exchange-rate-error button {
+  gap: 0.35rem;
+  min-height: 44px;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--border-color-light);
+  border-radius: 9px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.exchange-rate-content {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 1.25rem;
+  padding-top: 0.1rem;
+}
+
+.exchange-rate-quote-column,
+.exchange-rate-trend-column {
+  min-width: 0;
+}
+
+.exchange-rate-eyebrow {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.exchange-rate-main-quote {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.exchange-rate-main-quote span {
+  color: var(--text-secondary);
+  font-size: 0.83rem;
+  font-weight: 700;
+}
+
+.exchange-rate-main-quote strong {
+  color: var(--color-primary-text);
+  font-size: clamp(1.45rem, 4.4vw, 1.9rem);
+  font-weight: 850;
+  letter-spacing: -0.025em;
+}
+
+.exchange-rate-meta {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.18rem;
+  margin-top: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.exchange-rate-meta a {
+  color: var(--color-primary-text);
+  text-decoration: none;
+}
+
+.exchange-rate-meta a:hover {
+  text-decoration: underline;
+}
+
+.exchange-rate-calculator-toggle {
+  display: none;
+  width: 100%;
+  min-height: 44px;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.exchange-rate-calculator-toggle svg:last-child {
+  margin-left: auto;
+}
+
+.exchange-rate-calculator {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.65rem;
+  margin-top: 0.9rem;
+}
+
+.exchange-rate-amount-input {
+  display: flex;
+  height: 48px;
+  align-items: center;
+  border: 1px solid var(--border-color-light);
+  border-radius: 10px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.exchange-rate-amount-input input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0.65rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.exchange-rate-amount-input span {
+  padding-right: 0.65rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.exchange-rate-calculator-result {
+  display: flex;
+  min-height: 72px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(14, 165, 233, 0.24);
+  border-radius: 10px;
+  background: rgba(14, 165, 233, 0.07);
+}
+
+.exchange-rate-calculator-result span,
+.exchange-rate-calculator-result small {
+  color: var(--text-secondary);
+  font-size: 0.69rem;
+}
+
+.exchange-rate-calculator-result strong {
+  margin: 0.08rem 0;
+  color: var(--text-primary);
+  font-size: 0.96rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.exchange-rate-trend-column {
+  padding: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: rgba(100, 116, 139, 0.065);
+}
+
+.exchange-rate-trend-heading {
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.exchange-rate-trend-heading > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.exchange-rate-trend-heading strong {
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+
+.exchange-rate-trend-heading > div > span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.exchange-rate-change {
+  flex-shrink: 0;
+  gap: 0.18rem;
+  color: var(--color-primary-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.exchange-rate-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 3;
+  margin-top: 0.3rem;
+  overflow: visible;
+}
+
+.exchange-rate-chart-grid {
+  stroke: var(--border-color);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.exchange-rate-chart-line {
+  fill: none;
+  stroke: var(--color-primary-light);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.exchange-rate-chart-point {
+  fill: var(--bg-card);
+  stroke: var(--color-primary-light);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.exchange-rate-chart-point.latest {
+  fill: var(--color-primary-light);
+  stroke: var(--bg-card);
+  stroke-width: 2.5;
+}
+
+.exchange-rate-range {
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.69rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.exchange-rate-history-empty {
+  display: flex;
+  min-height: 132px;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.exchange-rate-disclaimer {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 700px) {
+  .exchange-rate-card {
+    padding: 1rem;
+  }
+
+  .exchange-rate-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .exchange-rate-content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .exchange-rate-calculator-toggle {
+    display: flex;
+  }
+
+  .exchange-rate-calculator {
+    display: none;
+    grid-template-columns: 1fr;
+  }
+
+  .exchange-rate-calculator.is-open {
+    display: grid;
+  }
+
+  .exchange-rate-trend-column {
+    padding: 0.75rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .exchange-rate-pair-controls {
+    gap: 0.4rem;
+  }
+
+  .exchange-rate-pair-controls select {
+    padding: 0 0.42rem;
+    font-size: 0.82rem;
+  }
+
+  .exchange-rate-trend-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+}
+
 /* ===== 電腦版彈窗（大螢幕）與字體優化 ===== */
 @media (min-width: 768px) {
   /* 彈窗整體放大 */

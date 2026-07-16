@@ -9,7 +9,7 @@
  */
 "use client"
 
-import { useEffect, useState, useRef, useCallback, useSyncExternalStore } from "react"
+import { useEffect, useState, useRef, useCallback, useMemo, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import {
@@ -33,6 +33,7 @@ import {
 } from "@/components/cash-wallet-panel"
 import { BatchReconcileModal } from "@/components/batch-reconcile-modal"
 import { TripStatsModal } from "@/components/trip-stats-modal"
+import { ExchangeRateCard } from "@/components/exchange-rate-card"
 
 export interface TripData {
   id: string
@@ -202,6 +203,13 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   }, [])
   const { t, locale } = useLanguage()
   const dateLocale = locale === 'en' ? enUS : zhTW
+  const suggestedRateCurrencies = useMemo(() => [
+    ...new Set([
+      ...getCurrenciesFromCountries(trip.countries),
+      ...trip.cashWallets.map((wallet) => wallet.currency),
+      ...trip.expenses.map((expense) => expense.currency),
+    ]),
+  ], [trip.cashWallets, trip.countries, trip.expenses])
 
   const fetchTrip = useCallback(async (redirectOnError = true) => {
     try {
@@ -684,6 +692,12 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
             onSubmit={handleCreatedTransaction}
           />
         )}
+
+        <ExchangeRateCard
+          baseCurrency={trip.baseCurrency}
+          defaultForeignCurrency={trip.defaultCurrency}
+          suggestedCurrencies={suggestedRateCurrencies}
+        />
 
         {/* 全部交易列表 */}
         {allTransactions.length > 0 && (
