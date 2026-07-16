@@ -12,7 +12,6 @@
 import { useEffect, useState, useRef, useCallback, useSyncExternalStore } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
-import { BudgetProgress } from "@/components/budget-progress"
 import {
   ArrowLeft, PlusCircle, Wallet, Users, Calendar, Settings,
   ChevronDown, ChevronUp, Loader2, Trash2, X, Check,
@@ -33,6 +32,7 @@ import {
   type CashWalletData,
 } from "@/components/cash-wallet-panel"
 import { BatchReconcileModal } from "@/components/batch-reconcile-modal"
+import { TripStatsModal } from "@/components/trip-stats-modal"
 
 export interface TripData {
   id: string
@@ -148,6 +148,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   const [showStatsModal, setShowStatsModal] = useState(false)
   const [showBatchReconcile, setShowBatchReconcile] = useState(false)
   const [editingExpense, setEditingExpense] = useState<TripData['expenses'][0] | null>(null)
+  const [editingExpenseInitialMode, setEditingExpenseInitialMode] = useState<'view' | 'edit'>('view')
   const [editingDeposit, setEditingDeposit] = useState<DepositDisplayTransaction | null>(null)
   const [editingExchange, setEditingExchange] = useState<ExchangeDisplayTransaction | null>(null)
   const [gmailPrefix, setGmailPrefix] = useState('')
@@ -159,6 +160,15 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   const [showSuggestions, setShowSuggestions] = useState(false)
   const suggestionsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputWrapperRef = useRef<HTMLDivElement>(null)
+  const statsTriggerRef = useRef<HTMLButtonElement>(null)
+
+  const openExpenseModal = (
+    expense: TripData['expenses'][number],
+    initialMode: 'view' | 'edit' = 'view',
+  ) => {
+    setEditingExpenseInitialMode(initialMode)
+    setEditingExpense(expense)
+  }
 
   // debounce 搜尋使用者
   const searchUsers = useCallback((prefix: string) => {
@@ -356,77 +366,11 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     ]),
   )
 
-  // 產生每日花費折線圖數據
-  const chartDays: { label: string; dateStr: string; amount: number }[] = []
-  try {
-    const dateSet = new Set<string>()
-
-    // 1. 放入行程期間的每一天
-    const start = new Date(trip.startDate)
-    const end = new Date(trip.endDate)
-    const current = new Date(start)
-    let count = 0
-    while (current <= end && count < 31) {
-      const yyyy = current.getFullYear()
-      const mm = String(current.getMonth() + 1).padStart(2, '0')
-      const dd = String(current.getDate()).padStart(2, '0')
-      dateSet.add(`${yyyy}-${mm}-${dd}`)
-      current.setDate(current.getDate() + 1)
-      count++
-    }
-
-    // 2. 放入行程外有交易的日期（例如提前訂的機票或出發前換匯）
-    dailySpendingSummaries.forEach((_summary, key) => dateSet.add(key))
-
-    // 3. 排序日期字串 (保證時間軸從小到大)
-    const sortedDateStrs = Array.from(dateSet).sort()
-
-    // 4. 計算每日消費總額
-    sortedDateStrs.forEach(dateStr => {
-      const parts = dateStr.split('-')
-      const m = parseInt(parts[1])
-      const d = parseInt(parts[2])
-      const label = `${m}/${d}`
-
-      const dayAmount = dailySpendingSummaries.get(dateStr)?.total ?? 0
-
-      chartDays.push({ label, dateStr, amount: Math.round(dayAmount) })
-    })
-  } catch (err) {
-    console.error("Chart data error:", err)
-  }
-
-  const maxChartAmount = Math.max(...chartDays.map(d => d.amount), 1000)
-  const minChartAmount = Math.min(...chartDays.map(d => d.amount), 0)
-  const chartRange = Math.max(maxChartAmount - minChartAmount, 1)
-  const chartZeroY = 90 - ((0 - minChartAmount) / chartRange) * 70
-  const chartPoints = chartDays.map((d, i) => {
-    const x = chartDays.length > 1
-      ? 20 + (i / (chartDays.length - 1)) * 320
-      : 180
-    const y = 90 - ((d.amount - minChartAmount) / chartRange) * 70
-    return { x, y, amount: d.amount, label: d.label }
-  })
-
-  const chartLinePath = chartPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-  const chartAreaPath = chartPoints.length > 0 ? `${chartLinePath} L ${chartPoints[chartPoints.length - 1].x} ${chartZeroY} L ${chartPoints[0].x} ${chartZeroY} Z` : ''
   const daysPassed = Math.max(0, differenceInDays(new Date(), new Date(trip.startDate)) + 1)
-  const budget = trip.budgetAmount || 0
   const canEdit = trip.userRole !== 'viewer'
   const pendingCardExpenses = trip.expenses.filter(
     (expense) => expense.paymentMethod === 'card' && !expense.reconciledAt,
   )
-
-  // 分類統計
-  const categoryStats = EXPENSE_CATEGORIES.map(cat => {
-    const expenses = trip.expenses.filter(e => e.category === cat.value)
-    const total = expenses.reduce(
-      (sum, expense) => sum + (getExpenseBaseAmount(expense, trip.baseCurrency) ?? 0),
-      0,
-    )
-    return { ...cat, label: t(`cat.${cat.value}`), total, count: expenses.length }
-  }).filter(c => c.count > 0).sort((a, b) => b.total - a.total)
-  const categorizedExpenseTotal = categoryStats.reduce((sum, category) => sum + category.total, 0)
 
   // 合併支出、收入與換匯並依時間倒序
   const parsedExpenses: ExpenseDisplayTransaction[] = trip.expenses.map(e => ({
@@ -583,16 +527,19 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
               <button
+                type="button"
+                ref={statsTriggerRef}
                 onClick={() => setShowStatsModal(true)}
+                aria-label={t('trip.stats.title')}
                 style={{
-                  padding: '0.5rem', borderRadius: '10px',
+                  width: '44px', height: '44px', padding: 0, borderRadius: '10px',
                   border: '1px solid var(--border-color)',
                   background: 'rgba(14, 165, 233, 0.06)',
                   color: 'var(--color-primary)',
                   cursor: 'pointer', transition: 'all 0.2s',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
-                title="統計"
+                title={t('trip.stats.title')}
               >
                 <BarChart3 size={18} />
               </button>
@@ -844,11 +791,11 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                               ? undefined
                               : transaction.kind === 'deposit'
                               ? () => setEditingDeposit(transaction)
-                              : () => setEditingExpense(transaction)
+                              : () => openExpenseModal(transaction)
                           }
                           onReconcile={
                             canEdit && transaction.kind === 'expense'
-                              ? () => setEditingExpense(transaction)
+                              ? () => openExpenseModal(transaction)
                               : undefined
                           }
                         />
@@ -891,6 +838,15 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
       </main>
 
+      <TripStatsModal
+        open={showStatsModal}
+        trip={trip}
+        canEdit={canEdit}
+        onOpenChange={setShowStatsModal}
+        onOpenBatchReconcile={() => setShowBatchReconcile(true)}
+        onEditExpense={(expense) => openExpenseModal(expense, 'edit')}
+      />
+
       {/* 批次核對信用卡交易 Modal */}
       {showBatchReconcile && (
         <BatchReconcileModal
@@ -911,6 +867,8 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           baseCurrency={trip.baseCurrency}
           countries={trip.countries}
           cashWallets={trip.cashWallets}
+          initialMode={editingExpenseInitialMode}
+          fallbackFocusRef={statsTriggerRef}
           onClose={() => setEditingExpense(null)}
           onSave={() => { setEditingExpense(null); fetchTrip() }}
         />
@@ -1183,254 +1141,6 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                   {inviteError}
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 統計 Modal */}
-      {showStatsModal && (
-        <div
-          onClick={() => setShowStatsModal(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 20000,
-            background: 'rgba(0, 0, 0, 0.5)',
-            backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
-            animation: 'fadeIn 0.15s ease-out',
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="glass-card trip-modal stats-modal"
-            style={{
-              width: '100%', maxWidth: '420px', padding: '1.75rem',
-              animation: 'fadeInDown 0.2s ease-out',
-              maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Header */}
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              marginBottom: '1.25rem', flexShrink: 0
-            }}>
-              <h3 style={{
-                fontSize: '1rem', fontWeight: 700,
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
-              }}>
-                <BarChart3 size={18} style={{ color: 'var(--color-primary)' }} />
-                花費統計
-              </h3>
-              <button
-                onClick={() => setShowStatsModal(false)}
-                style={{
-                  padding: '0.25rem', borderRadius: '6px', border: 'none',
-                  background: 'transparent', color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* 內容 (可滾動) */}
-            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
-              {/* 預算進度 */}
-              {budget > 0 && (
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <BudgetProgress
-                    totalBudget={budget}
-                    totalSpent={trip.totalSpent}
-                    currency={trip.baseCurrency}
-                  />
-                </div>
-              )}
-
-              {/* 每日花費趨勢折線圖 */}
-              <div style={{ marginBottom: '1.25rem', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', borderRadius: '12px', padding: '1rem' }}>
-                <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                  {t('trip.dailySpendTrend')} ({getCurrencySymbol(trip.baseCurrency)})
-                </h4>
-
-                {chartDays.length > 0 ? (
-                  <div style={{ position: 'relative', width: '100%' }}>
-                    <svg width="100%" height="125" viewBox="0 0 360 125" style={{ overflow: 'visible' }}>
-                      <defs>
-                        <linearGradient id="chart-grad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.25" />
-                          <stop offset="100%" stopColor="#0ea5e9" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-
-                      {/* 網格背景線 */}
-                      <line x1="15" y1="20" x2="345" y2="20" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
-                      <line x1="15" y1="55" x2="345" y2="55" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
-                      <line x1="15" y1={chartZeroY} x2="345" y2={chartZeroY} stroke="rgba(255,255,255,0.12)" strokeDasharray="3,3" />
-
-                      {/* 陰影填充區域 */}
-                      {chartPoints.length > 0 && (
-                        <path d={chartAreaPath} fill="url(#chart-grad)" />
-                      )}
-
-                      {/* 趨勢折線 */}
-                      {chartPoints.length > 0 && (
-                        <path
-                          d={chartLinePath}
-                          fill="none"
-                          stroke="#0ea5e9"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      )}
-
-                      {/* 資料點與金額文字 */}
-                      {chartPoints.map((p, i) => {
-                        const showLabel = chartDays.length <= 10 || i % Math.ceil(chartDays.length / 8) === 0 || i === chartDays.length - 1
-                        return (
-                          <g key={i}>
-                            {/* 金額標籤 */}
-                            {p.amount !== 0 && (
-                              <text
-                                x={p.x}
-                                y={p.amount > 0 ? p.y - 10 : p.y + 15}
-                                textAnchor="middle"
-                                fontSize="11"
-                                fill={p.amount > 0 ? "#38bdf8" : "#22c55e"}
-                                fontWeight="700"
-                              >
-                                {Math.abs(p.amount) >= 1000 ? `${(p.amount / 1000).toFixed(1)}k` : p.amount}
-                              </text>
-                            )}
-
-                            {/* 圓點節點 */}
-                            <circle
-                              cx={p.x}
-                              cy={p.y}
-                              r={p.amount !== 0 ? "4" : "2"}
-                              fill={p.amount > 0 ? "#0ea5e9" : p.amount < 0 ? "#22c55e" : "var(--text-muted)"}
-                              stroke={p.amount !== 0 ? "#fff" : "none"}
-                              strokeWidth="1.5"
-                            />
-
-                            {/* 日期 X 軸 Label */}
-                            {showLabel && (
-                              <text
-                                x={p.x}
-                                y="112"
-                                textAnchor="middle"
-                                fontSize="11"
-                                fill="var(--text-muted)"
-                              >
-                                {p.label}
-                              </text>
-                            )}
-                          </g>
-                        )
-                      })}
-                    </svg>
-                  </div>
-                ) : (
-                  <div style={{ height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                    暫無每日花費數據
-                  </div>
-                )}
-              </div>
-
-              {/* 分類統計 */}
-              {categoryStats.length > 0 && (
-                <div>
-                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.75rem' }}>
-                    {t('trip.categories')}
-                  </h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {categoryStats.map(cat => {
-                      const percent = categorizedExpenseTotal > 0 ? (cat.total / categorizedExpenseTotal) * 100 : 0
-                      return (
-                        <div key={cat.value} style={{
-                          display: 'flex', alignItems: 'center', gap: '0.75rem',
-                        }}>
-                          <span style={{ fontSize: '0.85rem', width: '80px' }}>{cat.label}</span>
-                          <div style={{
-                            flex: 1, height: '8px', borderRadius: '4px',
-                            background: 'var(--bg-card-hover)',
-                            overflow: 'hidden',
-                          }}>
-                            <div style={{
-                              height: '100%', borderRadius: '4px',
-                              background: cat.color,
-                              width: `${percent}%`,
-                              transition: 'width 1s ease',
-                            }} />
-                          </div>
-                          <span style={{
-                            fontSize: '0.8rem', fontWeight: 600,
-                            color: 'var(--text-primary)', minWidth: '80px', textAlign: 'right',
-                          }}>
-                            {getCurrencySymbol(trip.baseCurrency)}{cat.total.toLocaleString()}
-                          </span>
-                          <span style={{
-                            fontSize: '0.7rem', color: 'var(--text-muted)', minWidth: '32px',
-                          }}>
-                            {t('trip.allExpenses.count', { count: String(cat.count) })}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* 總計 */}
-              <div style={{
-                marginTop: '1.25rem', paddingTop: '1rem',
-                borderTop: '1px solid var(--border-color)',
-                display: 'flex', flexDirection: 'column', gap: '0.5rem',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t('trip.totalSpent')}</span>
-                  <span style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
-                  </span>
-                </div>
-                {((trip.missingConversionCount || 0) > 0 || (trip.foreignCurrencyDepositCount || 0) > 0) && (
-                  <div style={{
-                    padding: '0.6rem 0.75rem', borderRadius: '8px',
-                    background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b',
-                    fontSize: '0.75rem', lineHeight: 1.5,
-                  }}>
-                    {t('trip.total.incomplete', {
-                      expenses: String(trip.missingConversionCount || 0),
-                      deposits: String(trip.foreignCurrencyDepositCount || 0),
-                    })}
-                  </div>
-                )}
-                {trip.totalDeposits > 0 && (
-                  <>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#22c55e' }}>總收入（{trip.deposits.length} 筆）</span>
-                      <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#22c55e' }}>
-                        +{getCurrencySymbol(trip.baseCurrency)}{trip.totalDeposits.toLocaleString()}
-                      </span>
-                    </div>
-                    <div style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      paddingTop: '0.5rem', borderTop: '1px dashed var(--border-color)',
-                      marginTop: '0.25rem'
-                    }}>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>公積金餘額</span>
-                      <span style={{
-                        fontSize: '1.1rem', fontWeight: 800,
-                        color: (trip.totalDeposits - trip.totalSpent) >= 0 ? '#22c55e' : 'var(--color-danger)',
-                      }}>
-                        {getCurrencySymbol(trip.baseCurrency)}{(trip.totalDeposits - trip.totalSpent).toLocaleString()}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -2455,17 +2165,30 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
 }
 
 // === 花費詳情 / 編輯 Modal ===
-function EditExpenseModal({ expense, tripId, defaultCurrency, baseCurrency, countries, cashWallets, onClose, onSave }: {
+function EditExpenseModal({
+  expense,
+  tripId,
+  defaultCurrency,
+  baseCurrency,
+  countries,
+  cashWallets,
+  initialMode = 'view',
+  fallbackFocusRef,
+  onClose,
+  onSave,
+}: {
   expense: TripData['expenses'][0]
   tripId: string
   defaultCurrency: string
   baseCurrency: string
   countries: string[]
   cashWallets: CashWalletData[]
+  initialMode?: 'view' | 'edit'
+  fallbackFocusRef?: React.RefObject<HTMLElement | null>
   onClose: () => void
   onSave: () => void
 }) {
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<'view' | 'edit'>(initialMode)
   const [form, setForm] = useState({
     category: expense.category,
     item: expense.item,
@@ -2482,6 +2205,9 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, baseCurrency, coun
   const [saveError, setSaveError] = useState("")
   const [compressing, setCompressing] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const modalHeadingRef = useRef<HTMLHeadingElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   const touchStartX = useRef<number | null>(null)
   const touchEndX = useRef<number | null>(null)
   const images = expense.images || []
@@ -2605,6 +2331,69 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, baseCurrency, coun
 
   const isBusy = saving || deleting
 
+  useEffect(() => {
+    returnFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const fallbackFocus = fallbackFocusRef?.current
+
+    return () => {
+      const previousFocusIsUsable = returnFocusRef.current?.isConnected
+        && returnFocusRef.current !== document.body
+        && returnFocusRef.current !== document.documentElement
+      const target = previousFocusIsUsable
+        ? returnFocusRef.current
+        : fallbackFocus
+      if (target?.isConnected) requestAnimationFrame(() => target.focus())
+    }
+  }, [fallbackFocusRef])
+
+  useEffect(() => {
+    modalHeadingRef.current?.focus()
+  }, [mode])
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      if (lightboxIndex !== null) {
+        setLightboxIndex(null)
+        return
+      }
+      if (!isBusy) onClose()
+    }
+
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [isBusy, lightboxIndex, onClose])
+
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Tab' || lightboxIndex !== null) return
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+    )).filter((element) => !element.hasAttribute('hidden') && element.getClientRects().length > 0)
+    const first = focusable[0]
+    const last = focusable.at(-1)
+    if (!first || !last) return
+    const activeIndex = document.activeElement instanceof HTMLElement
+      ? focusable.indexOf(document.activeElement)
+      : -1
+
+    if (activeIndex === -1) {
+      event.preventDefault()
+      const boundaryTarget = event.shiftKey ? last : first
+      boundaryTarget.focus()
+    } else if (event.shiftKey && activeIndex === 0) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && activeIndex === focusable.length - 1) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+
   return (
     <>
     <div
@@ -2619,6 +2408,14 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, baseCurrency, coun
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={mode === 'view'
+          ? `${t('trip.stats.detailTitle')}: ${expense.item}`
+          : t('trip.stats.editExpense')}
+        tabIndex={-1}
+        onKeyDown={handleDialogKeyDown}
         onClick={(e) => e.stopPropagation()}
         className="glass-card trip-modal"
         style={{
@@ -2672,9 +2469,9 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, baseCurrency, coun
             {/* 內容 (可滾動) */}
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
               {/* 項目名稱 */}
-              <h2 style={{
+              <h2 ref={modalHeadingRef} tabIndex={-1} style={{
                 fontSize: '1.25rem', fontWeight: 700,
-                marginBottom: '0.5rem', letterSpacing: '-0.01em',
+                marginBottom: '0.5rem', letterSpacing: '-0.01em', outline: 'none',
               }}>
                 {expense.item}
               </h2>
@@ -2807,9 +2604,9 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, baseCurrency, coun
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               marginBottom: '1.25rem', flexShrink: 0
             }}>
-              <h3 style={{
+              <h3 ref={modalHeadingRef} tabIndex={-1} style={{
                 fontSize: '1rem', fontWeight: 700,
-                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                display: 'flex', alignItems: 'center', gap: '0.5rem', outline: 'none',
               }}>
                 <Pencil size={16} style={{ color: 'var(--color-primary)' }} />
                 編輯花費

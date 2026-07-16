@@ -580,11 +580,6 @@ a:hover .trip-card-bg {
     padding: 0.7rem 1rem !important;
   }
 
-  /* 統計彈窗可以更寬 */
-  .trip-modal.stats-modal {
-    max-width: 800px !important;
-  }
-
   .trip-modal.batch-reconcile-modal {
     max-width: 720px !important;
   }
