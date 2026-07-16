@@ -54,7 +54,7 @@ export function CashWalletPanel({
   const fallbackCurrency = defaultForeignCurrency !== baseCurrency
     ? defaultForeignCurrency
     : Object.keys(ALL_CURRENCIES).find((currency) => currency !== baseCurrency) || "USD"
-  const [expanded, setExpanded] = useState(wallets.length > 0)
+  const [expanded, setExpanded] = useState(false)
   const [type, setType] = useState<"buy" | "sell">("buy")
   const [foreignCurrency, setForeignCurrency] = useState(availableWallets[0]?.currency || fallbackCurrency)
   const [foreignAmount, setForeignAmount] = useState("")
@@ -122,6 +122,8 @@ export function CashWalletPanel({
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
+        aria-expanded={expanded}
+        aria-controls={`cash-wallet-details-${tripId}`}
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
           border: "none", background: "transparent", color: "var(--text-primary)", cursor: "pointer",
@@ -155,7 +157,10 @@ export function CashWalletPanel({
       )}
 
       {expanded && (
-        <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--border-color)" }}>
+        <div
+          id={`cash-wallet-details-${tripId}`}
+          style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--border-color)" }}
+        >
           {canEdit && (
             <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>

@@ -18,6 +18,7 @@
   /* 成功/警告/危險 */
   --color-success: #22c55e;
   --color-warning: #f59e0b;
+  --color-warning-text: #fbbf24;
   --color-danger: #ef4444;
   --color-spend-increase: #fda4af;
   --color-spend-decrease: #86efac;
@@ -57,6 +58,7 @@
 /* ===== 淺色主題 ===== */
 [data-theme="light"] {
   --color-primary-text: #0369a1;
+  --color-warning-text: #b45309;
   --color-spend-increase: #be123c;
   --color-spend-decrease: #15803d;
   --bg-primary: #f8fafc;
@@ -581,5 +583,9 @@ a:hover .trip-card-bg {
   /* 統計彈窗可以更寬 */
   .trip-modal.stats-modal {
     max-width: 800px !important;
+  }
+
+  .trip-modal.batch-reconcile-modal {
+    max-width: 720px !important;
   }
 }

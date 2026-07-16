@@ -16,7 +16,7 @@ import { BudgetProgress } from "@/components/budget-progress"
 import {
   ArrowLeft, PlusCircle, Wallet, Users, Calendar, Settings,
   ChevronDown, ChevronUp, Loader2, Trash2, X, Check,
-  Send, Share2, ImagePlus, BarChart3, Pencil, Plane,
+  Send, Share2, ImagePlus, BarChart3, Pencil, Plane, ListChecks,
 } from "lucide-react"
 import Link from "next/link"
 import { format, differenceInDays } from "date-fns"
@@ -32,6 +32,7 @@ import {
   type CashExchangeData,
   type CashWalletData,
 } from "@/components/cash-wallet-panel"
+import { BatchReconcileModal } from "@/components/batch-reconcile-modal"
 
 export interface TripData {
   id: string
@@ -145,6 +146,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   const [showMemberList, setShowMemberList] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
+  const [showBatchReconcile, setShowBatchReconcile] = useState(false)
   const [editingExpense, setEditingExpense] = useState<TripData['expenses'][0] | null>(null)
   const [editingDeposit, setEditingDeposit] = useState<DepositDisplayTransaction | null>(null)
   const [editingExchange, setEditingExchange] = useState<ExchangeDisplayTransaction | null>(null)
@@ -411,6 +413,9 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   const daysPassed = Math.max(0, differenceInDays(new Date(), new Date(trip.startDate)) + 1)
   const budget = trip.budgetAmount || 0
   const canEdit = trip.userRole !== 'viewer'
+  const pendingCardExpenses = trip.expenses.filter(
+    (expense) => expense.paymentMethod === 'card' && !expense.reconciledAt,
+  )
 
   // 分類統計
   const categoryStats = EXPENSE_CATEGORIES.map(cat => {
@@ -699,18 +704,6 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           </div>
         </div>
 
-
-
-        <CashWalletPanel
-          tripId={tripId}
-          baseCurrency={trip.baseCurrency}
-          defaultForeignCurrency={trip.defaultCurrency}
-          wallets={trip.cashWallets}
-          exchanges={trip.cashExchanges}
-          canEdit={canEdit}
-          onChanged={() => fetchTrip(false)}
-        />
-
         {/* 預算進度條已移至統計 Modal */}
 
         {/* 快速記帳按鈕 */}
@@ -755,26 +748,33 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem',
             }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>
-                {t('trip.allTransactions', { count: String(allTransactions.length) })}
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>
+                  {t('trip.allTransactions', { count: String(allTransactions.length) })}
+                </h3>
+                {canEdit && pendingCardExpenses.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn-nav"
+                    onClick={() => setShowBatchReconcile(true)}
+                    style={{
+                      padding: '0.35rem 0.55rem',
+                      borderColor: 'rgba(245, 158, 11, 0.45)',
+                      background: 'rgba(245, 158, 11, 0.09)',
+                      color: 'var(--color-warning-text)', fontSize: '0.76rem', fontWeight: 800,
+                    }}
+                  >
+                    <ListChecks size={15} />
+                    {t('expense.reconcile.batch.open', { count: String(pendingCardExpenses.length) })}
+                  </button>
+                )}
+              </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{
                   fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-primary-light)',
                 }}>
                   {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
                 </div>
-                {trip.exchangeNet !== 0 && (
-                  <div style={{
-                    marginTop: '0.15rem', fontSize: '0.76rem',
-                    color: 'var(--text-secondary)', fontWeight: 600,
-                  }}>
-                    {t('trip.exchangeIncluded')}{' '}
-                    <span style={{ color: trip.exchangeNet > 0 ? 'var(--color-spend-increase)' : 'var(--color-spend-decrease)' }}>
-                      {trip.exchangeNet > 0 ? '+' : '−'}{getCurrencySymbol(trip.baseCurrency)}{Math.abs(trip.exchangeNet).toLocaleString()}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -879,8 +879,28 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           </div>
         )}
 
+        <CashWalletPanel
+          tripId={tripId}
+          baseCurrency={trip.baseCurrency}
+          defaultForeignCurrency={trip.defaultCurrency}
+          wallets={trip.cashWallets}
+          exchanges={trip.cashExchanges}
+          canEdit={canEdit}
+          onChanged={() => fetchTrip(false)}
+        />
 
       </main>
+
+      {/* 批次核對信用卡交易 Modal */}
+      {showBatchReconcile && (
+        <BatchReconcileModal
+          tripId={tripId}
+          baseCurrency={trip.baseCurrency}
+          expenses={pendingCardExpenses}
+          onClose={() => setShowBatchReconcile(false)}
+          onSaved={() => fetchTrip(false)}
+        />
+      )}
 
       {/* 編輯花費 Modal */}
       {editingExpense && (
@@ -1375,17 +1395,6 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                     {getCurrencySymbol(trip.baseCurrency)}{trip.totalSpent.toLocaleString()}
                   </span>
                 </div>
-                {trip.exchangeNet !== 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{t('trip.exchangeIncluded')}</span>
-                    <span style={{
-                      fontSize: '0.88rem', fontWeight: 700,
-                      color: trip.exchangeNet > 0 ? 'var(--color-spend-increase)' : 'var(--color-spend-decrease)',
-                    }}>
-                      {trip.exchangeNet > 0 ? '+' : '−'}{getCurrencySymbol(trip.baseCurrency)}{Math.abs(trip.exchangeNet).toLocaleString()}
-                    </span>
-                  </div>
-                )}
                 {((trip.missingConversionCount || 0) > 0 || (trip.foreignCurrencyDepositCount || 0) > 0) && (
                   <div style={{
                     padding: '0.6rem 0.75rem', borderRadius: '8px',
