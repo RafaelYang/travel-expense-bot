@@ -26,7 +26,7 @@ import {
   EXPENSE_CATEGORIES, getCategoryInfo, getCurrencySymbol,
 } from "@/lib/utils"
 import { getCurrenciesFromCountries, ALL_CURRENCIES, getCurrencyChipLabel, extractCleanCountries } from "@/lib/countries"
-import { getExpenseBaseAmount } from "@/lib/money"
+import { getExpenseBaseAmount, summarizeTripSpending } from "@/lib/money"
 import {
   CashWalletPanel,
   type CashExchangeData,
@@ -51,6 +51,7 @@ export interface TripData {
   missingConversionCount?: number
   foreignCurrencyDepositCount?: number
   userRole: string
+  currentUserId: string
   members: {
     id: string
     role: string
@@ -64,11 +65,13 @@ export interface TripData {
     currency: string
     convertedAmount?: number
     exchangeRate?: number
+    settledAmount?: number
     date: string
     note?: string
     images?: string[]
     source: string
     paymentMethod: "card" | "cash"
+    reconciledAt?: string
     user: { id: string; name: string }
   }[]
   deposits: {
@@ -144,6 +147,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   const [showStatsModal, setShowStatsModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState<TripData['expenses'][0] | null>(null)
   const [editingDeposit, setEditingDeposit] = useState<DepositDisplayTransaction | null>(null)
+  const [editingExchange, setEditingExchange] = useState<ExchangeDisplayTransaction | null>(null)
   const [gmailPrefix, setGmailPrefix] = useState('')
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteStatus, setInviteStatus] = useState<'idle' | 'sent' | 'error'>('idle')
@@ -323,6 +327,33 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
   const totalDays = differenceInDays(new Date(trip.endDate), new Date(trip.startDate)) + 1
 
+  const localDateKey = (value: string | Date) => format(new Date(value), 'yyyy-MM-dd')
+  const dailySpendingInputs = new Map<string, {
+    expenses: TripData['expenses']
+    exchanges: TripData['cashExchanges']
+  }>()
+  const getDailyInput = (key: string) => {
+    const existing = dailySpendingInputs.get(key)
+    if (existing) return existing
+    const created = { expenses: [] as TripData['expenses'], exchanges: [] as TripData['cashExchanges'] }
+    dailySpendingInputs.set(key, created)
+    return created
+  }
+
+  trip.expenses.forEach((expense) => {
+    getDailyInput(localDateKey(expense.date)).expenses.push(expense)
+  })
+  trip.cashExchanges.forEach((exchange) => {
+    getDailyInput(localDateKey(exchange.date)).exchanges.push(exchange)
+  })
+
+  const dailySpendingSummaries = new Map(
+    [...dailySpendingInputs.entries()].map(([key, input]) => [
+      key,
+      summarizeTripSpending(input.expenses, input.exchanges, trip.baseCurrency),
+    ]),
+  )
+
   // 產生每日花費折線圖數據
   const chartDays: { label: string; dateStr: string; amount: number }[] = []
   try {
@@ -342,16 +373,8 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
       count++
     }
 
-    // 2. 放入行程外有記帳消費的日期 (例如提前訂的機票)
-    trip.expenses.forEach(e => {
-      try {
-        const eDate = new Date(e.date)
-        const yyyy = eDate.getFullYear()
-        const mm = String(eDate.getMonth() + 1).padStart(2, '0')
-        const dd = String(eDate.getDate()).padStart(2, '0')
-        dateSet.add(`${yyyy}-${mm}-${dd}`)
-      } catch {}
-    })
+    // 2. 放入行程外有交易的日期（例如提前訂的機票或出發前換匯）
+    dailySpendingSummaries.forEach((_summary, key) => dateSet.add(key))
 
     // 3. 排序日期字串 (保證時間軸從小到大)
     const sortedDateStrs = Array.from(dateSet).sort()
@@ -363,18 +386,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
       const d = parseInt(parts[2])
       const label = `${m}/${d}`
 
-      const dayAmount = trip.expenses
-        .filter(e => {
-          const eDate = new Date(e.date)
-          const ey = eDate.getFullYear()
-          const em = String(eDate.getMonth() + 1).padStart(2, '0')
-          const ed = String(eDate.getDate()).padStart(2, '0')
-          return `${ey}-${em}-${ed}` === dateStr
-        })
-        .reduce(
-          (sum, expense) => sum + (getExpenseBaseAmount(expense, trip.baseCurrency) ?? 0),
-          0,
-        )
+      const dayAmount = dailySpendingSummaries.get(dateStr)?.total ?? 0
 
       chartDays.push({ label, dateStr, amount: Math.round(dayAmount) })
     })
@@ -383,16 +395,19 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   }
 
   const maxChartAmount = Math.max(...chartDays.map(d => d.amount), 1000)
+  const minChartAmount = Math.min(...chartDays.map(d => d.amount), 0)
+  const chartRange = Math.max(maxChartAmount - minChartAmount, 1)
+  const chartZeroY = 90 - ((0 - minChartAmount) / chartRange) * 70
   const chartPoints = chartDays.map((d, i) => {
     const x = chartDays.length > 1
       ? 20 + (i / (chartDays.length - 1)) * 320
       : 180
-    const y = 90 - (d.amount / maxChartAmount) * 70
+    const y = 90 - ((d.amount - minChartAmount) / chartRange) * 70
     return { x, y, amount: d.amount, label: d.label }
   })
 
   const chartLinePath = chartPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-  const chartAreaPath = chartPoints.length > 0 ? `${chartLinePath} L ${chartPoints[chartPoints.length - 1].x} 90 L ${chartPoints[0].x} 90 Z` : ''
+  const chartAreaPath = chartPoints.length > 0 ? `${chartLinePath} L ${chartPoints[chartPoints.length - 1].x} ${chartZeroY} L ${chartPoints[0].x} ${chartZeroY} Z` : ''
   const daysPassed = Math.max(0, differenceInDays(new Date(), new Date(trip.startDate)) + 1)
   const budget = trip.budgetAmount || 0
   const canEdit = trip.userRole !== 'viewer'
@@ -418,12 +433,15 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     amount: e.amount,
     currency: e.currency,
     convertedAmount: e.convertedAmount,
+    exchangeRate: e.exchangeRate,
+    settledAmount: e.settledAmount,
     date: e.date,
     note: e.note,
     images: e.images,
     user: e.user,
     source: e.source,
     paymentMethod: e.paymentMethod,
+    reconciledAt: e.reconciledAt,
   }))
 
   const parsedDeposits: DepositDisplayTransaction[] = trip.deposits.map(d => ({
@@ -476,21 +494,28 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
   const groupedTransactions: {
     dateStr: string
+    dateKey: string
     dayLabel: string | null
     weekday: string
+    dailyTotal: number
+    missingConversionCount: number
     transactions: typeof displayTransactions
   }[] = []
 
   displayTransactions.forEach(tx => {
     const d = new Date(tx.date)
     const dateStr = format(d, 'yyyy/M/d')
+    const dateKey = localDateKey(d)
     const weekday = format(d, 'eee', { locale: locale === 'en' ? enUS : zhTW })
     let group = groupedTransactions.find(g => g.dateStr === dateStr)
     if (!group) {
       group = {
         dateStr,
+        dateKey,
         dayLabel: getDayLabel(dateStr),
         weekday: `(${weekday})`,
+        dailyTotal: dailySpendingSummaries.get(dateKey)?.total ?? 0,
+        missingConversionCount: dailySpendingSummaries.get(dateKey)?.missingConversionCount ?? 0,
         transactions: [],
       }
       groupedTransactions.push(group)
@@ -757,24 +782,42 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                 <div key={group.dateStr} style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                   {/* 日期分組 Header */}
                   <div style={{
-                    display: 'flex', alignItems: 'center', gap: '0.375rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: '0.5rem', flexWrap: 'wrap',
                     fontSize: '0.92rem', fontWeight: 700, color: 'var(--text-secondary)',
                     paddingLeft: '0.25rem',
                   }}>
-                    <Calendar size={16} style={{ color: 'var(--color-primary-light)' }} />
-                    <span>{group.dateStr}</span>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{group.weekday}</span>
-                    {group.dayLabel && (
-                      <span style={{
-                        padding: '0.1rem 0.4rem', borderRadius: '4px',
-                        background: 'rgba(14, 165, 233, 0.1)',
-                        color: 'var(--color-primary-text)',
-                        fontSize: '0.76rem', fontWeight: 700,
-                        marginLeft: '0.25rem',
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
+                      <Calendar size={16} style={{ color: 'var(--color-primary-light)' }} />
+                      <span>{group.dateStr}</span>
+                      <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{group.weekday}</span>
+                      {group.dayLabel && (
+                        <span style={{
+                          padding: '0.1rem 0.4rem', borderRadius: '4px',
+                          background: 'rgba(14, 165, 233, 0.1)',
+                          color: 'var(--color-primary-text)',
+                          fontSize: '0.76rem', fontWeight: 700,
+                        }}>
+                          {group.dayLabel}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ marginLeft: 'auto', textAlign: 'right', lineHeight: 1.25 }}>
+                      <div style={{
+                        fontSize: '0.9rem', fontWeight: 800,
+                        color: group.dailyTotal < 0 ? 'var(--color-spend-decrease)' : 'var(--text-primary)',
+                        whiteSpace: 'nowrap',
                       }}>
-                        {group.dayLabel}
-                      </span>
-                    )}
+                        {t('trip.dailyNet')}{' '}
+                        {group.dailyTotal < 0 ? '−' : ''}{getCurrencySymbol(trip.baseCurrency)}
+                        {Math.abs(group.dailyTotal).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </div>
+                      {group.missingConversionCount > 0 && (
+                        <div style={{ fontSize: '0.72rem', color: '#f59e0b', marginTop: '0.1rem' }}>
+                          {t('trip.dailyNet.missing', { count: String(group.missingConversionCount) })}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* 該日的所有交易 */}
@@ -785,6 +828,11 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                           key={`exchange:${transaction.id}`}
                           exchange={transaction}
                           baseCurrency={trip.baseCurrency}
+                          onEdit={
+                            canEdit && transaction.user.id === trip.currentUserId
+                              ? () => setEditingExchange(transaction)
+                              : undefined
+                          }
                         />
                       ) : (
                         <ExpenseRow
@@ -797,6 +845,11 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                               : transaction.kind === 'deposit'
                               ? () => setEditingDeposit(transaction)
                               : () => setEditingExpense(transaction)
+                          }
+                          onReconcile={
+                            canEdit && transaction.kind === 'expense'
+                              ? () => setEditingExpense(transaction)
+                              : undefined
                           }
                         />
                       )
@@ -835,6 +888,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           expense={editingExpense}
           tripId={tripId}
           defaultCurrency={trip.defaultCurrency}
+          baseCurrency={trip.baseCurrency}
           countries={trip.countries}
           cashWallets={trip.cashWallets}
           onClose={() => setEditingExpense(null)}
@@ -851,6 +905,17 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           countries={trip.countries}
           onClose={() => setEditingDeposit(null)}
           onSave={() => { setEditingDeposit(null); fetchTrip() }}
+        />
+      )}
+
+      {/* 編輯換匯 Modal */}
+      {editingExchange && (
+        <EditExchangeModal
+          exchange={editingExchange}
+          tripId={tripId}
+          baseCurrency={trip.baseCurrency}
+          onClose={() => setEditingExchange(null)}
+          onSave={() => { setEditingExchange(null); fetchTrip() }}
         />
       )}
 
@@ -1182,7 +1247,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                       {/* 網格背景線 */}
                       <line x1="15" y1="20" x2="345" y2="20" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
                       <line x1="15" y1="55" x2="345" y2="55" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
-                      <line x1="15" y1="90" x2="345" y2="90" stroke="rgba(255,255,255,0.05)" strokeDasharray="3,3" />
+                      <line x1="15" y1={chartZeroY} x2="345" y2={chartZeroY} stroke="rgba(255,255,255,0.12)" strokeDasharray="3,3" />
 
                       {/* 陰影填充區域 */}
                       {chartPoints.length > 0 && (
@@ -1206,17 +1271,17 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                         const showLabel = chartDays.length <= 10 || i % Math.ceil(chartDays.length / 8) === 0 || i === chartDays.length - 1
                         return (
                           <g key={i}>
-                            {/* 金額標籤 (僅大於 0 時顯示) */}
-                            {p.amount > 0 && (
+                            {/* 金額標籤 */}
+                            {p.amount !== 0 && (
                               <text
                                 x={p.x}
-                                y={p.y - 10}
+                                y={p.amount > 0 ? p.y - 10 : p.y + 15}
                                 textAnchor="middle"
                                 fontSize="11"
-                                fill="#38bdf8"
+                                fill={p.amount > 0 ? "#38bdf8" : "#22c55e"}
                                 fontWeight="700"
                               >
-                                {p.amount >= 1000 ? `${(p.amount / 1000).toFixed(1)}k` : p.amount}
+                                {Math.abs(p.amount) >= 1000 ? `${(p.amount / 1000).toFixed(1)}k` : p.amount}
                               </text>
                             )}
 
@@ -1224,9 +1289,9 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                             <circle
                               cx={p.x}
                               cy={p.y}
-                              r={p.amount > 0 ? "4" : "2"}
-                              fill={p.amount > 0 ? "#0ea5e9" : "var(--text-muted)"}
-                              stroke={p.amount > 0 ? "#fff" : "none"}
+                              r={p.amount !== 0 ? "4" : "2"}
+                              fill={p.amount > 0 ? "#0ea5e9" : p.amount < 0 ? "#22c55e" : "var(--text-muted)"}
+                              stroke={p.amount !== 0 ? "#fff" : "none"}
                               strokeWidth="1.5"
                             />
 
@@ -1367,18 +1432,27 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 }
 
 // === 換匯列表行 ===
-function ExchangeRow({ exchange, baseCurrency }: {
+function ExchangeRow({ exchange, baseCurrency, onEdit }: {
   exchange: ExchangeDisplayTransaction
   baseCurrency: string
+  onEdit?: () => void
 }) {
   const { t } = useLanguage()
   const isBuy = exchange.type === 'buy'
 
   return (
-    <div className="exchange-transaction-row" style={{
+    <button
+      type="button"
+      className="exchange-transaction-row"
+      onClick={onEdit}
+      disabled={!onEdit}
+      title={onEdit ? t('trip.exchange.edit') : undefined}
+      style={{
+      width: '100%', border: 'none', color: 'inherit', textAlign: 'left',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       gap: '0.75rem', padding: '0.75rem', borderRadius: 'var(--radius)',
       background: 'var(--bg-card-hover)',
+      cursor: onEdit ? 'pointer' : 'default', transition: 'all 0.2s',
     }}>
       <div className="exchange-transaction-main" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
         <span className="category-badge" style={{
@@ -1416,15 +1490,164 @@ function ExchangeRow({ exchange, baseCurrency }: {
           {t(isBuy ? 'trip.exchange.increase' : 'trip.exchange.decrease')}
         </div>
       </div>
+    </button>
+  )
+}
+
+// === 編輯換匯 Modal ===
+function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: {
+  exchange: ExchangeDisplayTransaction
+  tripId: string
+  baseCurrency: string
+  onClose: () => void
+  onSave: () => void
+}) {
+  const { t } = useLanguage()
+  const [form, setForm] = useState({
+    foreignAmount: String(exchange.foreignAmount),
+    baseAmount: String(exchange.baseAmount),
+    date: format(new Date(exchange.date), "yyyy-MM-dd'T'HH:mm"),
+    note: exchange.note || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const isBuy = exchange.type === 'buy'
+  const foreignAmount = Number(form.foreignAmount)
+  const baseAmount = Number(form.baseAmount)
+  const rate = foreignAmount > 0 && baseAmount > 0 ? baseAmount / foreignAmount : null
+  const valid = foreignAmount > 0 && baseAmount > 0 && Boolean(form.date)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!valid) return
+    setError('')
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/trips/${tripId}/cash-exchanges/${exchange.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          foreignAmount,
+          baseAmount,
+          date: new Date(form.date).toISOString(),
+          note: form.note || null,
+        }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) {
+        setError(data?.error || t('trip.exchange.edit.error'))
+        return
+      }
+      onSave()
+    } catch {
+      setError(t('trip.exchange.edit.error'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      onClick={() => { if (!saving) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 20000,
+        background: 'rgba(0, 0, 0, 0.5)',
+        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem',
+        animation: 'fadeIn 0.15s ease-out',
+      }}
+    >
+      <form
+        onSubmit={submit}
+        onClick={(event) => event.stopPropagation()}
+        className="glass-card trip-modal"
+        style={{
+          width: '100%', maxWidth: '420px', padding: '1.75rem',
+          maxHeight: '80vh', overflowY: 'auto', animation: 'fadeInDown 0.2s ease-out',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Pencil size={17} style={{ color: 'var(--color-primary)' }} />
+            {t('trip.exchange.edit')}
+          </h3>
+          <button type="button" className="btn-nav" onClick={onClose} disabled={saving} style={{ padding: '0.4rem' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{
+          padding: '0.7rem 0.8rem', marginBottom: '0.75rem', borderRadius: '10px',
+          background: 'var(--bg-card-hover)', color: 'var(--text-primary)',
+          fontSize: '0.86rem', fontWeight: 700,
+        }}>
+          {t(isBuy ? 'trip.exchange.buy' : 'trip.exchange.sell')} · {exchange.foreignCurrency}
+        </div>
+        <p style={{ margin: '0 0 1rem', color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5 }}>
+          {t('trip.exchange.edit.hint')}
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+            {t(isBuy ? 'trip.exchange.edit.basePaid' : 'trip.exchange.edit.baseReceived')} ({baseCurrency})
+            <input
+              className="input-field" type="number" min="0" step="any" required
+              value={form.baseAmount}
+              onChange={(event) => setForm((current) => ({ ...current, baseAmount: event.target.value }))}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
+            {t(isBuy ? 'trip.exchange.edit.foreignBought' : 'trip.exchange.edit.foreignSold')} ({exchange.foreignCurrency})
+            <input
+              className="input-field" type="number" min="0" step="any" required
+              value={form.foreignAmount}
+              onChange={(event) => setForm((current) => ({ ...current, foreignAmount: event.target.value }))}
+            />
+          </label>
+        </div>
+
+        {rate && (
+          <div style={{ marginBottom: '0.75rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+            1 {exchange.foreignCurrency} = {rate.toLocaleString(undefined, { maximumFractionDigits: 6 })} {baseCurrency}
+          </div>
+        )}
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+          {t('trip.exchange.edit.date')}
+          <input
+            className="input-field" type="datetime-local" required value={form.date}
+            onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '1rem' }}>
+          {t('trip.exchange.edit.note')}
+          <input
+            className="input-field" value={form.note}
+            onChange={(event) => setForm((current) => ({ ...current, note: event.target.value }))}
+          />
+        </label>
+
+        {error && <div role="alert" style={{ color: 'var(--color-danger)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>{error}</div>}
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button type="button" className="btn-nav" onClick={onClose} disabled={saving} style={{ padding: '0.65rem 0.9rem' }}>
+            {t('settings.delete.cancel')}
+          </button>
+          <button type="submit" className="btn-primary" disabled={saving || !valid} style={{ flex: 1, justifyContent: 'center', padding: '0.65rem' }}>
+            {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <><Check size={16} />{t('trip.exchange.edit.save')}</>}
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
 
 // === 花費列表行 ===
-function ExpenseRow({ expense, currency, onEdit }: {
+function ExpenseRow({ expense, currency, onEdit, onReconcile }: {
   expense: ExpenseOrDepositDisplayTransaction
   currency: string
   onEdit?: () => void
+  onReconcile?: () => void
 }) {
   const { t } = useLanguage()
   const isIncome = expense.isIncome
@@ -1434,9 +1657,21 @@ function ExpenseRow({ expense, currency, onEdit }: {
 
   // 使用實際幣種而非行程預設幣種
   const displayCurrency = expense.currency || currency
+  const isReconciled = !isIncome && Boolean(expense.reconciledAt)
+  const finalBaseAmount = !isIncome && expense.paymentMethod === 'card' && isReconciled
+    ? expense.settledAmount
+    : undefined
   return (
     <div
       onClick={onEdit}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && onEdit && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault()
+          onEdit()
+        }
+      }}
+      role={onEdit ? 'button' : undefined}
+      tabIndex={onEdit ? 0 : undefined}
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0.75rem',
@@ -1476,10 +1711,34 @@ function ExpenseRow({ expense, currency, onEdit }: {
           }}>
             {isIncome ? '+' : ''}{getCurrencySymbol(displayCurrency)}{expense.amount.toLocaleString()}
           </span>
-          {expense.convertedAmount && expense.currency !== currency && (
+          {(finalBaseAmount || expense.convertedAmount) && expense.currency !== currency && (
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '1px' }}>
-              ≈ {getCurrencySymbol(currency)}{expense.convertedAmount.toLocaleString()}
+              {finalBaseAmount ? '=' : '≈'} {getCurrencySymbol(currency)}
+              {(finalBaseAmount || expense.convertedAmount || 0).toLocaleString()}
             </div>
+          )}
+          {!isIncome && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onReconcile?.()
+              }}
+              disabled={!onReconcile}
+              aria-pressed={isReconciled}
+              style={{
+                marginTop: '0.28rem', padding: '0.14rem 0.42rem', borderRadius: '9999px',
+                border: isReconciled
+                  ? '1px solid rgba(34, 197, 94, 0.55)'
+                  : '1px solid rgba(245, 158, 11, 0.5)',
+                background: isReconciled ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.1)',
+                color: isReconciled ? '#22c55e' : '#f59e0b',
+                fontSize: '0.7rem', fontWeight: 800,
+                cursor: onReconcile ? 'pointer' : 'default', opacity: 1,
+              }}
+            >
+              {isReconciled ? `✓ ${t('expense.reconcile.confirmed')}` : t('expense.reconcile.pending')}
+            </button>
           )}
       </div>
     </div>
@@ -2187,10 +2446,11 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
 }
 
 // === 花費詳情 / 編輯 Modal ===
-function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWallets, onClose, onSave }: {
+function EditExpenseModal({ expense, tripId, defaultCurrency, baseCurrency, countries, cashWallets, onClose, onSave }: {
   expense: TripData['expenses'][0]
   tripId: string
   defaultCurrency: string
+  baseCurrency: string
   countries: string[]
   cashWallets: CashWalletData[]
   onClose: () => void
@@ -2203,6 +2463,8 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
     amount: String(expense.amount),
     currency: expense.currency,
     paymentMethod: expense.paymentMethod,
+    settledAmount: String(expense.settledAmount ?? expense.convertedAmount ?? ''),
+    reconciled: Boolean(expense.reconciledAt),
     note: expense.note || '',
     date: format(new Date(expense.date), "yyyy-MM-dd'T'HH:mm"),
   })
@@ -2275,6 +2537,11 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
           amount: parseFloat(form.amount),
           currency: form.currency,
           paymentMethod: form.paymentMethod,
+          settledAmount:
+            form.reconciled && form.paymentMethod === 'card' && form.currency !== baseCurrency
+              ? parseFloat(form.settledAmount)
+              : undefined,
+          reconciled: form.reconciled,
           note: form.note || null,
           images: editImages,
           date: new Date(form.date).toISOString(),
@@ -2312,6 +2579,7 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
   const chipCurrencies = [...tripCurrencies]
   if (!chipCurrencies.includes('TWD')) chipCurrencies.push('TWD')
   if (!chipCurrencies.includes(defaultCurrency)) chipCurrencies.push(defaultCurrency)
+  if (!chipCurrencies.includes(baseCurrency)) chipCurrencies.push(baseCurrency)
   const spendableCashCurrencies = cashWallets
     .filter(wallet => wallet.balance > 0.000001)
     .map(wallet => wallet.currency)
@@ -2319,6 +2587,12 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
     spendableCashCurrencies.push(expense.currency)
   }
   const editCurrencyOptions = form.paymentMethod === 'cash' ? spendableCashCurrencies : chipCurrencies
+  const needsSettledAmount = form.paymentMethod === 'card' && form.currency !== baseCurrency
+  const parsedSettledAmount = Number(form.settledAmount)
+  const reconciliationIsValid = !form.reconciled || !needsSettledAmount || parsedSettledAmount > 0
+  const finalRate = needsSettledAmount && parsedSettledAmount > 0 && Number(form.amount) > 0
+    ? parsedSettledAmount / Number(form.amount)
+    : null
 
   const isBusy = saving || deleting
 
@@ -2407,12 +2681,26 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
               >
                 {getCurrencySymbol(expense.currency)}{expense.amount.toLocaleString()}
               </div>
-              {expense.convertedAmount && expense.currency !== defaultCurrency && (
+              {expense.convertedAmount && expense.currency !== baseCurrency && (
                 <div style={{
                   fontSize: '0.8rem', color: 'var(--text-muted)',
+                  marginBottom: expense.reconciledAt && expense.settledAmount ? '0.25rem' : '1rem',
+                }}>
+                  ≈ {getCurrencySymbol(baseCurrency)}{expense.convertedAmount.toLocaleString()}
+                </div>
+              )}
+              {expense.reconciledAt && expense.settledAmount && expense.currency !== baseCurrency && (
+                <div style={{
+                  fontSize: '0.85rem', color: '#22c55e', fontWeight: 700,
                   marginBottom: '1rem',
                 }}>
-                  ≈ {getCurrencySymbol(defaultCurrency)}{expense.convertedAmount.toLocaleString()}
+                  ✓ {t('expense.reconcile.actualCharge', { currency: baseCurrency })}：
+                  {getCurrencySymbol(baseCurrency)}{expense.settledAmount.toLocaleString()}
+                  {' · '}{t('expense.reconcile.finalRate', {
+                    foreign: expense.currency,
+                    base: baseCurrency,
+                    rate: (expense.settledAmount / expense.amount).toLocaleString(undefined, { maximumFractionDigits: 6 }),
+                  })}
                 </div>
               )}
 
@@ -2445,6 +2733,24 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                     {expense.paymentMethod === 'cash' ? t('form.payment.cash') : t('form.payment.card')}
                   </span>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setMode('edit')}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    width: '100%', padding: '0.5rem 0.6rem', margin: '0.1rem 0',
+                    borderRadius: '8px', cursor: 'pointer',
+                    border: expense.reconciledAt
+                      ? '1px solid rgba(34, 197, 94, 0.45)'
+                      : '1px solid rgba(245, 158, 11, 0.45)',
+                    background: expense.reconciledAt ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.08)',
+                    color: expense.reconciledAt ? '#22c55e' : '#f59e0b',
+                    fontSize: '0.8rem', fontWeight: 800,
+                  }}
+                >
+                  <span>{t('expense.reconcile.status')}</span>
+                  <span>{expense.reconciledAt ? `✓ ${t('expense.reconcile.confirmed')}` : t('expense.reconcile.pending')}</span>
+                </button>
                 {expense.note && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{t('expense.detail.note')}</span>
@@ -2537,7 +2843,9 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <button type="button" onClick={() => setForm({ ...form, paymentMethod: 'card' })} style={{
+                <button type="button" onClick={() => setForm({
+                  ...form, paymentMethod: 'card', reconciled: false, settledAmount: '',
+                })} style={{
                   padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700,
                   border: form.paymentMethod === 'card' ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
                   background: form.paymentMethod === 'card' ? 'rgba(14,165,233,0.12)' : 'transparent',
@@ -2545,7 +2853,9 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                 }}>{t('form.payment.card')}</button>
                 <button type="button" disabled={spendableCashCurrencies.length === 0} onClick={() => {
                   const currency = spendableCashCurrencies.includes(form.currency) ? form.currency : spendableCashCurrencies[0]
-                  if (currency) setForm({ ...form, paymentMethod: 'cash', currency })
+                  if (currency) setForm({
+                    ...form, paymentMethod: 'cash', currency, reconciled: false, settledAmount: '',
+                  })
                 }} style={{
                   padding: '0.5rem', borderRadius: '8px', fontWeight: 700,
                   cursor: spendableCashCurrencies.length ? 'pointer' : 'not-allowed',
@@ -2568,7 +2878,9 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                   type="number"
                   className="input-field"
                   value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  onChange={(e) => setForm({
+                    ...form, amount: e.target.value, reconciled: false, settledAmount: '',
+                  })}
                   placeholder="金額"
                   style={{ fontWeight: 700, textAlign: 'right' }}
                 />
@@ -2580,7 +2892,9 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                   <button
                     key={cur}
                     type="button"
-                    onClick={() => setForm({ ...form, currency: cur })}
+                    onClick={() => setForm({
+                      ...form, currency: cur, reconciled: false, settledAmount: '',
+                    })}
                     style={{
                       padding: '0.3rem 0.625rem', borderRadius: '9999px',
                       border: form.currency === cur
@@ -2597,6 +2911,66 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                     {getCurrencyChipLabel(cur, cleanCountries, locale)}
                   </button>
                 ))}
+              </div>
+
+              {/* 信用卡帳單／交易核對 */}
+              <div style={{
+                marginBottom: '0.75rem', padding: '0.8rem', borderRadius: '10px',
+                border: form.reconciled
+                  ? '1px solid rgba(34, 197, 94, 0.45)'
+                  : '1px solid var(--border-color)',
+                background: form.reconciled ? 'rgba(34, 197, 94, 0.08)' : 'var(--bg-card-hover)',
+              }}>
+                {needsSettledAmount && (
+                  <>
+                    <label style={{
+                      display: 'flex', flexDirection: 'column', gap: '0.3rem',
+                      color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.45rem',
+                    }}>
+                      {t('expense.reconcile.actualCharge', { currency: baseCurrency })}
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        className="input-field"
+                        value={form.settledAmount}
+                        onChange={(event) => setForm({ ...form, settledAmount: event.target.value })}
+                        placeholder={getCurrencySymbol(baseCurrency)}
+                        style={{ fontWeight: 700, textAlign: 'right' }}
+                      />
+                    </label>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', lineHeight: 1.45, marginBottom: '0.55rem' }}>
+                      {t('expense.reconcile.actualCharge.hint')}
+                    </div>
+                    {finalRate && (
+                      <div style={{ color: 'var(--color-primary-text)', fontSize: '0.78rem', fontWeight: 700, marginBottom: '0.55rem' }}>
+                        {t('expense.reconcile.finalRate', {
+                          foreign: form.currency,
+                          base: baseCurrency,
+                          rate: finalRate.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+                        })}
+                      </div>
+                    )}
+                  </>
+                )}
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: '0.55rem',
+                  color: form.reconciled ? '#22c55e' : 'var(--text-primary)',
+                  fontSize: '0.82rem', fontWeight: 800, cursor: 'pointer',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={form.reconciled}
+                    onChange={(event) => setForm({ ...form, reconciled: event.target.checked })}
+                    style={{ width: 18, height: 18, accentColor: '#22c55e' }}
+                  />
+                  {t(form.paymentMethod === 'cash' ? 'expense.reconcile.switch.cash' : 'expense.reconcile.switch')}
+                </label>
+                {form.reconciled && !reconciliationIsValid && (
+                  <div role="alert" style={{ color: '#f59e0b', fontSize: '0.75rem', marginTop: '0.45rem' }}>
+                    {t('expense.reconcile.actualCharge.hint')}
+                  </div>
+                )}
               </div>
 
               {/* 備註 */}
@@ -2711,11 +3085,11 @@ function EditExpenseModal({ expense, tripId, defaultCurrency, countries, cashWal
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving || deleting || compressing || !form.item || !form.amount}
+                  disabled={saving || deleting || compressing || !form.item || !form.amount || !reconciliationIsValid}
                   className="btn-primary"
                   style={{
                     flex: 1, justifyContent: 'center', padding: '0.625rem',
-                    opacity: (saving || compressing) ? 0.7 : 1,
+                    opacity: (saving || compressing || !reconciliationIsValid) ? 0.7 : 1,
                   }}
                 >
                   {saving ? (

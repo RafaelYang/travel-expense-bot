@@ -114,24 +114,26 @@ model TripMember {
 
 // 花費記錄
 model Expense {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
   tripId          String
-  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  trip            Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
   userId          String // 記帳人
-  user            User     @relation(fields: [userId], references: [id])
+  user            User      @relation(fields: [userId], references: [id])
   category        String // food, transport, accommodation, shopping, ticket, other
   item            String // 項目名稱
   amount          Float // 原始金額
   currency        String // 原始幣種
   convertedAmount Float? // 換算後金額（基準幣種）
   exchangeRate    Float? // 當時匯率
-  date            DateTime @default(now()) // 花費日期
+  date            DateTime  @default(now()) // 花費日期
   note            String? // 備註
-  images          Json     @default("[]") // 圖片 data URL 陣列，最多 3 張
-  source          String   @default("web") // web, line
-  paymentMethod   String   @default("card") // card, cash
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  images          Json      @default("[]") // 圖片 data URL 陣列，最多 3 張
+  source          String    @default("web") // web, line
+  paymentMethod   String    @default("card") // card, cash
+  settledAmount   Float? // 信用卡帳單的最終基準幣扣款（保留原 convertedAmount 估算）
+  reconciledAt    DateTime? // 已與真實帳單／扣款記錄核對的時間
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([tripId, date])
   @@index([userId])

@@ -18,8 +18,12 @@ export interface TripVersionInput {
   cashExchanges?: {
     id: string
     type: string
+    foreignCurrency: string
     foreignAmount: number
     baseAmount: number
+    exchangeRate: number
+    date: Date | string
+    note: string | null
     createdAt: Date | string
   }[]
 }

@@ -76,6 +76,7 @@ export async function GET(
     missingConversionCount: expenseSummary.missingConversionCount,
     foreignCurrencyDepositCount: depositSummary.foreignCurrencyCount,
     userRole: member.role,
+    currentUserId: session.user.id,
     realtimeVersion: createTripVersion({
       updatedAt: trip.updatedAt,
       expenses: trip.expenses.map((expense) => ({
@@ -97,8 +98,12 @@ export async function GET(
       cashExchanges: trip.cashExchanges.map((exchange) => ({
         id: exchange.id,
         type: exchange.type,
+        foreignCurrency: exchange.foreignCurrency,
         foreignAmount: exchange.foreignAmount,
         baseAmount: exchange.baseAmount,
+        exchangeRate: exchange.exchangeRate,
+        date: exchange.date,
+        note: exchange.note,
         createdAt: exchange.createdAt,
       })),
     }),

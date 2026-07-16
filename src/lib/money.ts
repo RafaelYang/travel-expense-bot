@@ -2,6 +2,8 @@ export interface ExpenseAmount {
   amount: number
   currency: string
   convertedAmount?: number | null
+  settledAmount?: number | null
+  reconciledAt?: Date | string | null
   paymentMethod?: string | null
 }
 
@@ -19,7 +21,19 @@ export function getExpenseBaseAmount(
   expense: ExpenseAmount,
   baseCurrency: string,
 ): number | null {
-  if (expense.currency.toUpperCase() === baseCurrency.toUpperCase()) {
+  const isForeignCurrency =
+    expense.currency.toUpperCase() !== baseCurrency.toUpperCase()
+  if (
+    isForeignCurrency &&
+    expense.paymentMethod === "card" &&
+    expense.reconciledAt &&
+    typeof expense.settledAmount === "number" &&
+    Number.isFinite(expense.settledAmount)
+  ) {
+    return expense.settledAmount
+  }
+
+  if (!isForeignCurrency) {
     return expense.amount
   }
 

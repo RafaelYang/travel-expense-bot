@@ -34,3 +34,21 @@ the dry run reports a verified rollback, use
 `node scripts/cash-wallet-migration.mjs --apply` to apply and verify the
 expand-only schema change. The runner reads `DIRECT_URL` first and falls back to
 `DATABASE_URL`; it never prints either value.
+
+## Expense reconciliation
+
+`20260716_expense_reconciliation.sql` is an expand-only change that adds the
+nullable `Expense.settledAmount` and `Expense.reconciledAt` columns. The original
+`convertedAmount` and `exchangeRate` remain the booking-time estimate; a final
+foreign-card charge is used in totals only while the expense is reconciled.
+
+Before deploying application code that reads these columns, back up the target
+database and run `node scripts/expense-reconciliation-migration.mjs`. After the
+transactional dry run reports a verified rollback, run
+`node scripts/expense-reconciliation-migration.mjs --apply` and confirm the
+post-migration verification passes. The runner reads `DIRECT_URL` first and
+falls back to `DATABASE_URL` without printing either value.
+
+The paired rollback drops both the final-charge amount and reconciliation
+timestamps. It is destructive after users have started reconciling expenses and
+must not be used once that data needs to be retained.

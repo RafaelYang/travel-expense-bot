@@ -17,6 +17,45 @@ test("expense totals never treat a missing foreign exchange rate as 1:1", () => 
   assert.deepEqual(result, { total: 320, missingConversionCount: 1 })
 })
 
+test("a reconciled foreign card expense uses its final settled amount", () => {
+  const result = summarizeExpenses([{
+    amount: 100,
+    currency: "USD",
+    convertedAmount: 3_100,
+    settledAmount: 3_180,
+    reconciledAt: "2026-07-16T00:00:00.000Z",
+    paymentMethod: "card",
+  }], "TWD")
+
+  assert.deepEqual(result, { total: 3_180, missingConversionCount: 0 })
+})
+
+test("an unreconciled expense keeps using its estimate without deleting the settlement", () => {
+  const result = summarizeExpenses([{
+    amount: 100,
+    currency: "USD",
+    convertedAmount: 3_100,
+    settledAmount: 3_180,
+    reconciledAt: null,
+    paymentMethod: "card",
+  }], "TWD")
+
+  assert.deepEqual(result, { total: 3_100, missingConversionCount: 0 })
+})
+
+test("cash expenses never use a stored card settlement", () => {
+  const result = summarizeExpenses([{
+    amount: 100,
+    currency: "USD",
+    convertedAmount: 3_100,
+    settledAmount: 3_180,
+    reconciledAt: "2026-07-16T00:00:00.000Z",
+    paymentMethod: "cash",
+  }], "TWD")
+
+  assert.deepEqual(result, { total: 3_100, missingConversionCount: 0 })
+})
+
 test("deposit totals only include values already denominated in the base currency", () => {
   const result = summarizeDeposits([
     { amount: 500, currency: "TWD" },

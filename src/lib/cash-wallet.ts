@@ -1,6 +1,10 @@
 import "server-only"
 
 import type { Prisma } from "@prisma/client"
+import {
+  getCashExchangeWalletDelta,
+  type CashExchangeType,
+} from "@/lib/cash-exchange"
 
 export class InsufficientCashBalanceError extends Error {
   constructor() {
@@ -94,4 +98,42 @@ export async function replaceCashExpenseReservation(
   if (next.paymentMethod === "cash") {
     await debitCashWallet(tx, next)
   }
+}
+
+interface CashExchangeState {
+  tripId: string
+  userId: string
+  type: CashExchangeType
+  foreignCurrency: string
+  foreignAmount: number
+}
+
+/**
+ * 換匯編輯只能調整原本幣別與類型的金額。這個差額必須與
+ * CashExchange 更新包在同一個 Prisma transaction 內，否則錢包可能與流水失步。
+ */
+export async function replaceCashExchangeReservation(
+  tx: Prisma.TransactionClient,
+  previous: CashExchangeState,
+  nextForeignAmount: number,
+) {
+  const delta = getCashExchangeWalletDelta(
+    previous.type,
+    previous.foreignAmount,
+    nextForeignAmount,
+  )
+  const walletInput = {
+    tripId: previous.tripId,
+    userId: previous.userId,
+    currency: previous.foreignCurrency,
+    amount: Math.abs(delta),
+  }
+
+  if (delta > 0) {
+    return creditCashWallet(tx, walletInput)
+  }
+  if (delta < 0) {
+    return debitCashWallet(tx, walletInput)
+  }
+  return null
 }

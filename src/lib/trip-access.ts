@@ -38,6 +38,24 @@ export async function findEditableDeposit(
 }
 
 /**
+ * 外幣現金錢包是每位成員獨立的，因此換匯流水只能由原建立者編輯。
+ */
+export async function findEditableCashExchange(
+  userId: string,
+  tripId: string,
+  exchangeId: string,
+) {
+  return prisma.cashExchange.findFirst({
+    where: {
+      id: exchangeId,
+      tripId,
+      userId,
+      trip: { members: writableMemberFilter(userId) },
+    },
+  })
+}
+
+/**
  * LINE 的編輯按鈕只會列出發送者自己的花費。再次在資料層綁定
  * userId + expenseId + writable trip membership，避免 postback 被重放後
  * 修改其他使用者或已退出行程的資料。

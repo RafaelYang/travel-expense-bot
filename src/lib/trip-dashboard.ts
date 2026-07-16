@@ -60,6 +60,8 @@ export async function getTripDashboard(userId: string): Promise<DashboardTrip[]>
           amount: true,
           currency: true,
           convertedAmount: true,
+          settledAmount: true,
+          reconciledAt: true,
           paymentMethod: true,
         },
       })

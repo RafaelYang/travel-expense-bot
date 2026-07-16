@@ -25,8 +25,12 @@ const base = {
     {
       id: "exchange-a",
       type: "buy",
+      foreignCurrency: "JPY",
       foreignAmount: 30_000,
       baseAmount: 6_200,
+      exchangeRate: 6_200 / 30_000,
+      date: "2026-07-14T00:00:06.000Z",
+      note: "airport",
       createdAt: "2026-07-14T00:00:06.000Z",
     },
   ],
@@ -55,6 +59,27 @@ test("trip version changes when a transaction changes", () => {
   const changed = {
     ...base,
     deposits: [{ ...base.deposits[0], amount: 200 }],
+  }
+
+  assert.notEqual(createTripVersion(base), createTripVersion(changed))
+})
+
+test("trip version changes when a cash exchange date changes", () => {
+  const changed = {
+    ...base,
+    cashExchanges: [{
+      ...base.cashExchanges[0],
+      date: "2026-07-15T00:00:06.000Z",
+    }],
+  }
+
+  assert.notEqual(createTripVersion(base), createTripVersion(changed))
+})
+
+test("trip version changes when a cash exchange note changes", () => {
+  const changed = {
+    ...base,
+    cashExchanges: [{ ...base.cashExchanges[0], note: "hotel" }],
   }
 
   assert.notEqual(createTripVersion(base), createTripVersion(changed))

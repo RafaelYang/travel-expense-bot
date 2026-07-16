@@ -47,8 +47,12 @@ export async function GET(
         select: {
           id: true,
           type: true,
+          foreignCurrency: true,
           foreignAmount: true,
           baseAmount: true,
+          exchangeRate: true,
+          date: true,
+          note: true,
           createdAt: true,
         },
         orderBy: { id: "asc" },

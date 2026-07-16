@@ -2427,6 +2427,8 @@ async function handleUpdateField(
             currency: normalizedCurrency,
             convertedAmount,
             exchangeRate,
+            settledAmount: null,
+            reconciledAt: null,
           },
         })
       })
@@ -2611,6 +2613,8 @@ async function handleDirectTextUpdate(
             amount: newAmount,
             convertedAmount,
             exchangeRate,
+            settledAmount: null,
+            reconciledAt: null,
           },
           include: { trip: true }
         })

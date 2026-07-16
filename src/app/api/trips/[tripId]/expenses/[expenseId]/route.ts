@@ -25,6 +25,8 @@ const updateSchema = z.object({
   amount: z.number().positive().optional(),
   currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
   paymentMethod: z.enum(["card", "cash"]).optional(),
+  settledAmount: z.number().positive().finite().nullable().optional(),
+  reconciled: z.boolean().optional(),
   note: z.string().optional().nullable(),
   images: z.array(imageInputSchema).max(3).optional(),
   date: z.string().optional(),
@@ -52,7 +54,12 @@ export async function PATCH(
     const data = updateSchema.parse(body)
 
     // 如果金額或幣種改變，重新計算匯率
-    const { images, ...fields } = data
+    const {
+      images,
+      reconciled,
+      settledAmount,
+      ...fields
+    } = data
     const updateData: Record<string, unknown> = { ...fields }
 
     if (images) {
@@ -70,20 +77,56 @@ export async function PATCH(
     const newAmount = data.amount ?? existing.amount
     const newCurrency = data.currency ?? existing.currency
     const newPaymentMethod = data.paymentMethod ?? existing.paymentMethod
+    const estimateFieldsChanged =
+      (data.amount !== undefined && data.amount !== existing.amount) ||
+      (data.currency !== undefined && data.currency !== existing.currency) ||
+      (data.paymentMethod !== undefined && data.paymentMethod !== existing.paymentMethod)
+    const settlementChanged =
+      settledAmount !== undefined && settledAmount !== existing.settledAmount
+    const needsBaseCurrency =
+      estimateFieldsChanged || settledAmount !== undefined || reconciled === true
+    let baseCurrency: string | undefined
 
-    if (
-      data.amount !== undefined ||
-      data.currency !== undefined ||
-      data.paymentMethod !== undefined
-    ) {
+    if (needsBaseCurrency) {
       // 查詢行程基準幣種
       const trip = await prisma.trip.findUnique({
         where: { id: tripId },
         select: { baseCurrency: true },
       })
-      const baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
+      baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
+    }
 
-      if (newPaymentMethod === "cash" && newCurrency !== baseCurrency) {
+    const isForeignCard =
+      baseCurrency !== undefined &&
+      newPaymentMethod === "card" &&
+      newCurrency !== baseCurrency
+    if (settledAmount !== undefined && settledAmount !== null && !isForeignCard) {
+      return NextResponse.json(
+        { error: "只有外幣信用卡消費可以輸入實際扣款金額" },
+        { status: 400 },
+      )
+    }
+
+    if (reconciled === true && isForeignCard) {
+      const effectiveSettledAmount = settledAmount === undefined
+        ? existing.settledAmount
+        : settledAmount
+      if (
+        typeof effectiveSettledAmount !== "number" ||
+        !Number.isFinite(effectiveSettledAmount) ||
+        effectiveSettledAmount <= 0 ||
+        (estimateFieldsChanged && typeof settledAmount !== "number")
+      ) {
+        return NextResponse.json(
+          { error: "核對外幣信用卡消費時，請輸入最終的實際扣款金額" },
+          { status: 400 },
+        )
+      }
+    }
+
+    if (estimateFieldsChanged) {
+      const calculationBaseCurrency = baseCurrency ?? "TWD"
+      if (newPaymentMethod === "cash" && newCurrency !== calculationBaseCurrency) {
         const latestBuy = await prisma.cashExchange.findFirst({
           where: {
             tripId,
@@ -98,8 +141,12 @@ export async function PATCH(
         updateData.convertedAmount = latestBuy
           ? newAmount * latestBuy.exchangeRate
           : null
-      } else if (newCurrency !== baseCurrency) {
-        const conversion = await convertExpenseAmount(newAmount, newCurrency, baseCurrency)
+      } else if (newCurrency !== calculationBaseCurrency) {
+        const conversion = await convertExpenseAmount(
+          newAmount,
+          newCurrency,
+          calculationBaseCurrency,
+        )
         if (conversion) {
           updateData.convertedAmount = conversion.convertedAmount
           updateData.exchangeRate = conversion.exchangeRate
@@ -112,6 +159,24 @@ export async function PATCH(
       } else {
         updateData.convertedAmount = newAmount
         updateData.exchangeRate = 1
+      }
+    }
+
+    if (estimateFieldsChanged) {
+      // 原始金額資料變更後，舊核對與最終扣款都失效。
+      // 只有同一個 PATCH 明確重新核對才能留下新的最終扣款。
+      updateData.reconciledAt = reconciled === true ? new Date() : null
+      updateData.settledAmount = reconciled === true && isForeignCard
+        ? settledAmount
+        : null
+    } else {
+      if (settledAmount !== undefined) {
+        updateData.settledAmount = settledAmount
+      }
+      if (reconciled !== undefined) {
+        updateData.reconciledAt = reconciled ? new Date() : null
+      } else if (settlementChanged) {
+        updateData.reconciledAt = null
       }
     }
 
