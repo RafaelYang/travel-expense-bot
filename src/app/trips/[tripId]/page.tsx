@@ -108,6 +108,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
       })),
     }),
     totalSpent: expenseSummary.total,
+    exchangeNet: expenseSummary.exchangeNet,
     totalDeposits: depositSummary.total,
     missingConversionCount: expenseSummary.missingConversionCount,
     foreignCurrencyDepositCount: depositSummary.foreignCurrencyCount,
