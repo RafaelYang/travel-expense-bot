@@ -13,6 +13,25 @@ export function isUsableRate(rate: unknown): rate is number {
   return typeof rate === "number" && Number.isFinite(rate) && rate > 0
 }
 
+/**
+ * Keep the headline quote compact without changing the raw rate used by the
+ * calculator or the higher-precision trend labels.
+ */
+export function formatHeadlineRate(rate: number, locale: string): string {
+  if (!isUsableRate(rate)) return "—"
+
+  const maximumFractionDigits = rate >= 10
+    ? 2
+    : rate >= 0.01
+      ? 4
+      : 6
+
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(rate)
+}
+
 export function calculateReferenceConversion(amount: number, rate: number): number | null {
   if (!Number.isFinite(amount) || amount < 0 || !isUsableRate(rate)) return null
   const converted = amount * rate

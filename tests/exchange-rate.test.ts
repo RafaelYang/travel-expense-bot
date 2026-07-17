@@ -8,6 +8,7 @@ import {
 } from "../src/lib/exchange-rate.ts"
 import {
   calculateReferenceConversion,
+  formatHeadlineRate,
   invertRatePoints,
   summarizeRateTrend,
 } from "../src/lib/exchange-rate-view.ts"
@@ -81,4 +82,11 @@ test("calculator and reversed trend reuse the same raw quote", () => {
   assert.ok(Math.abs(trend.changePercent - 5) < 1e-12)
   assert.equal(trend.minimum, 34)
   assert.equal(trend.maximum, 35.7)
+})
+
+test("headline rates stay compact without discarding useful small-rate precision", () => {
+  assert.equal(formatHeadlineRate(36.9514, "en-US"), "36.95")
+  assert.equal(formatHeadlineRate(9.87654, "en-US"), "9.8765")
+  assert.equal(formatHeadlineRate(0.027063, "en-US"), "0.0271")
+  assert.equal(formatHeadlineRate(0.000038, "en-US"), "0.000038")
 })

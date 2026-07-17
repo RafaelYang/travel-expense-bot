@@ -17,6 +17,7 @@ import { ALL_CURRENCIES } from "@/lib/countries"
 import { getCurrencySymbol } from "@/lib/utils"
 import {
   calculateReferenceConversion,
+  formatHeadlineRate,
   invertRatePoints,
   isUsableRate,
   summarizeRateTrend,
@@ -350,8 +351,10 @@ export function ExchangeRateCard({
               <div className="exchange-rate-eyebrow">{t("trip.rate.latest")}</div>
               <div className="exchange-rate-main-quote">
                 <span>1 {data.base}</span>
-                <strong>≈ {getCurrencySymbol(data.target)}{formatRate(data.rate, locale)}</strong>
-                <span>{data.target}</span>
+                <strong className="exchange-rate-main-quote-value">
+                  ≈ {getCurrencySymbol(data.target)}{formatHeadlineRate(data.rate, locale)}
+                  <span>{data.target}</span>
+                </strong>
               </div>
               <div className="exchange-rate-meta">
                 {quoteTime && <span>{t("trip.rate.quotedAt", { time: quoteTime })}</span>}
@@ -391,7 +394,12 @@ export function ExchangeRateCard({
                   <strong>
                     {convertedAmount === null
                       ? "—"
-                      : `${getCurrencySymbol(data.target)}${formatAmount(convertedAmount, data.target, locale)} ${data.target}`}
+                      : (
+                        <>
+                          <span>{`${getCurrencySymbol(data.target)}${formatAmount(convertedAmount, data.target, locale)}`}</span>
+                          <span className="exchange-rate-calculator-code">{data.target}</span>
+                        </>
+                      )}
                   </strong>
                   {convertedAmount !== null && (
                     <small>{`${formatAmount(numericAmount, data.base, locale)} × ${formatRate(data.rate, locale)}`}</small>
