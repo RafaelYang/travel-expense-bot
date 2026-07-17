@@ -30,6 +30,26 @@ export const translations: Record<Locale, Record<string, string>> = {
     'menu.lineLink.activeTrip': '預設：{tripName}',
     'menu.lineLink.notLinked': '連結 LINE 帳號',
 
+    // 安裝應用程式
+    'install.title': '安裝小銘子記帳',
+    'install.subtitle': '加入主畫面或桌面，之後一點就能開啟',
+    'install.action': '安裝應用程式',
+    'install.installing': '準備安裝…',
+    'install.instructions': '查看安裝方式',
+    'install.dismiss': '暫時關閉安裝提示',
+    'install.close': '關閉安裝說明',
+    'install.done': '知道了',
+    'install.ios.title': '加入 iPhone／iPad 主畫面',
+    'install.ios.step1': '點選瀏覽器的「分享」按鈕。',
+    'install.ios.step2': '選擇「加入主畫面」。',
+    'install.ios.step3': '確認以 Web App 開啟，接著點「加入」。',
+    'install.mac.title': '加入 Mac Dock',
+    'install.mac.step1': '在 Safari 選單選擇「檔案」。',
+    'install.mac.step2': '點選「加入 Dock」並確認。',
+    'install.desktop.title': '安裝到電腦',
+    'install.desktop.step1': '開啟 Chrome 或 Edge 的瀏覽器選單。',
+    'install.desktop.step2': '選擇「安裝應用程式」或「將此網站安裝為應用程式」。',
+
     // 首頁
     'home.greeting': '哈囉，{name} 👋',
     'home.subtitle': '準備好記錄下一趟旅程了嗎？',
@@ -365,6 +385,26 @@ export const translations: Record<Locale, Record<string, string>> = {
     'menu.lineLink.linked': 'LINE Linked',
     'menu.lineLink.activeTrip': 'Default: {tripName}',
     'menu.lineLink.notLinked': 'Link LINE Account',
+
+    // App installation
+    'install.title': 'Install Travel Expense',
+    'install.subtitle': 'Add it to your home screen or desktop for one-tap access',
+    'install.action': 'Install App',
+    'install.installing': 'Preparing…',
+    'install.instructions': 'View Instructions',
+    'install.dismiss': 'Dismiss install prompt for now',
+    'install.close': 'Close installation instructions',
+    'install.done': 'Got it',
+    'install.ios.title': 'Add to iPhone or iPad',
+    'install.ios.step1': 'Tap the browser Share button.',
+    'install.ios.step2': 'Choose Add to Home Screen.',
+    'install.ios.step3': 'Keep Open as Web App enabled, then tap Add.',
+    'install.mac.title': 'Add to the Mac Dock',
+    'install.mac.step1': 'Open the File menu in Safari.',
+    'install.mac.step2': 'Choose Add to Dock and confirm.',
+    'install.desktop.title': 'Install on this computer',
+    'install.desktop.step1': 'Open the Chrome or Edge browser menu.',
+    'install.desktop.step2': 'Choose Install app or Install this site as an app.',
 
     // 首頁
     'home.greeting': 'Hello, {name} 👋',
