@@ -401,9 +401,6 @@ export function ExchangeRateCard({
                         </>
                       )}
                   </strong>
-                  {convertedAmount !== null && (
-                    <small>{`${formatAmount(numericAmount, data.base, locale)} × ${formatRate(data.rate, locale)}`}</small>
-                  )}
                 </div>
               </div>
             </div>

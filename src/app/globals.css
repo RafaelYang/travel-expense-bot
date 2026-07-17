@@ -811,8 +811,7 @@ a:hover .trip-card-bg {
   container-type: inline-size;
 }
 
-.exchange-rate-calculator-result > span,
-.exchange-rate-calculator-result > small {
+.exchange-rate-calculator-result > span {
   color: var(--text-secondary);
   font-size: 0.69rem;
 }
