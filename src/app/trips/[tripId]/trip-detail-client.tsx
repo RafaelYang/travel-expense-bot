@@ -34,6 +34,7 @@ import {
 import { BatchReconcileModal } from "@/components/batch-reconcile-modal"
 import { TripStatsModal } from "@/components/trip-stats-modal"
 import { ExchangeRateCard } from "@/components/exchange-rate-card"
+import { ModalScrollLock } from "@/components/modal-scroll-lock"
 
 export interface TripData {
   id: string
@@ -913,27 +914,28 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
       {/* 分享邀請 Modal */}
       {showShareModal && (
-        <div
-          onClick={() => setShowShareModal(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 20000,
-            background: 'rgba(0, 0, 0, 0.5)',
-            backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
-            animation: 'fadeIn 0.15s ease-out',
-          }}
-        >
+        <ModalScrollLock>
           <div
-            onClick={(e) => e.stopPropagation()}
-            className="glass-card trip-modal"
+            onClick={() => setShowShareModal(false)}
             style={{
-              width: '100%', maxWidth: '380px', padding: '1.75rem',
-              animation: 'fadeInDown 0.2s ease-out',
-              maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-              overflow: 'hidden',
+              position: 'fixed', inset: 0, zIndex: 20000,
+              background: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
+              animation: 'fadeIn 0.15s ease-out',
             }}
           >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="glass-card trip-modal"
+              style={{
+                width: '100%', maxWidth: '380px', padding: '1.75rem',
+                animation: 'fadeInDown 0.2s ease-out',
+                maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
             {/* Header */}
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -959,7 +961,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
             </div>
 
             {/* 內容 (可滾動) */}
-            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+            <div className="trip-modal-scroll-area" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
               <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
                 {t('settings.emailInvite.desc')}
               </p>
@@ -1156,8 +1158,9 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
                 </div>
               )}
             </div>
+            </div>
           </div>
-        </div>
+        </ModalScrollLock>
       )}
 
     </div>
@@ -1280,26 +1283,27 @@ function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: 
   }
 
   return (
-    <div
-      onClick={() => { if (!saving) onClose() }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 20000,
-        background: 'rgba(0, 0, 0, 0.5)',
-        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem',
-        animation: 'fadeIn 0.15s ease-out',
-      }}
-    >
-      <form
-        onSubmit={submit}
-        onClick={(event) => event.stopPropagation()}
-        className="glass-card trip-modal"
+    <ModalScrollLock>
+      <div
+        onClick={() => { if (!saving) onClose() }}
         style={{
-          width: '100%', maxWidth: '420px', padding: '1.75rem',
-          maxHeight: '80vh', overflowY: 'auto', animation: 'fadeInDown 0.2s ease-out',
+          position: 'fixed', inset: 0, zIndex: 20000,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem',
+          animation: 'fadeIn 0.15s ease-out',
         }}
       >
+        <form
+          onSubmit={submit}
+          onClick={(event) => event.stopPropagation()}
+          className="glass-card trip-modal trip-modal-scroll-area"
+          style={{
+            width: '100%', maxWidth: '420px', padding: '1.75rem',
+            maxHeight: '80vh', overflowY: 'auto', animation: 'fadeInDown 0.2s ease-out',
+          }}
+        >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <h3 style={{ fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Pencil size={17} style={{ color: 'var(--color-primary)' }} />
@@ -1370,8 +1374,9 @@ function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: 
             {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <><Check size={16} />{t('trip.exchange.edit.save')}</>}
           </button>
         </div>
-      </form>
-    </div>
+        </form>
+      </div>
+    </ModalScrollLock>
   )
 }
 
@@ -1728,23 +1733,19 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {/* 分類選擇（僅支出模式）*/}
         {isExpense && (
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div
+            role="group"
+            aria-label={locale === 'en' ? 'Category' : '分類'}
+            style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
+          >
             {EXPENSE_CATEGORIES.map(cat => (
               <button
                 key={cat.value}
                 type="button"
                 onClick={() => setForm({ ...form, category: cat.value })}
-                style={{
-                  padding: '0.375rem 0.75rem', borderRadius: '9999px',
-                  fontSize: '0.8rem', cursor: 'pointer',
-                  border: form.category === cat.value ? `1.5px solid ${cat.color}` : '1.5px solid transparent',
-                  fontWeight: form.category === cat.value ? 600 : 500,
-                  background: form.category === cat.value ? `${cat.color}25` : 'var(--bg-card-hover)',
-                  color: form.category === cat.value ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  transition: 'all 0.2s',
-                  transform: form.category === cat.value ? 'scale(1.05)' : 'scale(1)',
-                  boxShadow: form.category === cat.value ? `0 2px 8px ${cat.color}30` : 'none',
-                }}
+                aria-pressed={form.category === cat.value}
+                className="trip-choice-button trip-choice-button--pill trip-choice-button--category"
+                style={{ '--choice-accent': cat.color } as React.CSSProperties}
               >
                 {t(`cat.${cat.value}`)}
               </button>
@@ -1757,26 +1758,26 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
             <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>
               {locale === 'en' ? 'Payment method' : '付款方式'}
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-              <button type="button" onClick={() => setForm(current => ({ ...current, paymentMethod: 'card' }))} style={{
-                padding: '0.55rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700,
-                border: form.paymentMethod === 'card' ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
-                background: form.paymentMethod === 'card' ? 'rgba(14,165,233,0.12)' : 'transparent',
-                color: form.paymentMethod === 'card' ? 'var(--color-primary)' : 'var(--text-secondary)',
-              }}>
+            <div
+              role="group"
+              aria-label={locale === 'en' ? 'Payment method' : '付款方式'}
+              style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}
+            >
+              <button
+                type="button"
+                onClick={() => setForm(current => ({ ...current, paymentMethod: 'card' }))}
+                aria-pressed={form.paymentMethod === 'card'}
+                className="trip-choice-button trip-choice-button--segment"
+              >
                 {locale === 'en' ? 'Card / extra spend' : '刷卡／額外支出'}
               </button>
               <button type="button" disabled={spendableCashWallets.length === 0} onClick={() => {
                 const wallet = spendableCashWallets[0]
                 if (wallet) setForm(current => ({ ...current, paymentMethod: 'cash', currency: wallet.currency }))
-              }} style={{
-                padding: '0.55rem', borderRadius: '8px', fontWeight: 700,
-                cursor: spendableCashWallets.length ? 'pointer' : 'not-allowed',
-                border: form.paymentMethod === 'cash' ? '1px solid #22c55e' : '1px solid var(--border-color)',
-                background: form.paymentMethod === 'cash' ? 'rgba(34,197,94,0.12)' : 'transparent',
-                color: form.paymentMethod === 'cash' ? '#22c55e' : 'var(--text-secondary)',
-                opacity: spendableCashWallets.length ? 1 : 0.5,
-              }}>
+              }}
+                aria-pressed={form.paymentMethod === 'cash'}
+                className="trip-choice-button trip-choice-button--segment trip-choice-button--cash"
+              >
                 {locale === 'en' ? 'Cash from wallet' : '使用已換現金'}
               </button>
             </div>
@@ -1840,24 +1841,18 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
           }}>
             {t('form.currency')}
           </label>
-          <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div
+            role="group"
+            aria-label={t('form.currency')}
+            style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', alignItems: 'center' }}
+          >
             {paymentCurrencies.map(cur => (
               <button
                 key={cur}
                 type="button"
                 onClick={() => setForm({ ...form, currency: cur })}
-                style={{
-                  padding: '0.375rem 0.75rem', borderRadius: '9999px',
-                  border: form.currency === cur
-                    ? '1px solid var(--color-primary)'
-                    : '1px solid var(--border-color)',
-                  fontSize: '0.78rem',
-                  fontWeight: form.currency === cur ? 600 : 400,
-                  cursor: 'pointer',
-                  background: form.currency === cur ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
-                  color: form.currency === cur ? 'var(--color-primary-text)' : 'var(--text-secondary)',
-                  transition: 'all 0.15s',
-                }}
+                aria-pressed={form.currency === cur}
+                className="trip-choice-button trip-choice-button--pill"
               >
                 {getCurrencyChipLabel(cur, cleanCountries, locale)}
               </button>
@@ -2409,7 +2404,7 @@ function EditExpenseModal({
   }
 
   return (
-    <>
+    <ModalScrollLock>
     <div
       onClick={() => { if (!isBusy) onClose() }}
       style={{
@@ -2481,7 +2476,7 @@ function EditExpenseModal({
             </div>
 
             {/* 內容 (可滾動) */}
-            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+            <div className="trip-modal-scroll-area" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
               {/* 項目名稱 */}
               <h2 ref={modalHeadingRef} tabIndex={-1} style={{
                 fontSize: '1.25rem', fontWeight: 700,
@@ -2639,51 +2634,49 @@ function EditExpenseModal({
             </div>
 
             {/* 內容 (可滾動) */}
-            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+            <div className="trip-modal-scroll-area" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
               {/* 分類 */}
-              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              <div
+                role="group"
+                aria-label={locale === 'en' ? 'Category' : '分類'}
+                style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
+              >
                 {EXPENSE_CATEGORIES.map(c => (
                   <button
                     key={c.value}
                     type="button"
                     onClick={() => setForm({ ...form, category: c.value })}
-                    style={{
-                      padding: '0.3rem 0.625rem', borderRadius: '9999px',
-                      fontSize: '0.75rem', cursor: 'pointer',
-                      border: form.category === c.value ? `1.5px solid ${c.color}` : '1.5px solid transparent',
-                      fontWeight: form.category === c.value ? 600 : 500,
-                      background: form.category === c.value ? `${c.color}25` : 'var(--bg-card-hover)',
-                      color: form.category === c.value ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      transition: 'all 0.2s',
-                    }}
+                    aria-pressed={form.category === c.value}
+                    className="trip-choice-button trip-choice-button--compact trip-choice-button--category"
+                    style={{ '--choice-accent': c.color } as React.CSSProperties}
                   >
                     {t(`cat.${c.value}`)}
                   </button>
                 ))}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <button type="button" onClick={() => setForm({
-                  ...form, paymentMethod: 'card', reconciled: false, settledAmount: '',
-                })} style={{
-                  padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700,
-                  border: form.paymentMethod === 'card' ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
-                  background: form.paymentMethod === 'card' ? 'rgba(14,165,233,0.12)' : 'transparent',
-                  color: form.paymentMethod === 'card' ? 'var(--color-primary)' : 'var(--text-secondary)',
-                }}>{t('form.payment.card')}</button>
+              <div
+                role="group"
+                aria-label={locale === 'en' ? 'Payment method' : '付款方式'}
+                style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setForm({
+                    ...form, paymentMethod: 'card', reconciled: false, settledAmount: '',
+                  })}
+                  aria-pressed={form.paymentMethod === 'card'}
+                  className="trip-choice-button trip-choice-button--segment"
+                >{t('form.payment.card')}</button>
                 <button type="button" disabled={spendableCashCurrencies.length === 0} onClick={() => {
                   const currency = spendableCashCurrencies.includes(form.currency) ? form.currency : spendableCashCurrencies[0]
                   if (currency) setForm({
                     ...form, paymentMethod: 'cash', currency, reconciled: false, settledAmount: '',
                   })
-                }} style={{
-                  padding: '0.5rem', borderRadius: '8px', fontWeight: 700,
-                  cursor: spendableCashCurrencies.length ? 'pointer' : 'not-allowed',
-                  border: form.paymentMethod === 'cash' ? '1px solid #22c55e' : '1px solid var(--border-color)',
-                  background: form.paymentMethod === 'cash' ? 'rgba(34,197,94,0.12)' : 'transparent',
-                  color: form.paymentMethod === 'cash' ? '#22c55e' : 'var(--text-secondary)',
-                  opacity: spendableCashCurrencies.length ? 1 : 0.5,
-                }}>{t('form.payment.cash')}</button>
+                }}
+                  aria-pressed={form.paymentMethod === 'cash'}
+                  className="trip-choice-button trip-choice-button--segment trip-choice-button--cash"
+                >{t('form.payment.cash')}</button>
               </div>
 
               {/* 品名 + 金額 */}
@@ -2707,7 +2700,11 @@ function EditExpenseModal({
               </div>
 
               {/* 幣種 */}
-              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              <div
+                role="group"
+                aria-label={t('form.currency')}
+                style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
+              >
                 {editCurrencyOptions.map(cur => (
                   <button
                     key={cur}
@@ -2715,18 +2712,8 @@ function EditExpenseModal({
                     onClick={() => setForm({
                       ...form, currency: cur, reconciled: false, settledAmount: '',
                     })}
-                    style={{
-                      padding: '0.3rem 0.625rem', borderRadius: '9999px',
-                      border: form.currency === cur
-                        ? '1px solid var(--color-primary)'
-                        : '1px solid var(--border-color)',
-                      fontSize: '0.75rem',
-                      fontWeight: form.currency === cur ? 600 : 400,
-                      cursor: 'pointer',
-                      background: form.currency === cur ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
-                      color: form.currency === cur ? 'var(--color-primary-text)' : 'var(--text-secondary)',
-                      transition: 'all 0.15s',
-                    }}
+                    aria-pressed={form.currency === cur}
+                    className="trip-choice-button trip-choice-button--compact"
                   >
                     {getCurrencyChipLabel(cur, cleanCountries, locale)}
                   </button>
@@ -3204,7 +3191,7 @@ function EditExpenseModal({
         </div>
       </div>
     )}
-    </>
+    </ModalScrollLock>
   )
 }
 
@@ -3270,27 +3257,28 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
   const isBusy = saving || deleting
 
   return (
-    <div
-      onClick={() => { if (!isBusy) onClose() }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 20000,
-        background: 'rgba(0, 0, 0, 0.5)',
-        backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
-        animation: 'fadeIn 0.15s ease-out',
-      }}
-    >
+    <ModalScrollLock>
       <div
-        onClick={(e) => e.stopPropagation()}
-        className="glass-card trip-modal"
+        onClick={() => { if (!isBusy) onClose() }}
         style={{
-          width: '100%', maxWidth: '420px', padding: '1.75rem',
-          animation: 'fadeInDown 0.2s ease-out',
-          maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
+          position: 'fixed', inset: 0, zIndex: 20000,
+          background: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 'calc(3.5rem + env(safe-area-inset-top)) 1.5rem 1.5rem 1.5rem',
+          animation: 'fadeIn 0.15s ease-out',
         }}
       >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="glass-card trip-modal"
+          style={{
+            width: '100%', maxWidth: '420px', padding: '1.75rem',
+            animation: 'fadeInDown 0.2s ease-out',
+            maxHeight: '80vh', display: 'flex', flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
         {mode === 'view' ? (
           /* ===== 詳情模式 ===== */
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -3333,7 +3321,7 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
             </div>
 
             {/* 內容區域 */}
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem' }}>
+            <div className="trip-modal-scroll-area" style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem' }}>
               <div style={{ marginBottom: '1.5rem' }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
                   {deposit.item}
@@ -3375,7 +3363,7 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="trip-modal-scroll-area" style={{ flex: 1, overflowY: 'auto', paddingRight: '0.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* 品項名稱 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>項目名稱</label>
@@ -3405,20 +3393,18 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
               {/* 幣種 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>幣種</label>
-                <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                <div
+                  role="group"
+                  aria-label={locale === 'en' ? 'Currency' : '幣種'}
+                  style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}
+                >
                   {chipCurrencies.map(cur => (
                     <button
                       key={cur}
                       type="button"
                       onClick={() => setForm({ ...form, currency: cur })}
-                      style={{
-                        padding: '0.375rem 0.75rem', borderRadius: '9999px', fontSize: '0.8rem',
-                        border: form.currency === cur ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
-                        fontWeight: form.currency === cur ? 600 : 400,
-                        cursor: 'pointer',
-                        background: form.currency === cur ? 'rgba(14, 165, 233, 0.15)' : 'transparent',
-                        color: form.currency === cur ? 'var(--color-primary-text)' : 'var(--text-secondary)',
-                      }}
+                      aria-pressed={form.currency === cur}
+                      className="trip-choice-button trip-choice-button--pill"
                     >
                       {getCurrencyChipLabel(cur, cleanCountries, locale)}
                     </button>
@@ -3487,7 +3473,8 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
             </div>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </ModalScrollLock>
   )
 }
