@@ -1805,13 +1805,14 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
           />
           <input
             type="number"
+            inputMode="decimal"
             className="input-field"
             value={form.amount}
             onChange={(e) => setForm({ ...form, amount: e.target.value })}
             placeholder={t('form.amount')}
             required
             min="0"
-            step="1"
+            step="any"
             style={{ fontWeight: 700, textAlign: 'right' }}
           />
         </div>
@@ -2689,6 +2690,9 @@ function EditExpenseModal({
                 />
                 <input
                   type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
                   className="input-field"
                   value={form.amount}
                   onChange={(e) => setForm({
@@ -3383,6 +3387,8 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
                   className="input-field"
                   type="number"
                   inputMode="decimal"
+                  min="0"
+                  step="any"
                   value={form.amount}
                   onChange={(e) => setForm({ ...form, amount: e.target.value })}
                   placeholder="輸入金額"
