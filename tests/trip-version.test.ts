@@ -4,9 +4,18 @@ import { createTripVersion } from "../src/lib/trip-version.ts"
 
 const base = {
   updatedAt: "2026-07-14T00:00:00.000Z",
+  timelineOrder: {},
   expenses: [
-    { id: "expense-b", updatedAt: "2026-07-14T00:00:02.000Z" },
-    { id: "expense-a", updatedAt: "2026-07-14T00:00:01.000Z" },
+    {
+      id: "expense-b",
+      createdAt: "2026-07-14T00:00:02.000Z",
+      updatedAt: "2026-07-14T00:00:02.000Z",
+    },
+    {
+      id: "expense-a",
+      createdAt: "2026-07-14T00:00:01.000Z",
+      updatedAt: "2026-07-14T00:00:01.000Z",
+    },
   ],
   deposits: [
     {
@@ -14,6 +23,7 @@ const base = {
       amount: 100,
       currency: "TWD",
       note: "cash",
+      date: "2026-07-13T00:00:00.000Z",
       createdAt: "2026-07-14T00:00:03.000Z",
     },
   ],
@@ -59,6 +69,29 @@ test("trip version changes when a transaction changes", () => {
   const changed = {
     ...base,
     deposits: [{ ...base.deposits[0], amount: 200 }],
+  }
+
+  assert.notEqual(createTripVersion(base), createTripVersion(changed))
+})
+
+test("trip version changes when timeline order changes", () => {
+  const changed = {
+    ...base,
+    timelineOrder: {
+      "2026-07-14": ["expense:expense-b", "expense:expense-a"],
+    },
+  }
+
+  assert.notEqual(createTripVersion(base), createTripVersion(changed))
+})
+
+test("trip version changes when an income date changes", () => {
+  const changed = {
+    ...base,
+    deposits: [{
+      ...base.deposits[0],
+      date: "2026-07-12T00:00:00.000Z",
+    }],
   }
 
   assert.notEqual(createTripVersion(base), createTripVersion(changed))

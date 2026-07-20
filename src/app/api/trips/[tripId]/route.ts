@@ -36,18 +36,18 @@ export async function GET(
       },
       expenses: {
         include: { user: { select: { id: true, name: true } } },
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       },
       deposits: {
         include: { user: { select: { id: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       },
       cashWallets: {
         orderBy: { currency: 'asc' },
       },
       cashExchanges: {
         include: { user: { select: { id: true, name: true } } },
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       },
     },
   })
@@ -69,6 +69,7 @@ export async function GET(
       ...expense,
       images: createSignedExpenseImagePaths(expense.id, expense.images),
     })),
+    timelineOrder: trip.timelineOrder,
     cashWallets: trip.cashWallets.filter((wallet) => wallet.userId === session.user.id),
     totalSpent: expenseSummary.total,
     exchangeNet: expenseSummary.exchangeNet,
@@ -79,8 +80,10 @@ export async function GET(
     currentUserId: session.user.id,
     realtimeVersion: createTripVersion({
       updatedAt: trip.updatedAt,
+      timelineOrder: trip.timelineOrder,
       expenses: trip.expenses.map((expense) => ({
         id: expense.id,
+        createdAt: expense.createdAt,
         updatedAt: expense.updatedAt,
       })),
       deposits: trip.deposits.map((deposit) => ({
@@ -88,6 +91,7 @@ export async function GET(
         amount: deposit.amount,
         currency: deposit.currency,
         note: deposit.note,
+        date: deposit.date,
         createdAt: deposit.createdAt,
       })),
       cashWallets: trip.cashWallets.map((wallet) => ({

@@ -44,7 +44,7 @@ export async function POST(
         amount: data.amount,
         currency: data.currency,
         note: data.note,
-        createdAt: data.date ? new Date(data.date) : undefined,
+        date: data.date ? new Date(data.date) : new Date(),
       },
       include: {
         user: { select: { id: true, name: true } },

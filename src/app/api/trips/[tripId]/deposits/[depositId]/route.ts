@@ -42,7 +42,7 @@ export async function PATCH(
     }
 
     if (data.date) {
-      updateData.createdAt = new Date(data.date)
+      updateData.date = new Date(data.date)
     }
 
     const deposit = await prisma.deposit.update({

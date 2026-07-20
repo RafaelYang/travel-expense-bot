@@ -25,8 +25,9 @@ export async function GET(
     },
     select: {
       updatedAt: true,
+      timelineOrder: true,
       expenses: {
-        select: { id: true, updatedAt: true },
+        select: { id: true, createdAt: true, updatedAt: true },
         orderBy: { id: "asc" },
       },
       deposits: {
@@ -35,6 +36,7 @@ export async function GET(
           amount: true,
           currency: true,
           note: true,
+          date: true,
           createdAt: true,
         },
         orderBy: { id: "asc" },

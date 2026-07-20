@@ -1,11 +1,16 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDownUp, Banknote, ChevronDown, ChevronUp, Loader2 } from "lucide-react"
 
 import { useLanguage } from "@/components/language-provider"
 import { ALL_CURRENCIES } from "@/lib/countries"
 import { getCurrencySymbol } from "@/lib/utils"
+import {
+  calendarDayToLocalNoonIso,
+  readRecentEntryDaySnapshot,
+  rememberRecentEntryDay,
+} from "@/lib/recent-entry-date"
 
 export interface CashWalletData {
   id: string
@@ -22,17 +27,14 @@ export interface CashExchangeData {
   baseAmount: number
   exchangeRate: number
   date: string
+  createdAt: string
   note?: string
   user: { id: string; name: string }
 }
 
-function localDateTimeValue() {
-  const now = new Date()
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-}
-
 export function CashWalletPanel({
   tripId,
+  currentUserId,
   baseCurrency,
   defaultForeignCurrency,
   wallets,
@@ -41,6 +43,7 @@ export function CashWalletPanel({
   onChanged,
 }: {
   tripId: string
+  currentUserId: string
   baseCurrency: string
   defaultForeignCurrency: string
   wallets: CashWalletData[]
@@ -54,12 +57,17 @@ export function CashWalletPanel({
   const fallbackCurrency = defaultForeignCurrency !== baseCurrency
     ? defaultForeignCurrency
     : Object.keys(ALL_CURRENCIES).find((currency) => currency !== baseCurrency) || "USD"
+  const [initialRecentEntry] = useState(() => readRecentEntryDaySnapshot(currentUserId, tripId))
+  const formInteractedRef = useRef(false)
   const [expanded, setExpanded] = useState(false)
   const [type, setType] = useState<"buy" | "sell">("buy")
   const [foreignCurrency, setForeignCurrency] = useState(availableWallets[0]?.currency || fallbackCurrency)
   const [foreignAmount, setForeignAmount] = useState("")
   const [baseAmount, setBaseAmount] = useState("")
-  const [date, setDate] = useState(localDateTimeValue)
+  const [date, setDate] = useState(initialRecentEntry.day)
+  const [dateExpiresAt, setDateExpiresAt] = useState<number | null>(
+    initialRecentEntry.expiresAt,
+  )
   const [note, setNote] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
@@ -74,12 +82,45 @@ export function CashWalletPanel({
   const parsedBase = Number(baseAmount)
   const effectiveRate = parsedForeign > 0 && parsedBase > 0 ? parsedBase / parsedForeign : null
 
+  useEffect(() => {
+    if (!expanded || dateExpiresAt === null) return
+    let timer: number
+    const refreshExpiredDay = () => {
+      if (formInteractedRef.current) return
+      const remaining = dateExpiresAt - Date.now()
+      if (remaining > 0) {
+        timer = window.setTimeout(refreshExpiredDay, remaining)
+        return
+      }
+
+      const snapshot = readRecentEntryDaySnapshot(currentUserId, tripId)
+      setDate(snapshot.day)
+      setDateExpiresAt(snapshot.expiresAt)
+    }
+    timer = window.setTimeout(
+      refreshExpiredDay,
+      Math.max(0, dateExpiresAt - Date.now()),
+    )
+
+    return () => window.clearTimeout(timer)
+  }, [currentUserId, dateExpiresAt, expanded, tripId])
+
   const changeType = (nextType: "buy" | "sell") => {
     setType(nextType)
     setError("")
     if (nextType === "sell" && !availableWallets.some((wallet) => wallet.currency === foreignCurrency)) {
       setForeignCurrency(availableWallets[0]?.currency || fallbackCurrency)
     }
+  }
+
+  const toggleExpanded = () => {
+    if (!expanded) {
+      const snapshot = readRecentEntryDaySnapshot(currentUserId, tripId)
+      formInteractedRef.current = false
+      setDate(snapshot.day)
+      setDateExpiresAt(snapshot.expiresAt)
+    }
+    setExpanded(!expanded)
   }
 
   const submit = async (event: React.FormEvent) => {
@@ -95,7 +136,7 @@ export function CashWalletPanel({
           foreignCurrency,
           foreignAmount: parsedForeign,
           baseAmount: parsedBase,
-          date: new Date(date).toISOString(),
+          date: calendarDayToLocalNoonIso(date),
           note: note || undefined,
         }),
       })
@@ -108,8 +149,9 @@ export function CashWalletPanel({
       setForeignAmount("")
       setBaseAmount("")
       setNote("")
-      setDate(localDateTimeValue())
+      rememberRecentEntryDay(currentUserId, tripId, date)
       await onChanged()
+      setExpanded(false)
     } catch {
       setError(zh ? "換匯失敗，請稍後再試" : "Exchange failed. Please try again.")
     } finally {
@@ -121,7 +163,7 @@ export function CashWalletPanel({
     <section className="glass-card" style={{ padding: "1rem 1.25rem", marginBottom: "1rem" }}>
       <button
         type="button"
-        onClick={() => setExpanded((value) => !value)}
+        onClick={toggleExpanded}
         aria-expanded={expanded}
         aria-controls={`cash-wallet-details-${tripId}`}
         style={{
@@ -162,7 +204,12 @@ export function CashWalletPanel({
           style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--border-color)" }}
         >
           {canEdit && (
-            <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            <form
+              onSubmit={submit}
+              onClickCapture={() => { formInteractedRef.current = true }}
+              onChangeCapture={() => { formInteractedRef.current = true }}
+              style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+            >
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
                 <button type="button" onClick={() => changeType("buy")} style={{
                   padding: "0.55rem", borderRadius: "8px", cursor: "pointer",
@@ -207,7 +254,7 @@ export function CashWalletPanel({
                     <option key={currency} value={currency}>{ALL_CURRENCIES[currency]?.label || currency}</option>
                   ))}
                 </select>
-                <input className="input-field" type="datetime-local" value={date} onChange={(event) => setDate(event.target.value)} required />
+                <input className="input-field" type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
               </div>
 
               {type === "sell" && selectedWallet && (

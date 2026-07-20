@@ -36,6 +36,22 @@ import { BatchReconcileModal } from "@/components/batch-reconcile-modal"
 import { TripStatsModal } from "@/components/trip-stats-modal"
 import { ExchangeRateCard } from "@/components/exchange-rate-card"
 import { ModalScrollLock } from "@/components/modal-scroll-lock"
+import {
+  SortableTransactionList,
+  type SortableTransactionRootProps,
+} from "@/components/sortable-transaction-list"
+import {
+  calendarDayToLocalNoonIso,
+  getLocalCalendarDay,
+  readRecentEntryDaySnapshot,
+  rememberRecentEntryDay,
+} from "@/lib/recent-entry-date"
+import {
+  moveTimelineItem,
+  sortTimelineTransactions,
+  timelineItemDateKey,
+  timelineItemKey,
+} from "@/lib/timeline-order"
 
 export interface TripData {
   id: string
@@ -49,6 +65,7 @@ export interface TripData {
   budgetAmount?: number
   status: string
   realtimeVersion: string
+  timelineOrder?: unknown
   totalSpent: number
   exchangeNet: number
   totalDeposits: number
@@ -71,6 +88,7 @@ export interface TripData {
     exchangeRate?: number
     settledAmount?: number
     date: string
+    createdAt: string
     note?: string
     images?: string[]
     source: string
@@ -83,6 +101,7 @@ export interface TripData {
     amount: number
     currency: string
     note?: string
+    date: string
     createdAt: string
     user: { id: string; name: string }
   }[]
@@ -104,6 +123,7 @@ type DepositDisplayTransaction = {
   currency: string
   convertedAmount?: number
   date: string
+  createdAt: string
   note?: undefined
   user: TripData["deposits"][number]["user"]
   source: "web"
@@ -133,12 +153,6 @@ function subscribePreferredCurrency(onStoreChange: () => void) {
   }
 }
 
-function getLocalDateTimeInputValue() {
-  const now = new Date()
-  const timezoneOffset = now.getTimezoneOffset() * 60_000
-  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 16)
-}
-
 export default function TripDetailClient({ initialData, tripId }: { initialData: TripData; tripId: string }) {
   const router = useRouter()
   const [trip, setTrip] = useState<TripData>(initialData)
@@ -150,6 +164,8 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   const [showShareModal, setShowShareModal] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
   const [showBatchReconcile, setShowBatchReconcile] = useState(false)
+  const [reorderingTimeline, setReorderingTimeline] = useState(false)
+  const reorderingTimelineRef = useRef(false)
   const [editingExpense, setEditingExpense] = useState<TripData['expenses'][0] | null>(null)
   const [editingExpenseInitialMode, setEditingExpenseInitialMode] = useState<'view' | 'edit'>('view')
   const [editingDeposit, setEditingDeposit] = useState<DepositDisplayTransaction | null>(null)
@@ -349,7 +365,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
   const totalDays = differenceInDays(new Date(trip.endDate), new Date(trip.startDate)) + 1
 
-  const localDateKey = (value: string | Date) => format(new Date(value), 'yyyy-MM-dd')
+  const localDateKey = (value: string | Date) => getLocalCalendarDay(new Date(value))
   const dailySpendingInputs = new Map<string, {
     expenses: TripData['expenses']
     exchanges: TripData['cashExchanges']
@@ -382,7 +398,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     (expense) => expense.paymentMethod === 'card' && !expense.reconciledAt,
   )
 
-  // 合併支出、收入與換匯並依時間倒序
+  // 日期由新到舊；同一天預設依實際加入順序，手動排序後則保留自訂順序。
   const parsedExpenses: ExpenseDisplayTransaction[] = trip.expenses.map(e => ({
     id: e.id,
     kind: 'expense',
@@ -401,6 +417,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     source: e.source,
     paymentMethod: e.paymentMethod,
     reconciledAt: e.reconciledAt,
+    createdAt: e.createdAt,
   }))
 
   const parsedDeposits: DepositDisplayTransaction[] = trip.deposits.map(d => ({
@@ -412,7 +429,8 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     amount: d.amount,
     currency: d.currency,
     convertedAmount: d.currency === trip.baseCurrency ? d.amount : undefined,
-    date: d.createdAt,
+    date: d.date,
+    createdAt: d.createdAt,
     note: undefined,
     user: d.user,
     source: 'web',
@@ -423,15 +441,59 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
     kind: 'exchange',
   }))
 
-  const allTransactions: DisplayTransaction[] = [
+  const timelineTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const allTransactions = sortTimelineTransactions<DisplayTransaction>([
     ...parsedExpenses,
     ...parsedDeposits,
     ...parsedExchanges,
-  ].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  )
+  ], trip.timelineOrder, timelineTimeZone)
 
   const displayTransactions = showAllExpenses ? allTransactions : allTransactions.slice(0, 10)
+
+  const moveTransaction = async (activeKey: string, overKey: string) => {
+    if (reorderingTimelineRef.current || activeKey === overKey) return
+
+    const previousOrder = trip.timelineOrder
+    const activeItem = allTransactions.find(
+      (item) => timelineItemKey(item.kind, item.id) === activeKey,
+    )
+    if (!activeItem) return
+    const dateKey = timelineItemDateKey(activeItem, timelineTimeZone)
+    let optimisticOrder: ReturnType<typeof moveTimelineItem>
+    try {
+      optimisticOrder = moveTimelineItem(
+        allTransactions,
+        previousOrder,
+        activeKey,
+        overKey,
+        timelineTimeZone,
+      )
+    } catch {
+      return
+    }
+
+    reorderingTimelineRef.current = true
+    setTrip((current) => ({ ...current, timelineOrder: optimisticOrder }))
+    setReorderingTimeline(true)
+    try {
+      const response = await fetch(`/api/trips/${tripId}/timeline-order`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activeKey, overKey, dateKey, timeZone: timelineTimeZone }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok || !data?.timelineOrder) throw new Error('timeline reorder failed')
+
+      setTrip((current) => ({ ...current, timelineOrder: data.timelineOrder }))
+      await fetchTrip(false)
+    } catch {
+      setTrip((current) => ({ ...current, timelineOrder: previousOrder }))
+      await fetchTrip(false)
+    } finally {
+      reorderingTimelineRef.current = false
+      setReorderingTimeline(false)
+    }
+  }
 
   // 依日期分組
   const tripStart = new Date(trip.startDate)
@@ -686,6 +748,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
         {showExpenseForm && (
           <ExpenseForm
             tripId={tripId}
+            currentUserId={trip.currentUserId}
             defaultCurrency={trip.defaultCurrency}
             baseCurrency={trip.baseCurrency}
             countries={trip.countries}
@@ -782,38 +845,43 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
                   {/* 該日的所有交易 */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    {group.transactions.map(transaction => (
-                      transaction.kind === 'exchange' ? (
-                        <ExchangeRow
-                          key={`exchange:${transaction.id}`}
-                          exchange={transaction}
-                          baseCurrency={trip.baseCurrency}
-                          onEdit={
-                            canEdit && transaction.user.id === trip.currentUserId
-                              ? () => setEditingExchange(transaction)
-                              : undefined
-                          }
-                        />
-                      ) : (
-                        <ExpenseRow
-                          key={`${transaction.kind}:${transaction.id}`}
-                          expense={transaction}
-                          currency={trip.baseCurrency}
-                          onEdit={
-                            !canEdit
-                              ? undefined
-                              : transaction.kind === 'deposit'
-                              ? () => setEditingDeposit(transaction)
-                              : () => openExpenseModal(transaction)
-                          }
-                          onReconcile={
-                            canEdit && transaction.kind === 'expense'
-                              ? () => openExpenseModal(transaction)
-                              : undefined
-                          }
-                        />
-                      )
-                    ))}
+                    <SortableTransactionList
+                      disabled={!canEdit || reorderingTimeline}
+                      onMove={moveTransaction}
+                      items={group.transactions.map((transaction) => ({
+                        id: timelineItemKey(transaction.kind, transaction.id),
+                        render: (sortableProps) => transaction.kind === 'exchange' ? (
+                          <ExchangeRow
+                            exchange={transaction}
+                            baseCurrency={trip.baseCurrency}
+                            sortableProps={sortableProps}
+                            onEdit={
+                              canEdit && transaction.user.id === trip.currentUserId
+                                ? () => setEditingExchange(transaction)
+                                : undefined
+                            }
+                          />
+                        ) : (
+                          <ExpenseRow
+                            expense={transaction}
+                            currency={trip.baseCurrency}
+                            sortableProps={sortableProps}
+                            onEdit={
+                              !canEdit
+                                ? undefined
+                                : transaction.kind === 'deposit'
+                                ? () => setEditingDeposit(transaction)
+                                : () => openExpenseModal(transaction)
+                            }
+                            onReconcile={
+                              canEdit && transaction.kind === 'expense'
+                                ? () => openExpenseModal(transaction)
+                                : undefined
+                            }
+                          />
+                        ),
+                      }))}
+                    />
                   </div>
                 </div>
               ))}
@@ -841,6 +909,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
         <CashWalletPanel
           tripId={tripId}
+          currentUserId={trip.currentUserId}
           baseCurrency={trip.baseCurrency}
           defaultForeignCurrency={trip.defaultCurrency}
           wallets={trip.cashWallets}
@@ -1166,26 +1235,43 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 }
 
 // === 換匯列表行 ===
-function ExchangeRow({ exchange, baseCurrency, onEdit }: {
+function ExchangeRow({ exchange, baseCurrency, onEdit, sortableProps }: {
   exchange: ExchangeDisplayTransaction
   baseCurrency: string
   onEdit?: () => void
+  sortableProps?: SortableTransactionRootProps
 }) {
   const { t } = useLanguage()
   const isBuy = exchange.type === 'buy'
+  const {
+    ref: sortableRef,
+    style: sortableStyle,
+    onKeyDown: onSortableKeyDown,
+    ...sortableAttributes
+  } = sortableProps ?? {}
 
   return (
-    <button
-      type="button"
+    <div
+      {...sortableAttributes}
+      ref={sortableRef}
       className="exchange-transaction-row transaction-list-row"
       onClick={onEdit}
-      disabled={!onEdit}
+      onKeyDown={(event) => {
+        onSortableKeyDown?.(event)
+        if (!event.defaultPrevented && event.target === event.currentTarget && onEdit && event.key === 'Enter') {
+          event.preventDefault()
+          onEdit()
+        }
+      }}
+      role={sortableProps?.role ?? (onEdit ? 'button' : undefined)}
+      tabIndex={sortableProps?.tabIndex ?? (onEdit ? 0 : undefined)}
       title={onEdit ? t('trip.exchange.edit') : undefined}
       style={{
       width: '100%', border: 'none', color: 'inherit', textAlign: 'left',
       borderRadius: 'var(--radius)',
       background: 'var(--bg-card-hover)',
       cursor: onEdit ? 'pointer' : 'default', transition: 'all 0.2s',
+      ...sortableStyle,
     }}>
       <div className="exchange-transaction-main transaction-list-main">
         <span className="category-badge transaction-list-category" style={{
@@ -1201,7 +1287,7 @@ function ExchangeRow({ exchange, baseCurrency, onEdit }: {
             {exchange.foreignCurrency} {getCurrencySymbol(exchange.foreignCurrency)}{exchange.foreignAmount.toLocaleString()}
           </div>
           <div className="transaction-list-meta transaction-list-meta-wide">
-            {exchange.user?.name} · {format(new Date(exchange.date), 'HH:mm')}
+            {exchange.user?.name}
             {exchange.note && ` · ${exchange.note}`}
           </div>
         </div>
@@ -1218,7 +1304,7 @@ function ExchangeRow({ exchange, baseCurrency, onEdit }: {
           </div>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -1234,7 +1320,7 @@ function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: 
   const [form, setForm] = useState({
     foreignAmount: String(exchange.foreignAmount),
     baseAmount: String(exchange.baseAmount),
-    date: format(new Date(exchange.date), "yyyy-MM-dd'T'HH:mm"),
+    date: getLocalCalendarDay(new Date(exchange.date)),
     note: exchange.note || '',
   })
   const [saving, setSaving] = useState(false)
@@ -1257,7 +1343,7 @@ function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: 
         body: JSON.stringify({
           foreignAmount,
           baseAmount,
-          date: new Date(form.date).toISOString(),
+          date: calendarDayToLocalNoonIso(form.date),
           note: form.note || null,
         }),
       })
@@ -1345,7 +1431,7 @@ function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: 
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', color: 'var(--text-secondary)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
           {t('trip.exchange.edit.date')}
           <input
-            className="input-field" type="datetime-local" required value={form.date}
+            className="input-field" type="date" required value={form.date}
             onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))}
           />
         </label>
@@ -1373,11 +1459,12 @@ function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: 
 }
 
 // === 花費列表行 ===
-function ExpenseRow({ expense, currency, onEdit, onReconcile }: {
+function ExpenseRow({ expense, currency, onEdit, onReconcile, sortableProps }: {
   expense: ExpenseOrDepositDisplayTransaction
   currency: string
   onEdit?: () => void
   onReconcile?: () => void
+  sortableProps?: SortableTransactionRootProps
 }) {
   const { t } = useLanguage()
   const isIncome = expense.isIncome
@@ -1391,23 +1478,33 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile }: {
   const finalBaseAmount = !isIncome && expense.paymentMethod === 'card' && isReconciled
     ? expense.settledAmount
     : undefined
+  const {
+    ref: sortableRef,
+    style: sortableStyle,
+    onKeyDown: onSortableKeyDown,
+    ...sortableAttributes
+  } = sortableProps ?? {}
   return (
     <div
+      {...sortableAttributes}
+      ref={sortableRef}
       className="transaction-list-row"
       onClick={onEdit}
       onKeyDown={(event) => {
-        if (event.target === event.currentTarget && onEdit && (event.key === 'Enter' || event.key === ' ')) {
+        onSortableKeyDown?.(event)
+        if (!event.defaultPrevented && event.target === event.currentTarget && onEdit && event.key === 'Enter') {
           event.preventDefault()
           onEdit()
         }
       }}
-      role={onEdit ? 'button' : undefined}
-      tabIndex={onEdit ? 0 : undefined}
+      role={sortableProps?.role ?? (onEdit ? 'button' : undefined)}
+      tabIndex={sortableProps?.tabIndex ?? (onEdit ? 0 : undefined)}
       style={{
         borderRadius: 'var(--radius)',
         background: 'var(--bg-card-hover)',
         transition: 'all 0.2s',
         cursor: onEdit ? 'pointer' : 'default',
+        ...sortableStyle,
       }}
     >
       <div className="transaction-list-main">
@@ -1423,7 +1520,7 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile }: {
             {expense.item}
           </div>
           <div className={`transaction-list-meta${isIncome ? ' transaction-list-meta-wide' : ''}`}>
-            {expense.user?.name} · {format(new Date(expense.date), 'HH:mm')}
+            {expense.user?.name}
             {!isIncome && expense.source === 'line' && ' · 📱'}
             {!isIncome && expense.paymentMethod === 'cash' && ` · ${t('form.payment.cash')}`}
           </div>
@@ -1473,8 +1570,9 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile }: {
 }
 
 // === 記帳表單 ===
-function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWallets, onClose, onSubmit }: {
+function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, countries, cashWallets, onClose, onSubmit }: {
   tripId: string
+  currentUserId: string
   defaultCurrency: string
   baseCurrency: string
   countries: string[]
@@ -1493,6 +1591,8 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
   // 非 chip 的其他幣種
   const otherCurrencies = Object.keys(ALL_CURRENCIES).filter(c => !chipCurrencies.includes(c))
   const { locale, t } = useLanguage()
+  const [initialRecentEntry] = useState(() => readRecentEntryDaySnapshot(currentUserId, tripId))
+  const entryFormInteractedRef = useRef(false)
 
   const [mode, setMode] = useState<'expense' | 'deposit'>('expense')
   const [form, setForm] = useState(() => ({
@@ -1502,8 +1602,11 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
     currency: tripCurrencies[0] || defaultCurrency,
     paymentMethod: 'card' as 'card' | 'cash',
     note: '',
-    date: getLocalDateTimeInputValue(),
+    date: initialRecentEntry.day,
   }))
+  const [recentEntryExpiresAt, setRecentEntryExpiresAt] = useState<number | null>(
+    initialRecentEntry.expiresAt,
+  )
   const spendableCashWallets = cashWallets.filter(wallet => wallet.balance > 0.000001)
   const paymentCurrencies = mode === 'expense' && form.paymentMethod === 'cash'
     ? spendableCashWallets.map(wallet => wallet.currency)
@@ -1516,6 +1619,32 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
   const fileInputRef = useRef<HTMLInputElement>(null)
   const touchStartX = useRef<number | null>(null)
   const touchEndX = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (recentEntryExpiresAt === null) return
+    let timer: number
+    const refreshExpiredDay = () => {
+      if (entryFormInteractedRef.current) return
+      const remaining = recentEntryExpiresAt - Date.now()
+      if (remaining > 0) {
+        timer = window.setTimeout(refreshExpiredDay, remaining)
+        return
+      }
+
+      const snapshot = readRecentEntryDaySnapshot(currentUserId, tripId)
+      setForm((current) => ({
+        ...current,
+        date: snapshot.day,
+      }))
+      setRecentEntryExpiresAt(snapshot.expiresAt)
+    }
+    timer = window.setTimeout(
+      refreshExpiredDay,
+      Math.max(0, recentEntryExpiresAt - Date.now()),
+    )
+
+    return () => window.clearTimeout(timer)
+  }, [currentUserId, recentEntryExpiresAt, tripId])
 
   // 壓縮圖片為 base64（最大寬度 800px，品質 0.6）
   const compressImage = (file: File): Promise<string> => {
@@ -1622,8 +1751,8 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
         ? `/api/trips/${tripId}/expenses`
         : `/api/trips/${tripId}/deposits`
       const body = mode === 'expense'
-        ? { ...form, amount: parseFloat(form.amount), date: new Date(form.date).toISOString(), images }
-        : { amount: parseFloat(form.amount), currency: form.currency, note: form.item, date: new Date(form.date).toISOString() }
+        ? { ...form, amount: parseFloat(form.amount), date: calendarDayToLocalNoonIso(form.date), images }
+        : { amount: parseFloat(form.amount), currency: form.currency, note: form.item, date: calendarDayToLocalNoonIso(form.date) }
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1636,6 +1765,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
       }
 
       setImages([])
+      rememberRecentEntryDay(currentUserId, tripId, form.date)
       if (mode === 'expense') {
         onSubmit({
           kind: 'expense',
@@ -1652,6 +1782,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
             images: Array.isArray(data.images) ? data.images : [],
             source: data.source,
             paymentMethod: data.paymentMethod,
+            createdAt: data.createdAt,
             user: {
               id: data.user.id,
               name: data.user.name ?? '',
@@ -1666,6 +1797,7 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
             amount: data.amount,
             currency: data.currency,
             note: data.note ?? undefined,
+            date: data.date,
             createdAt: data.createdAt,
             user: {
               id: data.user.id,
@@ -1719,7 +1851,12 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
           <X size={18} />
         </button>
       </div>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <form
+        onSubmit={handleSubmit}
+        onClickCapture={() => { entryFormInteractedRef.current = true }}
+        onChangeCapture={() => { entryFormInteractedRef.current = true }}
+        style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+      >
         {/* 分類選擇（僅支出模式）*/}
         {isExpense && (
           <div
@@ -1882,15 +2019,15 @@ function ExpenseForm({ tripId, defaultCurrency, baseCurrency, countries, cashWal
           />
         )}
 
-        {/* 記帳時間 */}
+        {/* 記帳日期 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
           <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
             <Calendar size={13} style={{ color: 'var(--color-primary)' }} />
-            記帳時間
+            記帳日期
           </label>
           <input
             className="input-field"
-            type="datetime-local"
+            type="date"
             value={form.date}
             onChange={(e) => setForm({ ...form, date: e.target.value })}
             required
@@ -2197,7 +2334,7 @@ function EditExpenseModal({
     settledAmount: String(expense.settledAmount ?? expense.convertedAmount ?? ''),
     reconciled: Boolean(expense.reconciledAt),
     note: expense.note || '',
-    date: format(new Date(expense.date), "yyyy-MM-dd'T'HH:mm"),
+    date: getLocalCalendarDay(new Date(expense.date)),
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -2278,7 +2415,7 @@ function EditExpenseModal({
           reconciled: form.reconciled,
           note: form.note || null,
           images: editImages,
-          date: new Date(form.date).toISOString(),
+          date: calendarDayToLocalNoonIso(form.date),
         }),
       })
       if (res.ok) {
@@ -2523,7 +2660,7 @@ function EditExpenseModal({
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-muted)' }}>{t('expense.detail.time')}</span>
                   <span style={{ fontWeight: 500 }}>
-                    {format(new Date(expense.date), 'yyyy/M/d HH:mm')}
+                    {format(new Date(expense.date), 'yyyy/M/d')}
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -2782,13 +2919,13 @@ function EditExpenseModal({
                 style={{ marginBottom: '0.75rem' }}
               />
 
-              {/* 消費時間 */}
+              {/* 消費日期 */}
               <div style={{ marginBottom: '0.75rem' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                  消費日期與時間
+                  消費日期
                 </label>
                 <input
-                  type="datetime-local"
+                  type="date"
                   className="input-field"
                   value={form.date}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
@@ -3202,7 +3339,7 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
     item: deposit.item || '',
     amount: String(deposit.amount),
     currency: deposit.currency,
-    date: format(new Date(deposit.date), "yyyy-MM-dd'T'HH:mm"),
+    date: getLocalCalendarDay(new Date(deposit.date)),
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -3218,7 +3355,7 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
           amount: parseFloat(form.amount),
           currency: form.currency,
           note: form.item,
-          date: new Date(form.date).toISOString(),
+          date: calendarDayToLocalNoonIso(form.date),
         }),
       })
       if (res.ok) onSave()
@@ -3330,9 +3467,9 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
               {/* 詳情項目列表 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem', background: 'var(--bg-card-hover)', padding: '1rem', borderRadius: '12px' }}>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>記帳時間</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>記帳日期</div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>
-                    {format(new Date(deposit.date), 'yyyy/M/d HH:mm')}
+                    {format(new Date(deposit.date), 'yyyy/M/d')}
                   </div>
                 </div>
                 <div>
@@ -3423,12 +3560,12 @@ function EditDepositModal({ deposit, tripId, defaultCurrency, countries, onClose
                 </div>
               </div>
 
-              {/* 記帳時間 */}
+              {/* 記帳日期 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>記帳時間</label>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)' }}>記帳日期</label>
                 <input
                   className="input-field"
-                  type="datetime-local"
+                  type="date"
                   value={form.date}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
                   required

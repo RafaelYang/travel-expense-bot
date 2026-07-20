@@ -2,12 +2,18 @@ import { createHash } from "node:crypto"
 
 export interface TripVersionInput {
   updatedAt: Date | string
-  expenses: { id: string; updatedAt: Date | string }[]
+  timelineOrder: unknown
+  expenses: {
+    id: string
+    createdAt: Date | string
+    updatedAt: Date | string
+  }[]
   deposits: {
     id: string
     amount: number
     currency: string
     note: string | null
+    date: Date | string
     createdAt: Date | string
   }[]
   cashWallets?: {
@@ -31,6 +37,7 @@ export interface TripVersionInput {
 export function createTripVersion(input: TripVersionInput) {
   const normalized = {
     updatedAt: input.updatedAt,
+    timelineOrder: input.timelineOrder,
     expenses: [...input.expenses].sort((left, right) => left.id.localeCompare(right.id)),
     deposits: [...input.deposits].sort((left, right) => left.id.localeCompare(right.id)),
     cashWallets: [...(input.cashWallets ?? [])].sort((left, right) => left.id.localeCompare(right.id)),

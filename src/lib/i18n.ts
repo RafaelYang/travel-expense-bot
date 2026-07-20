@@ -128,7 +128,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'trip.exchange.edit.baseReceived': '收到本國貨幣',
     'trip.exchange.edit.foreignBought': '取得外幣',
     'trip.exchange.edit.foreignSold': '交回外幣',
-    'trip.exchange.edit.date': '換匯日期與時間',
+    'trip.exchange.edit.date': '換匯日期',
     'trip.exchange.edit.note': '備註（選填）',
     'trip.exchange.edit.save': '儲存換匯修改',
     'trip.exchange.edit.error': '換匯更新失敗，請稍後再試',
@@ -301,7 +301,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     // 支出詳情
     'expense.detail.recordedBy': '記帳人',
-    'expense.detail.time': '時間',
+    'expense.detail.time': '日期',
     'expense.detail.currency': '幣種',
     'expense.detail.payment': '付款方式',
     'expense.detail.note': '備註',
@@ -484,7 +484,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'trip.exchange.edit.baseReceived': 'Base currency received',
     'trip.exchange.edit.foreignBought': 'Foreign cash received',
     'trip.exchange.edit.foreignSold': 'Foreign cash returned',
-    'trip.exchange.edit.date': 'Exchange date and time',
+    'trip.exchange.edit.date': 'Exchange date',
     'trip.exchange.edit.note': 'Note (optional)',
     'trip.exchange.edit.save': 'Save exchange changes',
     'trip.exchange.edit.error': 'Could not update the exchange. Please try again.',
@@ -657,7 +657,7 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     // Expense Detail
     'expense.detail.recordedBy': 'Created By',
-    'expense.detail.time': 'Time',
+    'expense.detail.time': 'Date',
     'expense.detail.currency': 'Currency',
     'expense.detail.payment': 'Payment method',
     'expense.detail.note': 'Note',

@@ -38,18 +38,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
       },
       expenses: {
         include: { user: { select: { id: true, name: true } } },
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       },
       deposits: {
         include: { user: { select: { id: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       },
       cashWallets: {
         orderBy: { currency: 'asc' },
       },
       cashExchanges: {
         include: { user: { select: { id: true, name: true } } },
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       },
     },
   })
@@ -79,12 +79,15 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
     budgetAmount: trip.budgetAmount || undefined,
     status: trip.status,
     coverImage: trip.coverImage || undefined,
+    timelineOrder: trip.timelineOrder,
     createdAt: trip.createdAt.toISOString(),
     updatedAt: trip.updatedAt.toISOString(),
     realtimeVersion: createTripVersion({
       updatedAt: trip.updatedAt,
+      timelineOrder: trip.timelineOrder,
       expenses: trip.expenses.map((expense) => ({
         id: expense.id,
+        createdAt: expense.createdAt,
         updatedAt: expense.updatedAt,
       })),
       deposits: trip.deposits.map((deposit) => ({
@@ -92,6 +95,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
         amount: deposit.amount,
         currency: deposit.currency,
         note: deposit.note,
+        date: deposit.date,
         createdAt: deposit.createdAt,
       })),
       cashWallets: trip.cashWallets.map((wallet) => ({
@@ -139,6 +143,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
       settledAmount: e.settledAmount ?? undefined,
       reconciledAt: e.reconciledAt?.toISOString(),
       date: e.date.toISOString(),
+      createdAt: e.createdAt.toISOString(),
       note: e.note || undefined,
       images: createSignedExpenseImagePaths(e.id, e.images),
       source: e.source,
@@ -153,6 +158,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
       amount: d.amount,
       currency: d.currency,
       note: d.note || undefined,
+      date: d.date.toISOString(),
       createdAt: d.createdAt.toISOString(),
       user: {
         id: d.user.id,
@@ -173,6 +179,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
       baseAmount: exchange.baseAmount,
       exchangeRate: exchange.exchangeRate,
       date: exchange.date.toISOString(),
+      createdAt: exchange.createdAt.toISOString(),
       note: exchange.note || undefined,
       user: {
         id: exchange.user.id,

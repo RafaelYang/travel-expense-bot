@@ -52,3 +52,29 @@ falls back to `DATABASE_URL` without printing either value.
 The paired rollback drops both the final-charge amount and reconciliation
 timestamps. It is destructive after users have started reconciling expenses and
 must not be used once that data needs to be retained.
+
+## Timeline order and independent income dates
+
+`20260720_timeline_order.sql` is an expand-only change that adds the shared
+`Trip.timelineOrder` JSON object and separates `Deposit.date` from the immutable
+creation timestamp. Existing income rows are backfilled with
+`date = createdAt`, which preserves the historical transaction date but cannot
+reconstruct a distinct historical insertion time that the old schema never
+stored.
+
+The migration deliberately leaves `Deposit.date` without a database default.
+An insert compatibility trigger copies `createdAt` only when an old application
+version omits `date`; a companion update trigger preserves old-version date
+edits during the migration-to-deploy window. The new application always writes
+`Deposit.date` explicitly and no longer changes `createdAt`.
+
+Before deploying code that reads these columns, back up the target database and
+run `node scripts/timeline-order-migration.mjs`. After the transactional dry run
+reports a verified rollback, run
+`node scripts/timeline-order-migration.mjs --apply` and confirm the post-migration
+verification passes. The runner reads `DIRECT_URL` first and falls back to
+`DATABASE_URL` without printing either value.
+
+`20260720_timeline_order_rollback.sql` drops independent income dates and saved
+manual ordering. It is destructive after the new application starts writing
+either field and must not be used once that data needs to be retained.

@@ -40,6 +40,7 @@ export interface TripStatsExpense {
   exchangeRate?: number
   settledAmount?: number
   date: string
+  createdAt: string
   note?: string
   images?: string[]
   source: string
@@ -761,7 +762,7 @@ export function TripStatsModal({
                   {selectedCategory.details.map(({ expense, baseAmount }) => {
                     const formattedDate = format(
                       new Date(expense.date),
-                      "yyyy/M/d (EEE) HH:mm",
+                      "yyyy/M/d (EEE)",
                       { locale: dateLocale },
                     )
                     const paymentLabel = expense.paymentMethod === "cash"
@@ -891,7 +892,7 @@ export function TripStatsModal({
                     <dt>{t("expense.detail.time")}</dt>
                     <dd><time dateTime={selectedExpense.date}>{format(
                       new Date(selectedExpense.date),
-                      "yyyy/M/d (EEE) HH:mm",
+                      "yyyy/M/d (EEE)",
                       { locale: dateLocale },
                     )}</time></dd>
                   </div>

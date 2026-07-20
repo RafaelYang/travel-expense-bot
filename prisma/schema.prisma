@@ -81,6 +81,7 @@ model Trip {
   countries       String[] @default([]) // 目的地國家代碼（ISO 3166-1 alpha-2）
   status          String   @default("planning") // planning, active, completed
   coverImage      String? // 封面圖片 URL
+  timelineOrder   Json     @default("{}") // 每日跨類型交易的手動顯示順序
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -186,8 +187,10 @@ model Deposit {
   amount    Float // 儲值金額
   currency  String // 儲值幣種
   note      String? // 備註
+  date      DateTime // 收入日期（與真實加入時間分離）
   createdAt DateTime @default(now())
 
+  @@index([tripId, date])
   @@index([tripId])
 }
 
