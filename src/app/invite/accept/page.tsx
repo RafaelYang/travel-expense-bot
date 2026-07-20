@@ -13,6 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2, CheckCircle, XCircle, LogIn, Plane } from "lucide-react"
 import { useLanguage } from "@/components/language-provider"
 import { interpolate } from "@/lib/i18n"
+import { ALL_TRIPS_PATH } from "@/lib/active-trip"
 
 interface InviteInfo {
   tripName: string
@@ -307,7 +308,7 @@ function InviteAcceptContent() {
                 {errorMsg}
               </p>
               <button
-                onClick={() => router.push("/")}
+                onClick={() => router.push(ALL_TRIPS_PATH)}
                 className="btn-secondary"
                 style={{ justifyContent: "center", width: "100%" }}
               >

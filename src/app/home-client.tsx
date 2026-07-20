@@ -19,9 +19,11 @@ type Trip = DashboardTrip
 export default function HomeClient({
   initialTrips,
   userName,
+  currentTripId,
 }: {
   initialTrips: DashboardTrip[]
   userName: string
+  currentTripId?: string
 }) {
   const router = useRouter()
   const { t } = useLanguage()
@@ -58,8 +60,9 @@ export default function HomeClient({
   }
 
   // 進行中的行程置頂，其餘按日期新到舊
-  const activeTrips = trips.filter(t => t.status === 'active')
-  const otherTrips = trips.filter(t => t.status !== 'active')
+  const isActiveTrip = (trip: Trip) => trip.id === currentTripId || trip.status === 'active'
+  const activeTrips = trips.filter(isActiveTrip)
+  const otherTrips = trips.filter(trip => !isActiveTrip(trip))
 
   return (
     <div style={{ minHeight: '100vh', paddingBottom: '5rem' }}>

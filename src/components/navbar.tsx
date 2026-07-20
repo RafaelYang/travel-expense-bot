@@ -13,6 +13,7 @@ import { useState, useRef, useEffect, useSyncExternalStore } from "react"
 import { useTheme } from "./theme-provider"
 import { useLanguage } from "./language-provider"
 import { ALL_CURRENCIES } from "@/lib/countries"
+import { ALL_TRIPS_PATH } from "@/lib/active-trip"
 
 /** 飛機剪影 SVG */
 function PlaneIcon({ size = 20, className }: { size?: number; className?: string }) {
@@ -462,7 +463,7 @@ export function Navbar() {
           height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           {/* Logo */}
-          <Link href="/" style={{
+          <Link href={ALL_TRIPS_PATH} style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
             textDecoration: 'none', color: 'var(--text-primary)',
           }}>
@@ -528,7 +529,7 @@ export function Navbar() {
           padding: '0 1rem', height: '56px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <Link href="/" style={{
+          <Link href={ALL_TRIPS_PATH} style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
             textDecoration: 'none', color: 'var(--text-primary)',
           }}>

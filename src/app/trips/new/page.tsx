@@ -14,6 +14,7 @@ import { PlusCircle, ArrowLeft, Plane, Search, X, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { COUNTRIES, type Country } from "@/lib/countries"
 import { CURRENCIES } from "@/lib/utils"
+import { ALL_TRIPS_PATH } from "@/lib/active-trip"
 
 const CURRENCY_CHANGE_EVENT = "travel-expense-currency-change"
 
@@ -147,7 +148,7 @@ export default function NewTripPage() {
         position: 'relative', zIndex: 1,
       }}>
         {/* 返回 */}
-        <Link href="/" style={{
+        <Link href={ALL_TRIPS_PATH} style={{
           display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
           color: 'var(--text-muted)', textDecoration: 'none',
           fontSize: '0.85rem', marginBottom: '1.5rem', transition: 'color 0.2s',

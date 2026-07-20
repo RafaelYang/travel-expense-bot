@@ -26,6 +26,7 @@ import {
 } from "@/lib/utils"
 import { getCurrenciesFromCountries, ALL_CURRENCIES, getCurrencyChipLabel, extractCleanCountries } from "@/lib/countries"
 import { getExpenseBaseAmount, summarizeTripSpending } from "@/lib/money"
+import { ALL_TRIPS_PATH } from "@/lib/active-trip"
 import {
   CashWalletPanel,
   type CashExchangeData,
@@ -217,7 +218,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
       const res = await fetch(`/api/trips/${tripId}?t=${Date.now()}`, { cache: 'no-store' })
       if (!res.ok) {
         if (redirectOnError && (res.status === 403 || res.status === 404)) {
-          router.push("/")
+          router.push(ALL_TRIPS_PATH)
         }
         return
       }
@@ -228,7 +229,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
       setTrip(data)
     } catch {
       if (redirectOnError) {
-        router.push("/")
+        router.push(ALL_TRIPS_PATH)
       }
     } finally {
       setLoading(false)
@@ -238,7 +239,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   const readRealtimeVersion = useCallback(async () => {
     const res = await fetch(`/api/trips/${tripId}/version`, { cache: 'no-store' })
     if (!res.ok) {
-      if (res.status === 403 || res.status === 404) router.push("/")
+      if (res.status === 403 || res.status === 404) router.push(ALL_TRIPS_PATH)
       return null
     }
     const data = await res.json()
@@ -497,7 +498,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           marginBottom: '1.5rem',
         }}>
-          <Link href="/" className="btn-nav">
+          <Link href={ALL_TRIPS_PATH} className="btn-nav">
             <ArrowLeft size={15} />
             {t('trip.back')}
           </Link>

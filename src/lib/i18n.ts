@@ -105,7 +105,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'newTrip.back': '返回行程列表',
 
     // 行程內頁
-    'trip.back': '返回',
+    'trip.back': '所有旅程',
     'trip.settings': '設定',
     'trip.addExpense': '記帳',
     'trip.today': '📅 今日花費',
@@ -461,7 +461,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     'newTrip.back': 'Back to trips',
 
     // 行程內頁
-    'trip.back': 'Back',
+    'trip.back': 'All trips',
     'trip.settings': 'Settings',
     'trip.addExpense': 'Add Expense',
     'trip.today': '📅 Today',

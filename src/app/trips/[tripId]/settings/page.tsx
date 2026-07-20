@@ -14,6 +14,7 @@ import {
 import Link from "next/link"
 import { useLanguage } from "@/components/language-provider"
 import { getCountryCoverImage, COUNTRIES } from "@/lib/countries"
+import { ALL_TRIPS_PATH } from "@/lib/active-trip"
 
 interface TripSettings {
   id: string
@@ -69,7 +70,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const fetchTrip = useCallback(async () => {
     try {
       const res = await fetch(`/api/trips/${tripId}`)
-      if (!res.ok) { router.push("/"); return }
+      if (!res.ok) { router.push(ALL_TRIPS_PATH); return }
       const data = await res.json()
       setTrip(data)
       setEditForm({
@@ -128,7 +129,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         setDailyCountries(daily)
       }
     } catch {
-      router.push("/")
+      router.push(ALL_TRIPS_PATH)
     } finally {
       setLoading(false)
     }
@@ -229,7 +230,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     setDeleting(true)
     try {
       await fetch(`/api/trips/${tripId}`, { method: "DELETE" })
-      router.push("/")
+      router.push(ALL_TRIPS_PATH)
     } finally {
       setDeleting(false)
     }

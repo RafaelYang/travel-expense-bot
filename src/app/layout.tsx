@@ -7,6 +7,7 @@ import { SessionProvider } from "next-auth/react"
 import { InstallAppPrompt } from "@/components/install-app-prompt"
 import { ThemeProvider } from "@/components/theme-provider"
 import { LanguageProvider } from "@/components/language-provider"
+import { TimeZoneSync } from "@/components/time-zone-sync"
 import "./globals.css"
 
 const huninn = Huninn({
@@ -73,6 +74,7 @@ export default function RootLayout({
         <SessionProvider>
           <ThemeProvider>
             <LanguageProvider>
+              <TimeZoneSync />
               {children}
               <InstallAppPrompt />
             </LanguageProvider>

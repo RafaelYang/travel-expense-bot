@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { summarizeTripSpending } from "@/lib/money"
+import { findCurrentTrip, WRITABLE_TRIP_ROLES } from "@/lib/active-trip"
 
 export interface DashboardTrip {
   id: string
@@ -17,6 +18,27 @@ export interface DashboardTrip {
   missingConversionCount: number
   members: { user: { id: string; name: string; image?: string } }[]
   _count: { expenses: number }
+}
+
+/** 取得今天可直接記帳的旅程；日期範圍是權威來源，不依賴手動 status。 */
+export async function getCurrentWritableTripId(userId: string, todayDayKey: string) {
+  const trips = await prisma.trip.findMany({
+    where: {
+      members: {
+        some: {
+          userId,
+          role: { in: [...WRITABLE_TRIP_ROLES] },
+        },
+      },
+    },
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+    },
+  })
+
+  return findCurrentTrip(trips, todayDayKey)?.id
 }
 
 /**
