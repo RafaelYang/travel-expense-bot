@@ -753,6 +753,87 @@ body::before {
   border: 1px solid rgba(56, 189, 248, 0.35);
 }
 
+/* ===== 交易清單 ===== */
+.transaction-list-card {
+  padding: 1.25rem;
+}
+
+.transaction-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem;
+}
+
+.transaction-list-row:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+}
+
+.transaction-list-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.transaction-list-category {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.transaction-list-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.transaction-list-side {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.transaction-list-title {
+  overflow: hidden;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-list-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transaction-list-amount {
+  flex-shrink: 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.transaction-list-value {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.transaction-list-secondary {
+  margin-top: 1px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.transaction-list-status {
+  margin-top: 0.28rem;
+}
+
 /* ===== 滾動條美化 ===== */
 ::-webkit-scrollbar {
   width: 6px;
@@ -782,15 +863,72 @@ body::before {
   }
 }
 
-@media (max-width: 480px) {
-  .exchange-transaction-row {
-    align-items: flex-start !important;
-    flex-wrap: wrap;
+@media (max-width: 600px) {
+  .transaction-list-card {
+    padding: 1rem;
   }
 
-  .exchange-transaction-main,
-  .exchange-transaction-amount {
+  .transaction-list-row {
+    display: grid;
+    grid-template-areas:
+      "category amount"
+      "title title"
+      "meta status";
+    grid-template-columns: minmax(0, 1fr) max-content;
+    align-items: start;
+    gap: 0.4rem 0.5rem;
+    padding: 0.65rem;
+  }
+
+  .transaction-list-main,
+  .transaction-list-content,
+  .transaction-list-side {
+    display: contents;
+  }
+
+  .transaction-list-category {
+    grid-area: category;
+    justify-self: start;
+    max-width: 100%;
+    overflow: hidden;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .transaction-list-title {
+    grid-area: title;
     width: 100%;
+    display: -webkit-box;
+    overflow: hidden;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .transaction-list-meta {
+    grid-area: meta;
+    align-self: center;
+  }
+
+  .transaction-list-meta-wide {
+    grid-column: 1 / -1;
+  }
+
+  .transaction-list-amount {
+    grid-area: amount;
+    min-width: max-content;
+  }
+
+  .transaction-list-status {
+    grid-area: status;
+    justify-self: end;
+    margin-top: 0;
   }
 }
 

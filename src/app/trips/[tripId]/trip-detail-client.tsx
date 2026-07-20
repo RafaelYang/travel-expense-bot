@@ -702,10 +702,7 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
 
         {/* 全部交易列表 */}
         {allTransactions.length > 0 && (
-          <div className="glass-card" style={{
-            padding: '1.25rem',
-            marginBottom: '1rem',
-          }}>
+          <div className="glass-card transaction-list-card" style={{ marginBottom: '1rem' }}>
             <div style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
               gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem',
@@ -1179,51 +1176,45 @@ function ExchangeRow({ exchange, baseCurrency, onEdit }: {
   return (
     <button
       type="button"
-      className="exchange-transaction-row"
+      className="exchange-transaction-row transaction-list-row"
       onClick={onEdit}
       disabled={!onEdit}
       title={onEdit ? t('trip.exchange.edit') : undefined}
       style={{
       width: '100%', border: 'none', color: 'inherit', textAlign: 'left',
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      gap: '0.75rem', padding: '0.75rem', borderRadius: 'var(--radius)',
+      borderRadius: 'var(--radius)',
       background: 'var(--bg-card-hover)',
       cursor: onEdit ? 'pointer' : 'default', transition: 'all 0.2s',
     }}>
-      <div className="exchange-transaction-main" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-        <span className="category-badge" style={{
+      <div className="exchange-transaction-main transaction-list-main">
+        <span className="category-badge transaction-list-category" style={{
           background: 'rgba(14, 165, 233, 0.12)',
           borderColor: 'rgba(56, 189, 248, 0.45)',
-          color: 'var(--text-primary)', flexShrink: 0,
+          color: 'var(--text-primary)',
         }}>
           {t('trip.exchange')}
         </span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{
-            fontSize: '0.95rem', fontWeight: 500,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
+        <div className="transaction-list-content">
+          <div className="transaction-list-title">
             {t(isBuy ? 'trip.exchange.buy' : 'trip.exchange.sell')}{' '}
             {exchange.foreignCurrency} {getCurrencySymbol(exchange.foreignCurrency)}{exchange.foreignAmount.toLocaleString()}
           </div>
-          <div style={{
-            fontSize: '0.8rem', color: 'var(--text-muted)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
+          <div className="transaction-list-meta transaction-list-meta-wide">
             {exchange.user?.name} · {format(new Date(exchange.date), 'HH:mm')}
             {exchange.note && ` · ${exchange.note}`}
           </div>
         </div>
       </div>
-      <div className="exchange-transaction-amount" style={{ flexShrink: 0, textAlign: 'right' }}>
-        <div style={{
-          fontSize: '0.95rem', fontWeight: 700,
-          color: isBuy ? 'var(--color-spend-increase)' : 'var(--color-spend-decrease)',
-        }}>
-          {isBuy ? '+' : '−'}{getCurrencySymbol(baseCurrency)}{exchange.baseAmount.toLocaleString()}
-        </div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '1px' }}>
-          {t(isBuy ? 'trip.exchange.increase' : 'trip.exchange.decrease')}
+      <div className="transaction-list-side">
+        <div className="exchange-transaction-amount transaction-list-amount">
+          <div className="transaction-list-value" style={{
+            color: isBuy ? 'var(--color-spend-increase)' : 'var(--color-spend-decrease)',
+          }}>
+            {isBuy ? '+' : '−'}{getCurrencySymbol(baseCurrency)}{exchange.baseAmount.toLocaleString()}
+          </div>
+          <div className="transaction-list-secondary">
+            {t(isBuy ? 'trip.exchange.increase' : 'trip.exchange.decrease')}
+          </div>
         </div>
       </div>
     </button>
@@ -1401,6 +1392,7 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile }: {
     : undefined
   return (
     <div
+      className="transaction-list-row"
       onClick={onEdit}
       onKeyDown={(event) => {
         if (event.target === event.currentTarget && onEdit && (event.key === 'Enter' || event.key === ' ')) {
@@ -1411,73 +1403,69 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile }: {
       role={onEdit ? 'button' : undefined}
       tabIndex={onEdit ? 0 : undefined}
       style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0.75rem',
         borderRadius: 'var(--radius)',
         background: 'var(--bg-card-hover)',
         transition: 'all 0.2s',
         cursor: onEdit ? 'pointer' : 'default',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-        <span className="category-badge" style={{
+      <div className="transaction-list-main">
+        <span className="category-badge transaction-list-category" style={{
           background: isIncome ? 'rgba(34, 197, 94, 0.12)' : `${cat.color}18`,
           color: 'var(--text-primary)',
           borderColor: isIncome ? 'rgba(34, 197, 94, 0.45)' : `${cat.color}66`,
-          flexShrink: 0,
         }}>
           {isIncome ? t('form.tab.income') : t(`cat.${expense.category}`)}
         </span>
-        <div style={{ minWidth: 0 }}>
-          <div style={{
-            fontSize: '0.95rem', fontWeight: 500,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
+        <div className="transaction-list-content">
+          <div className="transaction-list-title">
             {expense.item}
           </div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+          <div className={`transaction-list-meta${isIncome ? ' transaction-list-meta-wide' : ''}`}>
             {expense.user?.name} · {format(new Date(expense.date), 'HH:mm')}
             {!isIncome && expense.source === 'line' && ' · 📱'}
             {!isIncome && expense.paymentMethod === 'cash' && ` · ${t('form.payment.cash')}`}
           </div>
         </div>
       </div>
-      <div style={{ flexShrink: 0, textAlign: 'right' }}>
-          <span style={{
-            fontSize: '0.95rem', fontWeight: 700,
+      <div className="transaction-list-side">
+        <div className="transaction-list-amount">
+          <span className="transaction-list-value" style={{
             color: isIncome ? '#22c55e' : 'var(--text-primary)',
           }}>
             {isIncome ? '+' : ''}{getCurrencySymbol(displayCurrency)}{expense.amount.toLocaleString()}
           </span>
           {(finalBaseAmount || expense.convertedAmount) && expense.currency !== currency && (
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '1px' }}>
+            <div className="transaction-list-secondary">
               {finalBaseAmount ? '=' : '≈'} {getCurrencySymbol(currency)}
               {(finalBaseAmount || expense.convertedAmount || 0).toLocaleString()}
             </div>
           )}
-          {!isIncome && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                onReconcile?.()
-              }}
-              disabled={!onReconcile}
-              aria-pressed={isReconciled}
-              style={{
-                marginTop: '0.28rem', padding: '0.14rem 0.42rem', borderRadius: '9999px',
-                border: isReconciled
-                  ? '1px solid rgba(34, 197, 94, 0.55)'
-                  : '1px solid rgba(245, 158, 11, 0.5)',
-                background: isReconciled ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.1)',
-                color: isReconciled ? '#22c55e' : '#f59e0b',
-                fontSize: '0.7rem', fontWeight: 800,
-                cursor: onReconcile ? 'pointer' : 'default', opacity: 1,
-              }}
-            >
-              {isReconciled ? `✓ ${t('expense.reconcile.confirmed')}` : t('expense.reconcile.pending')}
-            </button>
-          )}
+        </div>
+        {!isIncome && (
+          <button
+            className="transaction-list-status"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onReconcile?.()
+            }}
+            disabled={!onReconcile}
+            aria-pressed={isReconciled}
+            style={{
+              padding: '0.14rem 0.42rem', borderRadius: '9999px',
+              border: isReconciled
+                ? '1px solid rgba(34, 197, 94, 0.55)'
+                : '1px solid rgba(245, 158, 11, 0.5)',
+              background: isReconciled ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.1)',
+              color: isReconciled ? '#22c55e' : '#f59e0b',
+              fontSize: '0.7rem', fontWeight: 800,
+              cursor: onReconcile ? 'pointer' : 'default', opacity: 1,
+            }}
+          >
+            {isReconciled ? `✓ ${t('expense.reconcile.confirmed')}` : t('expense.reconcile.pending')}
+          </button>
+        )}
       </div>
     </div>
   )
