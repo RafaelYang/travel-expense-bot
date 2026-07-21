@@ -3,7 +3,7 @@
  */
 "use client"
 
-import { useCallback, useEffect, useState, use } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import {
@@ -13,8 +13,12 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "@/components/language-provider"
-import { getCountryCoverImage, COUNTRIES } from "@/lib/countries"
+import { getCountryCoverImage, parseTripCountryPlan, COUNTRIES } from "@/lib/countries"
 import { ALL_TRIPS_PATH } from "@/lib/active-trip"
+import {
+  isTripSettingsDraftDirty,
+  type TripSettingsDraft,
+} from "@/lib/trip-settings-draft"
 
 interface TripSettings {
   id: string
@@ -36,6 +40,45 @@ interface TripSettings {
   }[]
 }
 
+interface NavigationTraverseEvent extends Event {
+  canIntercept: boolean
+  hashChange: boolean
+  navigationType: "push" | "reload" | "replace" | "traverse"
+  intercept(options: {
+    precommitHandler?: () => Promise<void>
+  }): void
+}
+
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000
+
+function calendarDayOrdinal(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value)
+  if (!match) return null
+  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+}
+
+function createDailyCountryDraft(
+  countryList: readonly string[],
+  configuredDaily: readonly (string | null)[],
+  startDate: string,
+  endDate: string,
+) {
+  const start = calendarDayOrdinal(startDate)
+  const end = calendarDayOrdinal(endDate)
+  if (start === null || end === null || end < start) return []
+
+  const totalDays = Math.round((end - start) / MILLISECONDS_PER_DAY) + 1
+  const fallback = countryList[0] || "TW"
+  const distributed = Array.from({ length: totalDays }, (_, index) => {
+    if (countryList.length <= 1) return fallback
+    const interval = totalDays / countryList.length
+    return countryList[Math.min(Math.floor(index / interval), countryList.length - 1)]
+  })
+
+  if (configuredDaily.length === 0) return distributed
+  return distributed.map((value, index) => configuredDaily[index] ?? value)
+}
+
 export default function TripSettingsPage({ params }: { params: Promise<{ tripId: string }> }) {
   const { tripId } = use(params)
   const router = useRouter()
@@ -45,6 +88,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [codeCopied, setCodeCopied] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState("")
   const [uploadingImage, setUploadingImage] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -57,6 +101,8 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
 
   const [countriesList, setCountriesList] = useState<string[]>([])
   const [dailyCountries, setDailyCountries] = useState<string[]>([])
+  const [savedDraft, setSavedDraft] = useState<TripSettingsDraft | null>(null)
+  const navigationBypassRef = useRef(false)
 
   const [editForm, setEditForm] = useState({
     name: "",
@@ -67,67 +113,113 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     coverImage: "",
   })
 
+  const currentDraft = useMemo<TripSettingsDraft>(() => ({
+    ...editForm,
+    countriesList,
+    dailyCountries,
+  }), [countriesList, dailyCountries, editForm])
+  const hasUnsavedChanges = isTripSettingsDraftDirty(savedDraft, currentDraft)
+  const shouldBlockNavigation = hasUnsavedChanges || saving
+
+  const allowNavigation = useCallback(() => {
+    navigationBypassRef.current = true
+  }, [])
+
+  const confirmNavigation = useCallback(() => {
+    if (saving) {
+      window.alert(t('settings.save.inProgress'))
+      return false
+    }
+    if (!hasUnsavedChanges || navigationBypassRef.current) return true
+    const confirmed = window.confirm(t('settings.unsaved.confirm'))
+    if (confirmed) allowNavigation()
+    return confirmed
+  }, [allowNavigation, hasUnsavedChanges, saving, t])
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) {
+      navigationBypassRef.current = false
+      return
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (navigationBypassRef.current) return
+      event.preventDefault()
+      event.returnValue = ""
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [shouldBlockNavigation])
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) return
+
+    const navigation = (window as Window & { navigation?: EventTarget }).navigation
+    if (!navigation) return
+
+    const handleNavigate = (event: Event) => {
+      const navigateEvent = event as NavigationTraverseEvent
+      if (
+        navigateEvent.navigationType !== "traverse"
+        || !navigateEvent.canIntercept
+        || !navigateEvent.cancelable
+        || navigateEvent.hashChange
+        || navigationBypassRef.current
+      ) {
+        return
+      }
+
+      if ("NavigationPrecommitController" in window) {
+        navigateEvent.intercept({
+          precommitHandler: async () => {
+            if (!confirmNavigation()) {
+              throw new DOMException("Unsaved settings navigation cancelled", "AbortError")
+            }
+          },
+        })
+        return
+      }
+
+      // Base Navigation API implementations can still cancel a traversal
+      // synchronously, without racing Next.js with a post-commit reversal.
+      if (!confirmNavigation()) navigateEvent.preventDefault()
+    }
+
+    navigation.addEventListener("navigate", handleNavigate)
+    return () => navigation.removeEventListener("navigate", handleNavigate)
+  }, [confirmNavigation, shouldBlockNavigation])
+
   const fetchTrip = useCallback(async () => {
     try {
       const res = await fetch(`/api/trips/${tripId}`)
       if (!res.ok) { router.push(ALL_TRIPS_PATH); return }
       const data = await res.json()
-      setTrip(data)
-      setEditForm({
+      const loadedEditForm = {
         name: data.name,
         description: data.description || "",
         startDate: data.startDate.split("T")[0],
         endDate: data.endDate.split("T")[0],
         baseCurrency: data.baseCurrency,
         coverImage: data.coverImage || "",
+      }
+      const countryPlan = parseTripCountryPlan(data.countries)
+      const loadedDailyCountries = createDailyCountryDraft(
+        countryPlan.list,
+        countryPlan.daily,
+        loadedEditForm.startDate,
+        loadedEditForm.endDate,
+      )
+
+      setTrip(data)
+      setEditForm(loadedEditForm)
+      setCountriesList(countryPlan.list)
+      setDailyCountries(loadedDailyCountries)
+      setSavedDraft({
+        ...loadedEditForm,
+        countriesList: [...countryPlan.list],
+        dailyCountries: [...loadedDailyCountries],
       })
-
-      // 遞迴解包與淨化目的地國家 (防止滾雪球式嵌套髒資料)
-      const cleanExtractCountries = (input: string[] | null | undefined): { list: string[], daily: string[] } => {
-        if (!input || input.length === 0) return { list: [], daily: [] }
-        const first = input[0]
-        if (first && typeof first === "string" && first.startsWith("{")) {
-          try {
-            const parsed = JSON.parse(first)
-            if (parsed && typeof parsed === "object") {
-              if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
-                return cleanExtractCountries(parsed.list)
-              }
-              const parsedList: unknown[] = Array.isArray(parsed.list) ? parsed.list : []
-              const parsedDaily: unknown[] = Array.isArray(parsed.daily) ? parsed.daily : []
-              const list = parsedList.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
-              const daily = parsedDaily.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
-              return { list, daily }
-            }
-          } catch {}
-        }
-        const list = input.filter((c) => c.length === 2 && !c.includes("{"))
-        return { list, daily: [] }
-      }
-
-      const { list: cleanList, daily: cleanDaily } = cleanExtractCountries(data.countries)
-      setCountriesList(cleanList)
-
-      if (cleanDaily.length > 0) {
-        setDailyCountries(cleanDaily)
-      } else {
-        const start = new Date(data.startDate)
-        const end = new Date(data.endDate)
-        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-        const daily: string[] = []
-        for (let i = 0; i < totalDays; i++) {
-          if (cleanList.length === 1) {
-            daily.push(cleanList[0])
-          } else if (cleanList.length > 1) {
-            const interval = totalDays / cleanList.length
-            const countryIdx = Math.min(Math.floor(i / interval), cleanList.length - 1)
-            daily.push(cleanList[countryIdx])
-          } else {
-            daily.push("TW")
-          }
-        }
-        setDailyCountries(daily)
-      }
     } catch {
       router.push(ALL_TRIPS_PATH)
     } finally {
@@ -204,7 +296,9 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   }
 
   const saveSettings = async () => {
+    if (uploadingImage) return
     setSaving(true)
+    setSaveError("")
     try {
       const payload = {
         ...editForm,
@@ -215,12 +309,25 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
           })
         ]
       }
-      await fetch(`/api/trips/${tripId}`, {
+      const response = await fetch(`/api/trips/${tripId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      fetchTrip()
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(result?.error || t('settings.save.error'))
+      }
+
+      setSavedDraft({
+        ...currentDraft,
+        countriesList: [...currentDraft.countriesList],
+        dailyCountries: [...currentDraft.dailyCountries],
+      })
+      allowNavigation()
+      router.replace(`/trips/${tripId}`)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : t('settings.save.error'))
     } finally {
       setSaving(false)
     }
@@ -229,8 +336,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const deleteTrip = async () => {
     setDeleting(true)
     try {
-      await fetch(`/api/trips/${tripId}`, { method: "DELETE" })
-      router.push(ALL_TRIPS_PATH)
+      const response = await fetch(`/api/trips/${tripId}`, { method: "DELETE" })
+      if (!response.ok) return
+      allowNavigation()
+      router.replace(ALL_TRIPS_PATH)
     } finally {
       setDeleting(false)
     }
@@ -244,7 +353,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         method: 'DELETE',
       })
       if (res.ok) {
-        fetchTrip()
+        setTrip((current) => current ? {
+          ...current,
+          members: current.members.filter((member) => member.id !== memberId),
+        } : current)
       } else {
         const data = await res.json()
         alert(data.error || (locale === 'en' ? 'Failed to remove' : '移除失敗'))
@@ -266,13 +378,20 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
 
   return (
     <div style={{ minHeight: '100vh', paddingBottom: '6rem' }}>
-      <Navbar />
+      <Navbar onBeforeNavigate={confirmNavigation} />
 
       <main style={{
         maxWidth: '600px', margin: '0 auto', padding: '1.5rem',
         position: 'relative', zIndex: 1,
       }}>
-        <Link href={`/trips/${tripId}`} className="btn-nav" style={{ marginBottom: '1.5rem' }}>
+        <Link
+          href={`/trips/${tripId}`}
+          className="btn-nav"
+          style={{ marginBottom: '1.5rem' }}
+          onNavigate={(event) => {
+            if (!confirmNavigation()) event.preventDefault()
+          }}
+        >
           <ArrowLeft size={15} />
           {t('settings.back')}
         </Link>
@@ -294,7 +413,10 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             {t('settings.basic')}
           </h3>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <fieldset disabled={saving} style={{
+            display: 'flex', flexDirection: 'column', gap: '1rem',
+            border: 0, padding: 0, margin: 0, minWidth: 0,
+          }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.375rem', fontWeight: 500 }}>
                 {t('settings.tripName')}
@@ -551,11 +673,35 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
               </div>
             </div>
 
-            <button onClick={saveSettings} className="btn-primary" disabled={saving}
-              style={{ justifyContent: 'center', opacity: saving ? 0.7 : 1 }}>
+            <button onClick={saveSettings} className="btn-primary" disabled={saving || uploadingImage}
+              style={{ justifyContent: 'center', opacity: saving || uploadingImage ? 0.7 : 1 }}>
               {saving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : t('settings.save')}
             </button>
-          </div>
+
+            {hasUnsavedChanges && (
+              <div role="status" aria-live="polite" style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
+                padding: '0.625rem 0.75rem', borderRadius: '8px',
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                color: 'var(--color-primary-text)', fontSize: '0.78rem', fontWeight: 650,
+              }}>
+                <AlertTriangle size={15} />
+                {t('settings.unsaved.notice')}
+              </div>
+            )}
+
+            {saveError && (
+              <div role="alert" style={{
+                padding: '0.625rem 0.75rem', borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.25)',
+                color: 'var(--color-danger)', fontSize: '0.78rem', fontWeight: 600,
+              }}>
+                {saveError}
+              </div>
+            )}
+          </fieldset>
         </div>
 
         {/* 邀請碼區塊 */}

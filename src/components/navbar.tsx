@@ -32,6 +32,11 @@ interface LineStatus {
   activeTripName: string | null
 }
 
+interface NavbarProps {
+  /** Return false to cancel links or logout while a parent form is dirty. */
+  onBeforeNavigate?: () => boolean
+}
+
 let lineStatusCache: { userId: string; data: LineStatus; expiresAt: number } | null = null
 let lineStatusRequest: { userId: string; promise: Promise<LineStatus | null> } | null = null
 
@@ -80,7 +85,7 @@ function subscribePreferredCurrency(onStoreChange: () => void) {
   }
 }
 
-export function Navbar() {
+export function Navbar({ onBeforeNavigate }: NavbarProps = {}) {
   const { data: session } = useSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -431,7 +436,11 @@ export function Navbar() {
       {/* 登出 */}
       <div style={{ padding: '0.375rem', borderTop: '1px solid var(--border-color)' }}>
         <button
-          onClick={() => { setUserMenuOpen(false); signOut({ callbackUrl: '/login' }) }}
+          onClick={() => {
+            if (onBeforeNavigate?.() === false) return
+            setUserMenuOpen(false)
+            signOut({ callbackUrl: '/login' })
+          }}
           id="logout-button"
           style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -463,7 +472,9 @@ export function Navbar() {
           height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           {/* Logo */}
-          <Link href={ALL_TRIPS_PATH} style={{
+          <Link href={ALL_TRIPS_PATH} onNavigate={(event) => {
+            if (onBeforeNavigate?.() === false) event.preventDefault()
+          }} style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
             textDecoration: 'none', color: 'var(--text-primary)',
           }}>
@@ -529,7 +540,9 @@ export function Navbar() {
           padding: '0 1rem', height: '56px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <Link href={ALL_TRIPS_PATH} style={{
+          <Link href={ALL_TRIPS_PATH} onNavigate={(event) => {
+            if (onBeforeNavigate?.() === false) event.preventDefault()
+          }} style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
             textDecoration: 'none', color: 'var(--text-primary)',
           }}>
@@ -673,7 +686,10 @@ export function Navbar() {
                   {userEmail && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userEmail}</div>}
                 </div>
               </div>
-              <button onClick={() => signOut({ callbackUrl: '/login' })} style={{
+              <button onClick={() => {
+                if (onBeforeNavigate?.() === false) return
+                signOut({ callbackUrl: '/login' })
+              }} style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: '0.5rem',
                 padding: '0.625rem 0.75rem', borderRadius: '8px',
                 background: 'rgba(248, 113, 113, 0.08)', border: '1px solid rgba(248, 113, 113, 0.15)',
