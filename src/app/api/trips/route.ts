@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getCurrenciesFromCountries } from "@/lib/countries"
+import { getCurrenciesFromCountries, parseTripCountryPlan } from "@/lib/countries"
 import { getTripDashboard } from "@/lib/trip-dashboard"
 import { z } from "zod"
 
@@ -39,23 +39,26 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const data = createTripSchema.parse(body)
 
-    // 從國家列表推算預設幣種（第一個國家的幣種，或 baseCurrency）
-    const tripCurrencies = getCurrenciesFromCountries(data.countries)
+    // countries 相容平面、單層與歷史巢狀 JSON，寫入時一律正規化為單層。
+    const countryPlan = parseTripCountryPlan(data.countries)
+    const tripCurrencies = getCurrenciesFromCountries(countryPlan.list)
     const defaultCurrency = tripCurrencies[0] || data.baseCurrency
 
     // 計算行程天數，並預設初始化每一天的目的地為第一個國家
     const start = new Date(data.startDate)
     const end = new Date(data.endDate)
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
-    const firstCountry = data.countries[0] || "TW"
+    const firstCountry = countryPlan.list[0] || "TW"
     const daily: string[] = []
+    let activeCountry = firstCountry
     for (let i = 0; i < totalDays; i++) {
-      daily.push(firstCountry)
+      activeCountry = countryPlan.daily[i] || activeCountry
+      daily.push(activeCountry)
     }
 
     const countriesPayload = [
       JSON.stringify({
-        list: data.countries,
+        list: countryPlan.list,
         daily,
       })
     ]

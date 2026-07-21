@@ -8,10 +8,16 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { redirect, notFound } from "next/navigation"
+import { cookies, headers } from "next/headers"
 import TripDetailClient, { type TripData } from "./trip-detail-client"
 import { summarizeDeposits, summarizeTripSpending } from "@/lib/money"
 import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
 import { createTripVersion } from "@/lib/trip-version"
+import {
+  getCalendarDayKey,
+  resolveCalendarTimeZone,
+  VISITOR_TIME_ZONE_COOKIE,
+} from "@/lib/active-trip"
 
 export default async function TripPage({ params }: { params: Promise<{ tripId: string }> }) {
   const session = await auth()
@@ -19,7 +25,18 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
     redirect("/login")
   }
 
-  const { tripId } = await params
+  const [{ tripId }, requestHeaders, cookieStore] = await Promise.all([
+    params,
+    headers(),
+    cookies(),
+  ])
+  const initialCalendarDay = getCalendarDayKey(
+    new Date(),
+    resolveCalendarTimeZone(
+      cookieStore.get(VISITOR_TIME_ZONE_COOKIE)?.value,
+      requestHeaders.get("x-vercel-ip-timezone"),
+    ),
+  )
 
   // 1. 確認當前使用者為行程成員
   const member = await prisma.tripMember.findUnique({
@@ -188,5 +205,11 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
     })),
   }
 
-  return <TripDetailClient initialData={serializedTrip as TripData} tripId={tripId} />
+  return (
+    <TripDetailClient
+      initialData={serializedTrip as TripData}
+      tripId={tripId}
+      initialCalendarDay={initialCalendarDay}
+    />
+  )
 }

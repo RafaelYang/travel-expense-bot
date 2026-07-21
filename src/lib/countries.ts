@@ -11,6 +11,103 @@ export interface Country {
   currency: string // 該國主要幣種代碼
 }
 
+export interface TripCountryPlan {
+  list: string[]
+  daily: Array<string | null>
+}
+
+interface TripDayCountryOptions {
+  countries: readonly string[] | null | undefined
+  startDate: string
+  endDate: string
+  day: string
+}
+
+const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/u
+const CALENDAR_DAY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/u
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1_000
+
+function normalizeCountryCode(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim().toUpperCase()
+  return COUNTRY_CODE_PATTERN.test(normalized) ? normalized : null
+}
+
+function uniqueCountryCodes(values: readonly unknown[]) {
+  return [...new Set(values.flatMap((value) => {
+    const normalized = normalizeCountryCode(value)
+    return normalized ? [normalized] : []
+  }))]
+}
+
+function parseTripCountryPlanValue(input: unknown, depth: number): TripCountryPlan {
+  if (!Array.isArray(input) || input.length === 0 || depth > 8) {
+    return { list: [], daily: [] }
+  }
+
+  for (const value of input) {
+    if (typeof value !== 'string') continue
+    const serialized = value.trim()
+    if (!serialized.startsWith('{') && !serialized.startsWith('[')) continue
+
+    try {
+      const parsed = JSON.parse(serialized) as unknown
+      if (Array.isArray(parsed)) {
+        return parseTripCountryPlanValue(parsed, depth + 1)
+      }
+      if (!parsed || typeof parsed !== 'object') continue
+
+      const payload = parsed as { list?: unknown; daily?: unknown }
+      const rawList = Array.isArray(payload.list) ? payload.list : []
+      const containsNestedPlan = rawList.some((item) => (
+        typeof item === 'string' && item.trim().startsWith('{')
+      ))
+      const nestedPlan = parseTripCountryPlanValue(rawList, depth + 1)
+      if (containsNestedPlan) return nestedPlan
+
+      return {
+        list: nestedPlan.list,
+        daily: Array.isArray(payload.daily)
+          ? payload.daily.map(normalizeCountryCode)
+          : [],
+      }
+    } catch {
+      // Keep looking for a valid encoded payload, then fall back to legacy codes.
+    }
+  }
+
+  return { list: uniqueCountryCodes(input), daily: [] }
+}
+
+function calendarDayOrdinal(value: string): number | null {
+  const dayKey = value.match(/^(\d{4}-\d{2}-\d{2})/u)?.[1]
+  const match = dayKey ? CALENDAR_DAY_PATTERN.exec(dayKey) : null
+  if (!match) return null
+
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const timestamp = Date.UTC(year, month - 1, day)
+  const parsed = new Date(timestamp)
+  if (
+    parsed.getUTCFullYear() !== year
+    || parsed.getUTCMonth() !== month - 1
+    || parsed.getUTCDate() !== day
+  ) {
+    return null
+  }
+  return timestamp / MILLISECONDS_PER_DAY
+}
+
+function distributedCountryForDay(plan: TripCountryPlan, dayIndex: number, totalDays: number) {
+  if (plan.list.length === 0) return null
+  if (plan.list.length === 1) return plan.list[0]
+
+  const interval = totalDays / plan.list.length
+  const countryIndex = Math.min(Math.floor(dayIndex / interval), plan.list.length - 1)
+  return plan.list[countryIndex] ?? null
+}
+
 /**
  * 常見旅遊目的地國家清單
  * 依區域分類，方便 UI 顯示
@@ -79,7 +176,70 @@ export const COUNTRIES: Country[] = [
  * 根據國家代碼取得國家資訊
  */
 export function getCountryByCode(code: string): Country | undefined {
-  return COUNTRIES.find(c => c.code === code)
+  const normalized = normalizeCountryCode(code)
+  return normalized ? COUNTRIES.find(c => c.code === normalized) : undefined
+}
+
+/**
+ * 解開 Trip.countries 目前使用的平面、單層或歷史巢狀 JSON 格式。
+ * daily 保留原始索引；無效格會留下 null，避免後續日期錯位。
+ */
+export function parseTripCountryPlan(
+  input: readonly string[] | null | undefined,
+): TripCountryPlan {
+  return parseTripCountryPlanValue(input, 0)
+}
+
+export function getCurrencyFromCountryCode(code: string | null | undefined): string | null {
+  const normalized = normalizeCountryCode(code)
+  if (!normalized) return null
+  if (normalized === 'TW') return 'TWD'
+  return getCountryByCode(normalized)?.currency ?? null
+}
+
+/** Resolve the trip's configured primary country for an in-range calendar day. */
+export function resolveTripDayCountry({
+  countries,
+  startDate,
+  endDate,
+  day,
+}: TripDayCountryOptions): string | null {
+  const startOrdinal = calendarDayOrdinal(startDate)
+  const endOrdinal = calendarDayOrdinal(endDate)
+  const dayOrdinal = calendarDayOrdinal(day)
+  if (
+    startOrdinal === null
+    || endOrdinal === null
+    || dayOrdinal === null
+    || endOrdinal < startOrdinal
+    || dayOrdinal < startOrdinal
+    || dayOrdinal > endOrdinal
+  ) {
+    return null
+  }
+
+  const plan = parseTripCountryPlan(countries)
+  const dayIndex = dayOrdinal - startOrdinal
+  const totalDays = endOrdinal - startOrdinal + 1
+  return plan.daily[dayIndex]
+    ?? distributedCountryForDay(plan, dayIndex, totalDays)
+}
+
+/** Resolve a non-base reference currency for today's configured destination. */
+export function resolveTripDayCurrency(
+  options: TripDayCountryOptions & { baseCurrency: string },
+): string | null {
+  const activeCountry = resolveTripDayCountry(options)
+  if (!activeCountry) return null
+
+  const plan = parseTripCountryPlan(options.countries)
+  const normalizedBase = options.baseCurrency.trim().toUpperCase()
+  const countryCandidates = [activeCountry, ...plan.list]
+  for (const country of new Set(countryCandidates)) {
+    const currency = getCurrencyFromCountryCode(country)
+    if (currency && currency !== normalizedBase) return currency
+  }
+  return null
 }
 
 /**
@@ -88,9 +248,9 @@ export function getCountryByCode(code: string): Country | undefined {
  */
 export function getCurrenciesFromCountries(countryCodes: string[]): string[] {
   const currencies = new Set<string>()
-  for (const code of countryCodes) {
-    const country = getCountryByCode(code)
-    if (country) currencies.add(country.currency)
+  for (const code of extractCleanCountries(countryCodes)) {
+    const currency = getCurrencyFromCountryCode(code)
+    if (currency) currencies.add(currency)
   }
   return Array.from(currencies)
 }
@@ -210,22 +370,7 @@ const DEFAULT_COVER = 'https://images.unsplash.com/photo-1488646953014-85cb44e25
  * 遞迴解包與淨化目的地國家 (防止滾雪球式嵌套髒資料)
  */
 export function extractCleanCountries(input: string[] | null | undefined): string[] {
-  if (!input || input.length === 0) return []
-  
-  const first = input[0]
-  if (first && typeof first === "string" && first.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(first)
-      if (parsed && typeof parsed === "object") {
-        if (parsed.list && parsed.list.length > 0 && typeof parsed.list[0] === "string" && parsed.list[0].startsWith("{")) {
-          return extractCleanCountries(parsed.list)
-        }
-        const parsedList: unknown[] = Array.isArray(parsed.list) ? parsed.list : []
-        return parsedList.filter((c): c is string => typeof c === "string" && c.length === 2 && !c.includes("{"))
-      }
-    } catch {}
-  }
-  return input.filter((c) => c.length === 2 && !c.includes("{"))
+  return parseTripCountryPlan(input).list
 }
 
 /**

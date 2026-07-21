@@ -298,7 +298,7 @@ export function ExchangeRateCard({
         </span>
       </div>
 
-      <div className="exchange-rate-pair-controls" aria-label={t("trip.rate.pair")}>
+      <div className="exchange-rate-pair-controls" role="group" aria-label={t("trip.rate.pair")}>
         <label>
           <span>{t("trip.rate.from")}</span>
           <select value={fromCurrency} onChange={(event) => changePair("from", event.target.value)}>
@@ -310,7 +310,13 @@ export function ExchangeRateCard({
             ))}
           </select>
         </label>
-        <button type="button" className="exchange-rate-swap" onClick={swapCurrencies} aria-label={t("trip.rate.swap")}>
+        <button
+          type="button"
+          className="exchange-rate-swap"
+          onClick={swapCurrencies}
+          aria-label={t("trip.rate.swap")}
+          disabled={!fromCurrency || !toCurrency}
+        >
           <ArrowRightLeft size={18} aria-hidden="true" />
         </button>
         <label>

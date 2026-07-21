@@ -24,7 +24,14 @@ import { useLanguage } from "@/components/language-provider"
 import {
   EXPENSE_CATEGORIES, getCategoryInfo, getCurrencySymbol,
 } from "@/lib/utils"
-import { getCurrenciesFromCountries, ALL_CURRENCIES, getCurrencyChipLabel, extractCleanCountries } from "@/lib/countries"
+import {
+  ALL_CURRENCIES,
+  extractCleanCountries,
+  getCurrenciesFromCountries,
+  getCurrencyChipLabel,
+  parseTripCountryPlan,
+  resolveTripDayCurrency,
+} from "@/lib/countries"
 import { getExpenseBaseAmount, summarizeTripSpending } from "@/lib/money"
 import { ALL_TRIPS_PATH } from "@/lib/active-trip"
 import {
@@ -153,7 +160,50 @@ function subscribePreferredCurrency(onStoreChange: () => void) {
   }
 }
 
-export default function TripDetailClient({ initialData, tripId }: { initialData: TripData; tripId: string }) {
+function getCurrentCalendarDaySnapshot() {
+  return getLocalCalendarDay()
+}
+
+function subscribeCurrentCalendarDay(onStoreChange: () => void) {
+  let midnightTimer: number | null = null
+
+  const scheduleMidnightRefresh = () => {
+    if (midnightTimer !== null) window.clearTimeout(midnightTimer)
+    const now = new Date()
+    const nextDay = new Date(now)
+    nextDay.setHours(24, 0, 0, 50)
+    midnightTimer = window.setTimeout(() => {
+      onStoreChange()
+      scheduleMidnightRefresh()
+    }, Math.max(1_000, nextDay.getTime() - now.getTime()))
+  }
+  const refreshAfterReturn = () => {
+    onStoreChange()
+    scheduleMidnightRefresh()
+  }
+  const refreshWhenVisible = () => {
+    if (document.visibilityState === "visible") refreshAfterReturn()
+  }
+
+  scheduleMidnightRefresh()
+  window.addEventListener("focus", refreshAfterReturn)
+  document.addEventListener("visibilitychange", refreshWhenVisible)
+  return () => {
+    if (midnightTimer !== null) window.clearTimeout(midnightTimer)
+    window.removeEventListener("focus", refreshAfterReturn)
+    document.removeEventListener("visibilitychange", refreshWhenVisible)
+  }
+}
+
+export default function TripDetailClient({
+  initialData,
+  tripId,
+  initialCalendarDay,
+}: {
+  initialData: TripData
+  tripId: string
+  initialCalendarDay: string
+}) {
   const router = useRouter()
   const [trip, setTrip] = useState<TripData>(initialData)
   const realtimeVersionRef = useRef(initialData.realtimeVersion)
@@ -221,13 +271,51 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
   }, [])
   const { t, locale } = useLanguage()
   const dateLocale = locale === 'en' ? enUS : zhTW
+  const currentCalendarDay = useSyncExternalStore(
+    subscribeCurrentCalendarDay,
+    getCurrentCalendarDaySnapshot,
+    () => initialCalendarDay,
+  )
+  const tripCountryPlan = useMemo(
+    () => parseTripCountryPlan(trip.countries),
+    [trip.countries],
+  )
+  const plannedRateCurrencies = useMemo(() => getCurrenciesFromCountries([
+    ...tripCountryPlan.list,
+    ...tripCountryPlan.daily.flatMap((country) => country ? [country] : []),
+  ]), [tripCountryPlan])
   const suggestedRateCurrencies = useMemo(() => [
     ...new Set([
-      ...getCurrenciesFromCountries(trip.countries),
+      ...plannedRateCurrencies,
       ...trip.cashWallets.map((wallet) => wallet.currency),
       ...trip.expenses.map((expense) => expense.currency),
     ]),
-  ], [trip.cashWallets, trip.countries, trip.expenses])
+  ], [plannedRateCurrencies, trip.cashWallets, trip.expenses])
+  const automaticRateCurrency = useMemo(() => {
+    const dailyCurrency = resolveTripDayCurrency({
+      countries: trip.countries,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      day: currentCalendarDay,
+      baseCurrency: trip.baseCurrency,
+    })
+    const normalizedBase = trip.baseCurrency.trim().toUpperCase()
+    return [dailyCurrency, trip.defaultCurrency, ...suggestedRateCurrencies]
+      .flatMap((currency) => {
+        const normalized = currency?.trim().toUpperCase()
+        return normalized && ALL_CURRENCIES[normalized] ? [normalized] : []
+      })
+      .find((currency) => currency !== normalizedBase) || ""
+  }, [
+    currentCalendarDay,
+    suggestedRateCurrencies,
+    trip.baseCurrency,
+    trip.countries,
+    trip.defaultCurrency,
+    trip.endDate,
+    trip.startDate,
+  ])
+  const exchangeRateCardKey = `${currentCalendarDay}:${automaticRateCurrency}`
 
   const fetchTrip = useCallback(async (redirectOnError = true) => {
     try {
@@ -759,8 +847,9 @@ export default function TripDetailClient({ initialData, tripId }: { initialData:
         )}
 
         <ExchangeRateCard
+          key={exchangeRateCardKey}
           baseCurrency={trip.baseCurrency}
-          defaultForeignCurrency={trip.defaultCurrency}
+          defaultForeignCurrency={automaticRateCurrency}
           suggestedCurrencies={suggestedRateCurrencies}
         />
 
