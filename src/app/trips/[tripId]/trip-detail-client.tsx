@@ -34,7 +34,7 @@ import {
   resolveTripDayCurrency,
 } from "@/lib/countries"
 import { getExpenseBaseAmount, summarizeTripSpending } from "@/lib/money"
-import { ALL_TRIPS_PATH } from "@/lib/active-trip"
+import { ALL_TRIPS_PATH, LAST_VIEWED_TRIP_COOKIE } from "@/lib/active-trip"
 import {
   CashWalletPanel,
   type CashExchangeData,
@@ -210,7 +210,7 @@ export default function TripDetailClient({
   const realtimeVersionRef = useRef(initialData.realtimeVersion)
   const [loading, setLoading] = useState(false)
   const [showExpenseForm, setShowExpenseForm] = useState(false)
-  const [showAllExpenses, setShowAllExpenses] = useState(false)
+  const [showAllExpenses, setShowAllExpenses] = useState(true)
   const [showMemberList, setShowMemberList] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
@@ -231,6 +231,19 @@ export default function TripDetailClient({
   const suggestionsTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputWrapperRef = useRef<HTMLDivElement>(null)
   const statsTriggerRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    try {
+      document.cookie = [
+        `${LAST_VIEWED_TRIP_COOKIE}=${encodeURIComponent(tripId)}`,
+        "Path=/",
+        `Max-Age=${60 * 60 * 24 * 365}`,
+        "SameSite=Lax",
+      ].join("; ")
+    } catch {
+      // Cookie 不可用時仍可正常瀏覽，只是不保留上次行程。
+    }
+  }, [tripId])
 
   const openExpenseModal = (
     expense: TripData['expenses'][number],

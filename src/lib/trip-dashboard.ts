@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { summarizeTripSpending } from "@/lib/money"
-import { findCurrentTrip, WRITABLE_TRIP_ROLES } from "@/lib/active-trip"
+import { resolveTripLaunch } from "@/lib/active-trip"
 
 export interface DashboardTrip {
   id: string
@@ -20,25 +20,34 @@ export interface DashboardTrip {
   _count: { expenses: number }
 }
 
-/** 取得今天可直接記帳的旅程；日期範圍是權威來源，不依賴手動 status。 */
-export async function getCurrentWritableTripId(userId: string, todayDayKey: string) {
-  const trips = await prisma.trip.findMany({
-    where: {
-      members: {
-        some: {
-          userId,
-          role: { in: [...WRITABLE_TRIP_ROLES] },
+/** 取得首頁智慧導向所需資料，並在同一個查詢中驗證上次瀏覽行程的成員權限。 */
+export async function getTripLaunchSelection(
+  userId: string,
+  todayDayKey: string,
+  lastViewedTripId: string | null | undefined,
+) {
+  const memberships = await prisma.tripMember.findMany({
+    where: { userId },
+    select: {
+      role: true,
+      trip: {
+        select: {
+          id: true,
+          startDate: true,
+          endDate: true,
         },
       },
     },
-    select: {
-      id: true,
-      startDate: true,
-      endDate: true,
-    },
   })
 
-  return findCurrentTrip(trips, todayDayKey)?.id
+  return resolveTripLaunch(
+    memberships.map((membership) => ({
+      ...membership.trip,
+      role: membership.role,
+    })),
+    todayDayKey,
+    lastViewedTripId,
+  )
 }
 
 /**

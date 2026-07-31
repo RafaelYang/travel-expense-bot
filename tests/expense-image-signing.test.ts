@@ -4,6 +4,7 @@ import test from "node:test"
 import {
   createSignedExpenseImagePath,
   createSignedExpenseImagePaths,
+  createSignedExpenseImagePathsFromCount,
   resolveExpenseImageInputs,
   signExpenseImageAccess,
   verifyExpenseImageAccess,
@@ -50,6 +51,15 @@ test("serializes stored images as signed references instead of Base64 payloads",
   assert.equal(paths.length, 2)
   assert.equal(paths.every((path) => path.startsWith("/api/trips/expenses/images/expense-1?")), true)
   assert.equal(paths.some((path) => path.includes("QUJD")), false)
+})
+
+test("creates signed references from image count without loading image contents", () => {
+  const paths = createSignedExpenseImagePathsFromCount("expense-1", 5, 60, secret)
+
+  assert.equal(paths.length, 3)
+  assert.equal(paths[0].includes("index=0"), true)
+  assert.equal(paths[2].includes("index=2"), true)
+  assert.deepEqual(createSignedExpenseImagePathsFromCount("expense-1", 0, 60, secret), [])
 })
 
 test("resolves valid existing image references without persisting expiring URLs", () => {

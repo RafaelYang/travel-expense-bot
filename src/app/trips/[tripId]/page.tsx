@@ -11,7 +11,8 @@ import { redirect, notFound } from "next/navigation"
 import { cookies, headers } from "next/headers"
 import TripDetailClient, { type TripData } from "./trip-detail-client"
 import { summarizeDeposits, summarizeTripSpending } from "@/lib/money"
-import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
+import { createSignedExpenseImagePathsFromCount } from "@/lib/expense-image-signing"
+import { getExpenseImageCounts } from "@/lib/expense-image-metadata"
 import { createTripVersion } from "@/lib/trip-version"
 import {
   getCalendarDayKey,
@@ -38,44 +39,46 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
     ),
   )
 
-  // 1. 確認當前使用者為行程成員
-  const member = await prisma.tripMember.findUnique({
-    where: { tripId_userId: { tripId, userId: session.user.id } },
-  })
-  if (!member) {
+  // 1. 以成員條件直接撈取完整行程，省去先查權限再查行程的資料庫往返。
+  const [trip, expenseImageCounts] = await Promise.all([
+    prisma.trip.findFirst({
+      where: {
+        id: tripId,
+        members: { some: { userId: session.user.id } },
+      },
+      include: {
+        members: {
+          include: { user: { select: { id: true, name: true, email: true, image: true } } },
+        },
+        expenses: {
+          omit: { images: true },
+          include: { user: { select: { id: true, name: true } } },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        },
+        deposits: {
+          include: { user: { select: { id: true, name: true } } },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        },
+        cashWallets: {
+          orderBy: { currency: 'asc' },
+        },
+        cashExchanges: {
+          include: { user: { select: { id: true, name: true } } },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        },
+      },
+    }),
+    getExpenseImageCounts(tripId, session.user.id),
+  ])
+
+  if (!trip) {
     redirect("/")
   }
 
-  // 2. 撈取行程的完整關聯資料
-  const trip = await prisma.trip.findUnique({
-    where: { id: tripId },
-    include: {
-      members: {
-        include: { user: { select: { id: true, name: true, email: true, image: true } } },
-      },
-      expenses: {
-        include: { user: { select: { id: true, name: true } } },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      },
-      deposits: {
-        include: { user: { select: { id: true, name: true } } },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      },
-      cashWallets: {
-        orderBy: { currency: 'asc' },
-      },
-      cashExchanges: {
-        include: { user: { select: { id: true, name: true } } },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      },
-    },
-  })
+  const member = trip.members.find((candidate) => candidate.userId === session.user.id)
+  if (!member) notFound()
 
-  if (!trip) {
-    notFound()
-  }
-
-  // 3. 計算總支出與總收入
+  // 2. 計算總支出與總收入
   const expenseSummary = summarizeTripSpending(
     trip.expenses,
     trip.cashExchanges,
@@ -83,7 +86,7 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
   )
   const depositSummary = summarizeDeposits(trip.deposits, trip.baseCurrency)
 
-  // 4. 手動序列化為 React 伺服器傳送給客戶端元件所允許的純資料格式 (Plain JSON with ISO Strings)
+  // 3. 手動序列化為 React 伺服器傳送給客戶端元件所允許的純資料格式 (Plain JSON with ISO Strings)
   const serializedTrip = {
     id: trip.id,
     name: trip.name,
@@ -162,7 +165,10 @@ export default async function TripPage({ params }: { params: Promise<{ tripId: s
       date: e.date.toISOString(),
       createdAt: e.createdAt.toISOString(),
       note: e.note || undefined,
-      images: createSignedExpenseImagePaths(e.id, e.images),
+      images: createSignedExpenseImagePathsFromCount(
+        e.id,
+        expenseImageCounts.get(e.id) ?? 0,
+      ),
       source: e.source,
       paymentMethod: e.paymentMethod,
       user: {

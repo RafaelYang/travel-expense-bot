@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation"
 import { cookies, headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getCurrentWritableTripId, getTripDashboard } from "@/lib/trip-dashboard"
+import { getTripDashboard, getTripLaunchSelection } from "@/lib/trip-dashboard"
 import {
   getCalendarDayKey,
   isAllTripsView,
+  LAST_VIEWED_TRIP_COOKIE,
   resolveCalendarTimeZone,
   VISITOR_TIME_ZONE_COOKIE,
 } from "@/lib/active-trip"
@@ -33,10 +34,14 @@ export default async function HomePage({
     new Date(),
     timeZone,
   )
-  const currentTripId = await getCurrentWritableTripId(session.user.id, todayDayKey)
+  const { currentTripId, launchTripId } = await getTripLaunchSelection(
+    session.user.id,
+    todayDayKey,
+    cookieStore.get(LAST_VIEWED_TRIP_COOKIE)?.value,
+  )
 
-  if (!isAllTripsView(query.view) && currentTripId) {
-    redirect(`/trips/${encodeURIComponent(currentTripId)}`)
+  if (!isAllTripsView(query.view) && launchTripId) {
+    redirect(`/trips/${encodeURIComponent(launchTripId)}`)
   }
 
   const trips = await getTripDashboard(session.user.id)

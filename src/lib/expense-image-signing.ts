@@ -85,6 +85,25 @@ export function createSignedExpenseImagePaths(
   ))
 }
 
+export function createSignedExpenseImagePathsFromCount(
+  expenseId: string,
+  imageCount: number,
+  ttlSeconds = WEB_IMAGE_TTL_SECONDS,
+  explicitSecret?: string,
+) {
+  if (!Number.isInteger(imageCount) || imageCount <= 0) return []
+
+  return Array.from(
+    { length: Math.min(imageCount, 3) },
+    (_, index) => createSignedExpenseImagePath(
+      expenseId,
+      index,
+      ttlSeconds,
+      explicitSecret,
+    ),
+  )
+}
+
 /**
  * 編輯時，前端回傳的舊圖是簽名參照，新圖才是 Data URL。
  * 這裡將舊圖安全還原為資料庫原值，防止把會過期的 URL 寫回資料庫。

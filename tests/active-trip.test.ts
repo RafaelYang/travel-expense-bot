@@ -6,7 +6,9 @@ import {
   findCurrentTrip,
   getCalendarDayKey,
   isAllTripsView,
+  LAST_VIEWED_TRIP_COOKIE,
   resolveCalendarTimeZone,
+  resolveTripLaunch,
   VISITOR_TIME_ZONE_COOKIE,
   WRITABLE_TRIP_ROLES,
 } from "../src/lib/active-trip.ts"
@@ -54,6 +56,7 @@ test("device time zone takes priority over the visitor IP time zone", () => {
   )
   assert.equal(resolveCalendarTimeZone("%", "also-invalid"), "UTC")
   assert.equal(VISITOR_TIME_ZONE_COOKIE, "travel-time-zone")
+  assert.equal(LAST_VIEWED_TRIP_COOKIE, "last-viewed-trip")
 })
 
 test("only the exact all-trips view bypasses smart opening", () => {
@@ -67,4 +70,25 @@ test("only the exact all-trips view bypasses smart opening", () => {
 
 test("invalid current day keys fail instead of silently choosing a trip", () => {
   assert.throws(() => findCurrentTrip(trips, "2026/07/20"), /YYYY-MM-DD/)
+})
+
+test("smart launch prefers an active writable trip, then the last accessible trip", () => {
+  const memberTrips = [
+    { ...trips[0], role: "owner" },
+    { ...trips[1], role: "member" },
+    { ...trips[2], role: "viewer" },
+  ]
+
+  assert.deepEqual(resolveTripLaunch(memberTrips, "2026-07-20", "past"), {
+    currentTripId: "current",
+    launchTripId: "current",
+  })
+  assert.deepEqual(resolveTripLaunch(memberTrips, "2026-07-30", "past"), {
+    currentTripId: undefined,
+    launchTripId: "past",
+  })
+  assert.deepEqual(resolveTripLaunch(memberTrips, "2026-07-30", "removed"), {
+    currentTripId: undefined,
+    launchTripId: undefined,
+  })
 })

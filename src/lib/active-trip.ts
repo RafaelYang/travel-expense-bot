@@ -1,6 +1,7 @@
 export const ALL_TRIPS_PATH = "/?view=all"
 export const WRITABLE_TRIP_ROLES = ["owner", "member"] as const
 export const VISITOR_TIME_ZONE_COOKIE = "travel-time-zone"
+export const LAST_VIEWED_TRIP_COOKIE = "last-viewed-trip"
 
 const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/u
 
@@ -8,6 +9,10 @@ export interface ActiveTripCandidate {
   id: string
   startDate: string | Date
   endDate: string | Date
+}
+
+export interface MemberTripCandidate extends ActiveTripCandidate {
+  role: string
 }
 
 function tripBoundaryDayKey(value: string | Date) {
@@ -95,4 +100,26 @@ export function findCurrentTrip<T extends ActiveTripCandidate>(
       || a.endDay.localeCompare(b.endDay)
       || a.trip.id.localeCompare(b.trip.id)
     ))[0]?.trip
+}
+
+/**
+ * 進行中的可記帳行程優先；沒有進行中行程時，回到使用者上次瀏覽且仍有權限的行程。
+ */
+export function resolveTripLaunch(
+  trips: readonly MemberTripCandidate[],
+  todayDayKey: string,
+  lastViewedTripId: string | null | undefined,
+) {
+  const currentTrip = findCurrentTrip(
+    trips.filter((trip) => WRITABLE_TRIP_ROLES.some((role) => role === trip.role)),
+    todayDayKey,
+  )
+  const lastViewedTrip = lastViewedTripId
+    ? trips.find((trip) => trip.id === lastViewedTripId)
+    : undefined
+
+  return {
+    currentTripId: currentTrip?.id,
+    launchTripId: currentTrip?.id ?? lastViewedTrip?.id,
+  }
 }

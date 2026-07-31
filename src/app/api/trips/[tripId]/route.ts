@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { summarizeDeposits, summarizeTripSpending } from "@/lib/money"
-import { createSignedExpenseImagePaths } from "@/lib/expense-image-signing"
+import { createSignedExpenseImagePathsFromCount } from "@/lib/expense-image-signing"
+import { getExpenseImageCounts } from "@/lib/expense-image-metadata"
 import { createTripVersion } from "@/lib/trip-version"
 
 // GET — 取得行程詳情
@@ -20,40 +21,44 @@ export async function GET(
 
   const { tripId } = await params
 
-  // 確認是行程成員
-  const member = await prisma.tripMember.findUnique({
-    where: { tripId_userId: { tripId, userId: session.user.id } },
-  })
-  if (!member) {
+  const [trip, expenseImageCounts] = await Promise.all([
+    prisma.trip.findFirst({
+      where: {
+        id: tripId,
+        members: { some: { userId: session.user.id } },
+      },
+      include: {
+        members: {
+          include: { user: { select: { id: true, name: true, email: true, image: true } } },
+        },
+        expenses: {
+          omit: { images: true },
+          include: { user: { select: { id: true, name: true } } },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        },
+        deposits: {
+          include: { user: { select: { id: true, name: true } } },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        },
+        cashWallets: {
+          orderBy: { currency: 'asc' },
+        },
+        cashExchanges: {
+          include: { user: { select: { id: true, name: true } } },
+          orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        },
+      },
+    }),
+    getExpenseImageCounts(tripId, session.user.id),
+  ])
+
+  if (!trip) {
     return NextResponse.json({ error: "無權限查看此行程" }, { status: 403 })
   }
 
-  const trip = await prisma.trip.findUnique({
-    where: { id: tripId },
-    include: {
-      members: {
-        include: { user: { select: { id: true, name: true, email: true, image: true } } },
-      },
-      expenses: {
-        include: { user: { select: { id: true, name: true } } },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      },
-      deposits: {
-        include: { user: { select: { id: true, name: true } } },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      },
-      cashWallets: {
-        orderBy: { currency: 'asc' },
-      },
-      cashExchanges: {
-        include: { user: { select: { id: true, name: true } } },
-        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
-      },
-    },
-  })
-
-  if (!trip) {
-    return NextResponse.json({ error: "行程不存在" }, { status: 404 })
+  const member = trip.members.find((candidate) => candidate.userId === session.user.id)
+  if (!member) {
+    return NextResponse.json({ error: "無權限查看此行程" }, { status: 403 })
   }
 
   const expenseSummary = summarizeTripSpending(
@@ -67,7 +72,10 @@ export async function GET(
     ...trip,
     expenses: trip.expenses.map((expense) => ({
       ...expense,
-      images: createSignedExpenseImagePaths(expense.id, expense.images),
+      images: createSignedExpenseImagePathsFromCount(
+        expense.id,
+        expenseImageCounts.get(expense.id) ?? 0,
+      ),
     })),
     timelineOrder: trip.timelineOrder,
     cashWallets: trip.cashWallets.filter((wallet) => wallet.userId === session.user.id),
