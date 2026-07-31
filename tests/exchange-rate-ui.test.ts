@@ -48,7 +48,8 @@ test("mobile exchange rate stays out of the transaction flow and opens as a calc
   assert.match(cardSource, /className="exchange-rate-mobile-trigger"/u)
   assert.match(cardSource, /<Dialog\.Content className="exchange-rate-mobile-dialog">/u)
   assert.match(cardSource, /className="exchange-rate-mobile-keypad"/u)
-  assert.match(cardSource, /t\("trip\.rate\.historyShort"\)/u)
+  assert.match(cardSource, /<ArrowLeft size=\{27\} aria-hidden="true" \/>/u)
+  assert.doesNotMatch(cardSource, /<Delete\b/u)
   assert.match(
     globalCss,
     /@media \(max-width: 700px\)[\s\S]*?\.exchange-rate-card\s*\{\s*display:\s*none;/u,
@@ -57,4 +58,17 @@ test("mobile exchange rate stays out of the transaction flow and opens as a calc
     globalCss,
     /@media \(max-width: 700px\)[\s\S]*?\.exchange-rate-mobile-trigger\s*\{\s*display:\s*grid;/u,
   )
+})
+
+test("mobile calculator uses circular flag pickers and keeps history in a separate dialog", () => {
+  const flagRule = cssRule(".exchange-rate-currency-flag")
+  assert.match(flagRule, /width:\s*48px;/u)
+  assert.match(flagRule, /height:\s*48px;/u)
+  assert.match(flagRule, /border-radius:\s*50%;/u)
+  assert.match(cardSource, /className="exchange-rate-currency-picker"/u)
+  assert.match(cardSource, /currencyFlag\(value\)/u)
+  assert.match(cardSource, /<select[\s\S]*?aria-label=\{ariaLabel\}/u)
+  assert.match(cardSource, /t\("trip\.rate\.openHistory"\)/u)
+  assert.match(cardSource, /<Dialog\.Content className="exchange-rate-history-dialog">/u)
+  assert.doesNotMatch(cardSource, /className="exchange-rate-mobile-trend"/u)
 })

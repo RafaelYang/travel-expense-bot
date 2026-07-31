@@ -3,18 +3,19 @@
 import { useEffect, useMemo, useState } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import {
+  ArrowLeft,
   ArrowDownRight,
   ArrowRightLeft,
   ArrowUpRight,
   Calculator,
-  Delete,
+  ChevronDown,
   Loader2,
   RefreshCw,
   TrendingUp,
   X,
 } from "lucide-react"
 import { useLanguage } from "@/components/language-provider"
-import { ALL_CURRENCIES } from "@/lib/countries"
+import { ALL_CURRENCIES, COUNTRIES } from "@/lib/countries"
 import { getCurrencySymbol } from "@/lib/utils"
 import {
   calculateReferenceConversion,
@@ -48,12 +49,27 @@ const SOURCE_META: Record<RateSource, { label: string; href: string }> = {
   "exchange-rate-api": { label: "ExchangeRate-API", href: "https://www.exchangerate-api.com/" },
 }
 
+const CURRENCY_FLAG_OVERRIDES: Record<string, string> = {
+  EUR: "🇪🇺",
+  TWD: "🇹🇼",
+}
+
 function normalizeCurrency(value: string): string {
   return value.trim().toUpperCase()
 }
 
 function currencyLabel(currency: string): string {
   return ALL_CURRENCIES[currency]?.label ?? currency
+}
+
+function currencyFlag(currency: string): string {
+  return CURRENCY_FLAG_OVERRIDES[currency]
+    ?? COUNTRIES.find((country) => country.currency === currency)?.flag
+    ?? "💱"
+}
+
+function currencyName(currency: string): string {
+  return ALL_CURRENCIES[currency]?.nameCn ?? currency
 }
 
 function parseRateResponse(payload: unknown): ExchangeRateResponse | null {
@@ -216,6 +232,43 @@ function formatCalculatorValue(value: number): string {
   })
 }
 
+interface CurrencyFlagSelectProps {
+  ariaLabel: string
+  currencyOptions: string[]
+  onChange: (currency: string) => void
+  placeholder: string
+  value: string
+}
+
+function CurrencyFlagSelect({
+  ariaLabel,
+  currencyOptions,
+  onChange,
+  placeholder,
+  value,
+}: CurrencyFlagSelectProps) {
+  return (
+    <label className="exchange-rate-currency-picker">
+      <span className="exchange-rate-currency-flag" aria-hidden="true">
+        {value ? currencyFlag(value) : "💱"}
+        <span><ChevronDown size={12} /></span>
+      </span>
+      <strong>{value || "—"}</strong>
+      <small>{value ? currencyName(value) : placeholder}</small>
+      <select
+        value={value}
+        aria-label={ariaLabel}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {!value && <option value="">{placeholder}</option>}
+        {currencyOptions.map((currency) => (
+          <option key={currency} value={currency}>{currencyLabel(currency)}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 interface MobileExchangeCalculatorProps {
   amount: string
   convertedAmount: number | null
@@ -230,7 +283,6 @@ interface MobileExchangeCalculatorProps {
   onRetry: () => void
   onSwap: () => void
   toCurrency: string
-  trend: ReturnType<typeof summarizeRateTrend>
   t: ReturnType<typeof useLanguage>["t"]
 }
 
@@ -248,7 +300,6 @@ function MobileExchangeCalculator({
   onRetry,
   onSwap,
   toCurrency,
-  trend,
   t,
 }: MobileExchangeCalculatorProps) {
   const [accumulator, setAccumulator] = useState<number | null>(null)
@@ -344,50 +395,38 @@ function MobileExchangeCalculator({
     <>
       <div className="exchange-rate-mobile-display">
         <div className="exchange-rate-mobile-values">
-          <label className="exchange-rate-mobile-value-row">
-            <span>{t("trip.rate.from")}</span>
-            <select value={fromCurrency} onChange={(event) => onChangePair("from", event.target.value)}>
-              {!fromCurrency && <option value="">{t("trip.rate.select")}</option>}
-              {currencyOptions.map((currency) => (
-                <option key={currency} value={currency}>{currencyLabel(currency)}</option>
-              ))}
-            </select>
-            <output aria-live="polite">{visibleAmount}</output>
-          </label>
-
-          <label className="exchange-rate-mobile-value-row exchange-rate-mobile-value-row--result">
-            <span>{t("trip.rate.to")}</span>
-            <select value={toCurrency} onChange={(event) => onChangePair("to", event.target.value)}>
-              {currencyOptions.map((currency) => (
-                <option key={currency} value={currency}>{currencyLabel(currency)}</option>
-              ))}
-            </select>
-            <output aria-live="polite">
-              {convertedAmount === null
-                ? "—"
-                : `${getCurrencySymbol(toCurrency)}${formatAmount(convertedAmount, toCurrency, locale)}`}
-            </output>
-          </label>
-        </div>
-
-        <aside className="exchange-rate-mobile-trend" aria-label={t("trip.rate.historyShort")}>
-          <div>
-            <TrendingUp size={15} aria-hidden="true" />
-            <strong>{t("trip.rate.historyShort")}</strong>
+          <div className="exchange-rate-mobile-value-row">
+            <CurrencyFlagSelect
+              ariaLabel={t("trip.rate.from")}
+              currencyOptions={currencyOptions}
+              onChange={(currency) => onChangePair("from", currency)}
+              placeholder={t("trip.rate.select")}
+              value={fromCurrency}
+            />
+            <div className="exchange-rate-mobile-amount">
+              <span>{t("trip.rate.from")}</span>
+              <output aria-live="polite">{visibleAmount}</output>
+            </div>
           </div>
-          {activeData && activeData.history.length >= 2 && trend ? (
-            <>
-              <RateSparkline points={activeData.history} locale={locale} currency={activeData.target} />
-              <span className="exchange-rate-mobile-change">
-                {`${trend.changePercent >= 0 ? "+" : ""}${trend.changePercent.toFixed(2)}%`}
-              </span>
-              <span>{t("trip.rate.lowShort", { rate: formatRate(trend.minimum, locale) })}</span>
-              <span>{t("trip.rate.highShort", { rate: formatRate(trend.maximum, locale) })}</span>
-            </>
-          ) : (
-            <span className="exchange-rate-mobile-trend-empty">—</span>
-          )}
-        </aside>
+
+          <div className="exchange-rate-mobile-value-row exchange-rate-mobile-value-row--result">
+            <CurrencyFlagSelect
+              ariaLabel={t("trip.rate.to")}
+              currencyOptions={currencyOptions}
+              onChange={(currency) => onChangePair("to", currency)}
+              placeholder={t("trip.rate.select")}
+              value={toCurrency}
+            />
+            <div className="exchange-rate-mobile-amount">
+              <span>{t("trip.rate.to")}</span>
+              <output aria-live="polite">
+                {convertedAmount === null
+                  ? "—"
+                  : `${getCurrencySymbol(toCurrency)}${formatAmount(convertedAmount, toCurrency, locale)}`}
+              </output>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="exchange-rate-mobile-status" aria-live="polite">
@@ -407,7 +446,7 @@ function MobileExchangeCalculator({
       <div className="exchange-rate-mobile-keypad" role="group" aria-label={t("trip.rate.calculatorKeys")}>
         <button type="button" className="exchange-rate-key" onClick={clearCalculator} aria-label={t("trip.rate.clear")}>C</button>
         <button type="button" className="exchange-rate-key" onClick={backspace} aria-label={t("trip.rate.backspace")}>
-          <Delete size={25} aria-hidden="true" />
+          <ArrowLeft size={27} aria-hidden="true" />
         </button>
         <button type="button" className="exchange-rate-key" onClick={onSwap} aria-label={t("trip.rate.swap")} disabled={!fromCurrency || !toCurrency}>
           <ArrowRightLeft size={25} aria-hidden="true" />
@@ -704,15 +743,91 @@ export function ExchangeRateCard({
           <Dialog.Overlay className="exchange-rate-mobile-overlay" />
           <Dialog.Content className="exchange-rate-mobile-dialog">
             <header className="exchange-rate-mobile-header">
-              <div>
+              <div className="exchange-rate-mobile-header-title">
                 <Calculator size={19} aria-hidden="true" />
                 <Dialog.Title>{t("trip.rate.calculator")}</Dialog.Title>
               </div>
-              <Dialog.Close asChild>
-                <button type="button" aria-label={t("trip.rate.closeCalculator")}>
-                  <X size={22} aria-hidden="true" />
-                </button>
-              </Dialog.Close>
+              <div className="exchange-rate-mobile-header-actions">
+                <Dialog.Root>
+                  <Dialog.Trigger asChild>
+                    <button type="button" aria-label={t("trip.rate.openHistory")}>
+                      <TrendingUp size={21} aria-hidden="true" />
+                    </button>
+                  </Dialog.Trigger>
+                  <Dialog.Portal>
+                    <Dialog.Overlay className="exchange-rate-history-overlay" />
+                    <Dialog.Content className="exchange-rate-history-dialog">
+                      <header>
+                        <Dialog.Title>
+                          <TrendingUp size={20} aria-hidden="true" />
+                          {t("trip.rate.historyShort")}
+                        </Dialog.Title>
+                        <Dialog.Close asChild>
+                          <button type="button" aria-label={t("trip.rate.closeHistory")}>
+                            <X size={21} aria-hidden="true" />
+                          </button>
+                        </Dialog.Close>
+                      </header>
+                      <Dialog.Description className="exchange-rate-visually-hidden">
+                        {t("trip.rate.subtitle")}
+                      </Dialog.Description>
+
+                      <div className="exchange-rate-history-dialog-body">
+                        {loading ? (
+                          <div className="exchange-rate-history-dialog-state">
+                            <Loader2 size={19} className="exchange-rate-spinner" aria-hidden="true" />
+                            {t("trip.rate.loading")}
+                          </div>
+                        ) : error ? (
+                          <div className="exchange-rate-history-dialog-state">
+                            <span>{t("trip.rate.error")}</span>
+                            <button type="button" onClick={retryRate}>
+                              <RefreshCw size={15} aria-hidden="true" />
+                              {t("trip.rate.retry")}
+                            </button>
+                          </div>
+                        ) : data && data.history.length >= 2 && trend ? (
+                          <>
+                            <div className="exchange-rate-history-dialog-summary">
+                              <span>{`${formatShortDate(data.history[0].date)}–${formatShortDate(data.history[data.history.length - 1].date)}`}</span>
+                              <strong>
+                                {trend.changePercent >= 0
+                                  ? <ArrowUpRight size={17} aria-hidden="true" />
+                                  : <ArrowDownRight size={17} aria-hidden="true" />}
+                                {t("trip.rate.change", {
+                                  change: `${trend.changePercent >= 0 ? "+" : ""}${trend.changePercent.toFixed(2)}%`,
+                                })}
+                              </strong>
+                            </div>
+                            <RateSparkline points={data.history} locale={locale} currency={data.target} />
+                            <div className="exchange-rate-range">
+                              <span>{t("trip.rate.low", { rate: formatRate(trend.minimum, locale) })}</span>
+                              <span>{t("trip.rate.high", { rate: formatRate(trend.maximum, locale) })}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="exchange-rate-history-dialog-state">{t("trip.rate.noHistory")}</div>
+                        )}
+                      </div>
+
+                      <footer>
+                        {data && <span>{`1 ${data.base} ≈ ${formatHeadlineRate(data.rate, locale)} ${data.target}`}</span>}
+                        {sourceMeta && (
+                          <a href={sourceMeta.href} target="_blank" rel="noreferrer">
+                            {t("trip.rate.source", { source: sourceMeta.label })}
+                          </a>
+                        )}
+                      </footer>
+                    </Dialog.Content>
+                  </Dialog.Portal>
+                </Dialog.Root>
+
+                <Dialog.Close asChild>
+                  <button type="button" aria-label={t("trip.rate.closeCalculator")}>
+                    <X size={22} aria-hidden="true" />
+                  </button>
+                </Dialog.Close>
+              </div>
             </header>
 
             <Dialog.Description className="exchange-rate-visually-hidden">
@@ -734,7 +849,6 @@ export function ExchangeRateCard({
                 onRetry={retryRate}
                 onSwap={swapCurrencies}
                 toCurrency={toCurrency}
-                trend={trend}
                 t={t}
               />
             </div>
