@@ -772,6 +772,27 @@ body::before {
   outline-offset: 2px;
 }
 
+.transaction-list-thumbnail {
+  position: relative;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--border-color-light);
+  border-radius: 13px;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+}
+
+.transaction-list-thumbnail--image {
+  background: var(--bg-card);
+}
+
+.transaction-list-thumbnail img {
+  object-fit: cover;
+}
+
 .transaction-list-main {
   display: flex;
   align-items: center;
@@ -871,10 +892,10 @@ body::before {
   .transaction-list-row {
     display: grid;
     grid-template-areas:
-      "category amount"
-      "title title"
-      "meta status";
-    grid-template-columns: minmax(0, 1fr) max-content;
+      "thumbnail category amount"
+      "thumbnail title title"
+      "thumbnail meta status";
+    grid-template-columns: 52px minmax(0, 1fr) max-content;
     align-items: start;
     gap: 0.4rem 0.5rem;
     padding: 0.65rem;
@@ -884,6 +905,13 @@ body::before {
   .transaction-list-content,
   .transaction-list-side {
     display: contents;
+  }
+
+  .transaction-list-thumbnail {
+    grid-area: thumbnail;
+    width: 52px;
+    height: 52px;
+    align-self: center;
   }
 
   .transaction-list-category {
@@ -917,7 +945,7 @@ body::before {
   }
 
   .transaction-list-meta-wide {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
   }
 
   .transaction-list-amount {

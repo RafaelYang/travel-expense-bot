@@ -10,12 +10,13 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback, useMemo, useSyncExternalStore } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Navbar } from "@/components/navbar"
 import {
-  ArrowLeft, PlusCircle, Wallet, Users, Calendar, Settings,
+  ArrowLeft, ArrowRightLeft, PlusCircle, Wallet, Users, Calendar, Settings,
   ChevronDown, ChevronUp, Loader2, Trash2, X, Check,
-  Send, Share2, ImagePlus, BarChart3, Pencil, Plane, ListChecks,
+  Send, Share2, ImagePlus, BarChart3, Pencil, Plane, ListChecks, Receipt,
 } from "lucide-react"
 import Link from "next/link"
 import { format, differenceInDays } from "date-fns"
@@ -1323,6 +1324,43 @@ export default function TripDetailClient({
   )
 }
 
+function TransactionThumbnail({
+  accent,
+  fallback,
+  src,
+}: {
+  accent: string
+  fallback: React.ReactNode
+  src?: string
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const showImage = Boolean(src && failedSrc !== src)
+
+  return (
+    <span
+      className={`transaction-list-thumbnail${showImage ? ' transaction-list-thumbnail--image' : ''}`}
+      style={{
+        background: showImage ? 'var(--bg-card)' : `${accent}18`,
+        borderColor: `${accent}55`,
+        color: accent,
+      }}
+      aria-hidden="true"
+    >
+      {showImage && src ? (
+        <Image
+          src={src}
+          alt=""
+          fill
+          sizes="(max-width: 600px) 52px, 56px"
+          unoptimized
+          draggable={false}
+          onError={() => setFailedSrc(src)}
+        />
+      ) : fallback}
+    </span>
+  )
+}
+
 // === 換匯列表行 ===
 function ExchangeRow({ exchange, baseCurrency, onEdit, sortableProps }: {
   exchange: ExchangeDisplayTransaction
@@ -1362,6 +1400,10 @@ function ExchangeRow({ exchange, baseCurrency, onEdit, sortableProps }: {
       cursor: onEdit ? 'pointer' : 'default', transition: 'all 0.2s',
       ...sortableStyle,
     }}>
+      <TransactionThumbnail
+        accent="#0ea5e9"
+        fallback={<ArrowRightLeft size={23} strokeWidth={2.1} />}
+      />
       <div className="exchange-transaction-main transaction-list-main">
         <span className="category-badge transaction-list-category" style={{
           background: 'rgba(14, 165, 233, 0.12)',
@@ -1596,6 +1638,13 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile, sortableProps }: {
         ...sortableStyle,
       }}
     >
+      <TransactionThumbnail
+        accent={isIncome ? '#22c55e' : cat.color}
+        fallback={isIncome
+          ? <Wallet size={23} strokeWidth={2.1} />
+          : <Receipt size={23} strokeWidth={2.1} />}
+        src={!isIncome ? expense.images?.[0] : undefined}
+      />
       <div className="transaction-list-main">
         <span className="category-badge transaction-list-category" style={{
           background: isIncome ? 'rgba(34, 197, 94, 0.12)' : `${cat.color}18`,
