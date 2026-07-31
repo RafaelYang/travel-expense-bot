@@ -232,6 +232,14 @@ function formatCalculatorValue(value: number): string {
   })
 }
 
+function mobileAmountDensity(value: string): "regular" | "compact" | "dense" | "tiny" {
+  const length = Array.from(value).length
+  if (length > 17) return "tiny"
+  if (length > 13) return "dense"
+  if (length > 8) return "compact"
+  return "regular"
+}
+
 interface CurrencyFlagSelectProps {
   ariaLabel: string
   currencyOptions: string[]
@@ -308,6 +316,9 @@ function MobileExchangeCalculator({
   const activeData = data?.base === fromCurrency && data.target === toCurrency ? data : null
   const visibleAmount = amount || "0"
   const currentValue = Number(visibleAmount)
+  const convertedLabel = convertedAmount === null
+    ? "—"
+    : `${getCurrencySymbol(toCurrency)}${formatAmount(convertedAmount, toCurrency, locale)}`
 
   const inputDigit = (digit: string) => {
     onAmountChange((() => {
@@ -405,7 +416,13 @@ function MobileExchangeCalculator({
             />
             <div className="exchange-rate-mobile-amount">
               <span>{t("trip.rate.from")}</span>
-              <output aria-live="polite">{visibleAmount}</output>
+              <output
+                aria-live="polite"
+                data-density={mobileAmountDensity(visibleAmount)}
+                title={visibleAmount}
+              >
+                {visibleAmount}
+              </output>
             </div>
           </div>
 
@@ -419,10 +436,12 @@ function MobileExchangeCalculator({
             />
             <div className="exchange-rate-mobile-amount">
               <span>{t("trip.rate.to")}</span>
-              <output aria-live="polite">
-                {convertedAmount === null
-                  ? "—"
-                  : `${getCurrencySymbol(toCurrency)}${formatAmount(convertedAmount, toCurrency, locale)}`}
+              <output
+                aria-live="polite"
+                data-density={mobileAmountDensity(convertedLabel)}
+                title={convertedLabel}
+              >
+                {convertedLabel}
               </output>
             </div>
           </div>

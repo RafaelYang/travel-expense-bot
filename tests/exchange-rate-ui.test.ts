@@ -72,3 +72,15 @@ test("mobile calculator uses circular flag pickers and keeps history in a separa
   assert.match(cardSource, /<Dialog\.Content className="exchange-rate-history-dialog">/u)
   assert.doesNotMatch(cardSource, /className="exchange-rate-mobile-trend"/u)
 })
+
+test("mobile calculator keeps long amounts visible and removes the fixed display gutter", () => {
+  const displayRule = cssRule(".exchange-rate-mobile-display")
+  const outputRule = cssRule(".exchange-rate-mobile-amount output")
+  assert.doesNotMatch(displayRule, /(?:min-)?height:/u)
+  assert.match(displayRule, /padding:\s*0\.45rem;/u)
+  assert.match(cardSource, /function mobileAmountDensity/u)
+  assert.match(cardSource, /data-density=\{mobileAmountDensity\(convertedLabel\)\}/u)
+  assert.match(globalCss, /output\[data-density="compact"\][\s\S]*?font-size:\s*clamp\(1\.35rem, 7vw, 2rem\);/u)
+  assert.match(globalCss, /output\[data-density="tiny"\][\s\S]*?font-size:\s*clamp\(0\.82rem, 4\.5vw, 1\.15rem\);/u)
+  assert.doesNotMatch(outputRule, /text-overflow:\s*ellipsis;/u)
+})

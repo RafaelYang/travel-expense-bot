@@ -1658,17 +1658,15 @@ a:hover .trip-card-bg {
 }
 
 .exchange-rate-mobile-display {
-  min-height: 188px;
-  height: clamp(188px, 30dvh, 254px);
   flex-shrink: 0;
-  padding: 0.65rem;
+  padding: 0.45rem;
   border-bottom: 1px solid var(--border-color);
 }
 
 .exchange-rate-mobile-values {
   display: grid;
   min-width: 0;
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(82px, auto));
   overflow: hidden;
   border: 1px solid var(--border-color);
   border-radius: 16px;
@@ -1783,8 +1781,22 @@ a:hover .trip-card-bg {
   letter-spacing: -0.035em;
   line-height: 1;
   text-align: right;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
+}
+
+.exchange-rate-mobile-amount output[data-density="compact"] {
+  font-size: clamp(1.35rem, 7vw, 2rem);
+}
+
+.exchange-rate-mobile-amount output[data-density="dense"] {
+  font-size: clamp(1.05rem, 5.5vw, 1.5rem);
+  letter-spacing: -0.025em;
+}
+
+.exchange-rate-mobile-amount output[data-density="tiny"] {
+  font-size: clamp(0.82rem, 4.5vw, 1.15rem);
+  letter-spacing: -0.01em;
 }
 
 .exchange-rate-mobile-value-row--result .exchange-rate-mobile-amount output {
