@@ -994,8 +994,7 @@ a:hover .trip-card-bg {
 .exchange-rate-change,
 .exchange-rate-range,
 .exchange-rate-state,
-.exchange-rate-error button,
-.exchange-rate-calculator-toggle {
+.exchange-rate-error button {
   display: flex;
   align-items: center;
 }
@@ -1070,8 +1069,7 @@ a:hover .trip-card-bg {
 
 .exchange-rate-pair-controls select:focus-visible,
 .exchange-rate-amount-input:focus-within,
-.exchange-rate-swap:focus-visible,
-.exchange-rate-calculator-toggle:focus-visible {
+.exchange-rate-swap:focus-visible {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
 }
@@ -1211,27 +1209,6 @@ a:hover .trip-card-bg {
 
 .exchange-rate-meta a:hover {
   text-decoration: underline;
-}
-
-.exchange-rate-calculator-toggle {
-  display: none;
-  width: 100%;
-  min-height: 44px;
-  justify-content: flex-start;
-  gap: 0.4rem;
-  margin-top: 0.9rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: 0.84rem;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.exchange-rate-calculator-toggle svg:last-child {
-  margin-left: auto;
 }
 
 .exchange-rate-calculator {
@@ -1410,54 +1387,379 @@ a:hover .trip-card-bg {
   line-height: 1.55;
 }
 
-@media (max-width: 700px) {
-  .exchange-rate-card {
-    padding: 1rem;
-  }
+/* 手機版只留下隨視窗移動的換算入口，完整卡片讓位給交易列表。 */
+.exchange-rate-mobile-trigger {
+  position: fixed;
+  top: 58%;
+  left: env(safe-area-inset-left);
+  z-index: 85;
+  display: none;
+  width: 46px;
+  height: 52px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 50%, var(--border-color));
+  border-left: 0;
+  border-radius: 0 15px 15px 0;
+  background: linear-gradient(145deg, var(--color-primary), var(--color-primary-dark));
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(2, 132, 199, 0.3);
+  cursor: pointer;
+  transform: translateY(-50%);
+  -webkit-tap-highlight-color: transparent;
+}
 
-  .exchange-rate-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.65rem;
-  }
+.exchange-rate-mobile-trigger:focus-visible,
+.exchange-rate-mobile-header button:focus-visible,
+.exchange-rate-mobile-value-row select:focus-visible,
+.exchange-rate-key:focus-visible,
+.exchange-rate-mobile-status button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary-light) 72%, transparent);
+  outline-offset: -3px;
+}
 
-  .exchange-rate-content {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
+.exchange-rate-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 29999;
+  background: rgba(2, 6, 23, 0.72);
+  animation: fadeIn 0.16s ease-out;
+}
 
-  .exchange-rate-calculator-toggle {
-    display: flex;
-  }
+.exchange-rate-mobile-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  display: flex;
+  width: 100vw;
+  height: 100dvh;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  animation: exchangeRateCalculatorEnter 0.2s ease-out;
+}
 
-  .exchange-rate-calculator {
-    display: none;
-    grid-template-columns: 1fr;
-  }
+.exchange-rate-mobile-header {
+  display: flex;
+  min-height: calc(58px + env(safe-area-inset-top));
+  flex-shrink: 0;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: env(safe-area-inset-top) 0.8rem 0.55rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+}
 
-  .exchange-rate-calculator.is-open {
-    display: grid;
-  }
+.exchange-rate-mobile-header > div,
+.exchange-rate-mobile-header button,
+.exchange-rate-mobile-trend > div,
+.exchange-rate-mobile-status,
+.exchange-rate-mobile-status button {
+  display: flex;
+  align-items: center;
+}
 
-  .exchange-rate-trend-column {
-    padding: 0.75rem;
+.exchange-rate-mobile-header > div {
+  gap: 0.45rem;
+  min-height: 44px;
+  color: var(--color-primary-text);
+}
+
+.exchange-rate-mobile-header h2 {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.exchange-rate-mobile-header button {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.exchange-rate-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.exchange-rate-mobile-workspace {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-primary) 88%, #020617);
+}
+
+.exchange-rate-mobile-display {
+  display: grid;
+  min-height: 178px;
+  height: clamp(178px, 28dvh, 238px);
+  flex-shrink: 0;
+  grid-template-columns: minmax(0, 1fr) 100px;
+  gap: 0.55rem;
+  padding: 0.65rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.exchange-rate-mobile-values {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-card);
+}
+
+.exchange-rate-mobile-value-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.15rem 0.45rem;
+  padding: 0.55rem 0.7rem 0.4rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.exchange-rate-mobile-value-row--result {
+  border-bottom: 0;
+}
+
+.exchange-rate-mobile-value-row > span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.exchange-rate-mobile-value-row select {
+  min-width: 0;
+  justify-self: start;
+  padding: 0.2rem 1.35rem 0.2rem 0.35rem;
+  border: 0;
+  border-radius: 7px;
+  outline: 0;
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.exchange-rate-mobile-value-row output {
+  grid-column: 1 / -1;
+  min-width: 0;
+  align-self: center;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: clamp(1.55rem, 8.5vw, 2.6rem);
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exchange-rate-mobile-value-row--result output {
+  color: var(--color-primary-text);
+  font-weight: 750;
+}
+
+.exchange-rate-mobile-trend {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.45rem;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.exchange-rate-mobile-trend > div {
+  gap: 0.25rem;
+  color: var(--color-primary-text);
+}
+
+.exchange-rate-mobile-trend strong {
+  color: var(--text-primary);
+  font-size: 0.64rem;
+}
+
+.exchange-rate-mobile-trend .exchange-rate-chart {
+  margin: 0.35rem 0 0.15rem;
+}
+
+.exchange-rate-mobile-change {
+  color: var(--color-primary-text);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.exchange-rate-mobile-trend-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  font-size: 1.2rem;
+}
+
+.exchange-rate-mobile-status {
+  min-height: 38px;
+  flex-shrink: 0;
+  justify-content: center;
+  padding: 0.35rem 0.7rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.exchange-rate-mobile-status button {
+  min-height: 30px;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg-card-hover);
+  color: var(--color-primary-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.exchange-rate-mobile-keypad {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
+  background: var(--border-color);
+  gap: 1px;
+}
+
+.exchange-rate-key {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, var(--bg-card-hover) 88%, var(--text-primary));
+  color: var(--text-primary);
+  font: inherit;
+  font-size: clamp(1.35rem, 7vw, 2rem);
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.exchange-rate-key:active {
+  background: color-mix(in srgb, var(--bg-card-hover) 72%, var(--color-primary));
+}
+
+.exchange-rate-key:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.exchange-rate-key--operator,
+.exchange-rate-key--equals {
+  background: linear-gradient(145deg, var(--color-primary), var(--color-primary-dark));
+  color: #fff;
+  font-size: clamp(1.6rem, 8vw, 2.25rem);
+}
+
+.exchange-rate-key--operator[aria-pressed="true"] {
+  background: var(--color-primary-text);
+  color: var(--bg-primary);
+}
+
+.exchange-rate-key--equals {
+  background: linear-gradient(145deg, var(--color-accent), var(--color-accent-dark));
+}
+
+.exchange-rate-mobile-footer {
+  display: flex;
+  min-height: calc(46px + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem calc(0.45rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 0.61rem;
+  line-height: 1.35;
+}
+
+.exchange-rate-mobile-footer a {
+  flex-shrink: 0;
+  color: var(--color-primary-text);
+  text-decoration: none;
+}
+
+@keyframes exchangeRateCalculatorEnter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-@media (max-width: 420px) {
-  .exchange-rate-pair-controls {
+@media (max-width: 700px) {
+  .exchange-rate-card {
+    display: none;
+  }
+
+  .exchange-rate-mobile-trigger {
+    display: grid;
+  }
+}
+
+@media (max-width: 350px) {
+  .exchange-rate-mobile-display {
+    grid-template-columns: minmax(0, 1fr) 86px;
     gap: 0.4rem;
+    padding: 0.5rem;
   }
 
-  .exchange-rate-pair-controls select {
-    padding: 0 0.42rem;
-    font-size: 0.82rem;
+  .exchange-rate-mobile-value-row {
+    padding-inline: 0.55rem;
   }
+}
 
-  .exchange-rate-trend-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.25rem;
+@media (prefers-reduced-motion: reduce) {
+  .exchange-rate-mobile-overlay,
+  .exchange-rate-mobile-dialog {
+    animation: none;
   }
 }
 

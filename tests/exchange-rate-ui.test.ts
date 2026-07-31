@@ -40,3 +40,21 @@ test("exchange-rate swap control is centered and unavailable without a complete 
   assert.match(cardSource, /role="group" aria-label=\{t\("trip\.rate\.pair"\)\}/u)
   assert.match(cardSource, /disabled=\{!fromCurrency \|\| !toCurrency\}/u)
 })
+
+test("mobile exchange rate stays out of the transaction flow and opens as a calculator", () => {
+  const triggerRule = cssRule(".exchange-rate-mobile-trigger")
+  assert.match(triggerRule, /position:\s*fixed;/u)
+  assert.match(triggerRule, /left:\s*env\(safe-area-inset-left\);/u)
+  assert.match(cardSource, /className="exchange-rate-mobile-trigger"/u)
+  assert.match(cardSource, /<Dialog\.Content className="exchange-rate-mobile-dialog">/u)
+  assert.match(cardSource, /className="exchange-rate-mobile-keypad"/u)
+  assert.match(cardSource, /t\("trip\.rate\.historyShort"\)/u)
+  assert.match(
+    globalCss,
+    /@media \(max-width: 700px\)[\s\S]*?\.exchange-rate-card\s*\{\s*display:\s*none;/u,
+  )
+  assert.match(
+    globalCss,
+    /@media \(max-width: 700px\)[\s\S]*?\.exchange-rate-mobile-trigger\s*\{\s*display:\s*grid;/u,
+  )
+})

@@ -1,16 +1,17 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import * as Dialog from "@radix-ui/react-dialog"
 import {
   ArrowDownRight,
   ArrowRightLeft,
   ArrowUpRight,
   Calculator,
-  ChevronDown,
-  ChevronUp,
+  Delete,
   Loader2,
   RefreshCw,
   TrendingUp,
+  X,
 } from "lucide-react"
 import { useLanguage } from "@/components/language-provider"
 import { ALL_CURRENCIES } from "@/lib/countries"
@@ -186,6 +187,253 @@ function RateSparkline({ points, locale, currency }: { points: RatePoint[]; loca
   )
 }
 
+type CalculatorOperator = "add" | "subtract" | "multiply" | "divide"
+
+const MAX_CALCULATOR_DIGITS = 12
+
+function calculateOperation(left: number, right: number, operator: CalculatorOperator): number | null {
+  const result = operator === "add"
+    ? left + right
+    : operator === "subtract"
+      ? left - right
+      : operator === "multiply"
+        ? left * right
+        : right === 0
+          ? Number.NaN
+          : left / right
+
+  return Number.isFinite(result) ? result : null
+}
+
+function formatCalculatorValue(value: number): string {
+  if (!Number.isFinite(value)) return "0"
+  const rounded = Number(value.toPrecision(MAX_CALCULATOR_DIGITS))
+  const plain = String(rounded)
+  if (!plain.includes("e")) return plain
+  return rounded.toLocaleString("en-US", {
+    useGrouping: false,
+    maximumFractionDigits: MAX_CALCULATOR_DIGITS,
+  })
+}
+
+interface MobileExchangeCalculatorProps {
+  amount: string
+  convertedAmount: number | null
+  currencyOptions: string[]
+  data: ExchangeRateResponse | null
+  error: boolean
+  fromCurrency: string
+  loading: boolean
+  locale: string
+  onAmountChange: (amount: string) => void
+  onChangePair: (side: "from" | "to", currency: string) => void
+  onRetry: () => void
+  onSwap: () => void
+  toCurrency: string
+  trend: ReturnType<typeof summarizeRateTrend>
+  t: ReturnType<typeof useLanguage>["t"]
+}
+
+function MobileExchangeCalculator({
+  amount,
+  convertedAmount,
+  currencyOptions,
+  data,
+  error,
+  fromCurrency,
+  loading,
+  locale,
+  onAmountChange,
+  onChangePair,
+  onRetry,
+  onSwap,
+  toCurrency,
+  trend,
+  t,
+}: MobileExchangeCalculatorProps) {
+  const [accumulator, setAccumulator] = useState<number | null>(null)
+  const [pendingOperator, setPendingOperator] = useState<CalculatorOperator | null>(null)
+  const [waitingForOperand, setWaitingForOperand] = useState(false)
+  const activeData = data?.base === fromCurrency && data.target === toCurrency ? data : null
+  const visibleAmount = amount || "0"
+  const currentValue = Number(visibleAmount)
+
+  const inputDigit = (digit: string) => {
+    onAmountChange((() => {
+      if (waitingForOperand || visibleAmount === "0") return digit
+      const digitCount = visibleAmount.replace(/[^0-9]/gu, "").length
+      return digitCount >= MAX_CALCULATOR_DIGITS ? visibleAmount : `${visibleAmount}${digit}`
+    })())
+    setWaitingForOperand(false)
+  }
+
+  const inputDecimal = () => {
+    if (waitingForOperand) {
+      onAmountChange("0.")
+      setWaitingForOperand(false)
+      return
+    }
+    if (!visibleAmount.includes(".")) onAmountChange(`${visibleAmount}.`)
+  }
+
+  const clearCalculator = () => {
+    onAmountChange("0")
+    setAccumulator(null)
+    setPendingOperator(null)
+    setWaitingForOperand(false)
+  }
+
+  const backspace = () => {
+    if (waitingForOperand) {
+      onAmountChange("0")
+      setWaitingForOperand(false)
+      return
+    }
+    onAmountChange(visibleAmount.length > 1 ? visibleAmount.slice(0, -1) : "0")
+  }
+
+  const percentage = () => {
+    if (!Number.isFinite(currentValue)) return
+    onAmountChange(formatCalculatorValue(currentValue / 100))
+    setWaitingForOperand(false)
+  }
+
+  const chooseOperator = (operator: CalculatorOperator) => {
+    if (!Number.isFinite(currentValue)) return
+    if (waitingForOperand) {
+      setPendingOperator(operator)
+      return
+    }
+
+    const result = accumulator !== null && pendingOperator
+      ? calculateOperation(accumulator, currentValue, pendingOperator)
+      : currentValue
+    const nextValue = result ?? 0
+    onAmountChange(formatCalculatorValue(nextValue))
+    setAccumulator(nextValue)
+    setPendingOperator(operator)
+    setWaitingForOperand(true)
+  }
+
+  const equals = () => {
+    if (accumulator === null || !pendingOperator || !Number.isFinite(currentValue)) return
+    const result = calculateOperation(accumulator, currentValue, pendingOperator)
+    onAmountChange(formatCalculatorValue(result ?? 0))
+    setAccumulator(null)
+    setPendingOperator(null)
+    setWaitingForOperand(true)
+  }
+
+  const operatorButton = (
+    operator: CalculatorOperator,
+    symbol: string,
+    label: string,
+  ) => (
+    <button
+      type="button"
+      className="exchange-rate-key exchange-rate-key--operator"
+      aria-label={label}
+      aria-pressed={pendingOperator === operator}
+      onClick={() => chooseOperator(operator)}
+    >
+      {symbol}
+    </button>
+  )
+
+  return (
+    <>
+      <div className="exchange-rate-mobile-display">
+        <div className="exchange-rate-mobile-values">
+          <label className="exchange-rate-mobile-value-row">
+            <span>{t("trip.rate.from")}</span>
+            <select value={fromCurrency} onChange={(event) => onChangePair("from", event.target.value)}>
+              {!fromCurrency && <option value="">{t("trip.rate.select")}</option>}
+              {currencyOptions.map((currency) => (
+                <option key={currency} value={currency}>{currencyLabel(currency)}</option>
+              ))}
+            </select>
+            <output aria-live="polite">{visibleAmount}</output>
+          </label>
+
+          <label className="exchange-rate-mobile-value-row exchange-rate-mobile-value-row--result">
+            <span>{t("trip.rate.to")}</span>
+            <select value={toCurrency} onChange={(event) => onChangePair("to", event.target.value)}>
+              {currencyOptions.map((currency) => (
+                <option key={currency} value={currency}>{currencyLabel(currency)}</option>
+              ))}
+            </select>
+            <output aria-live="polite">
+              {convertedAmount === null
+                ? "—"
+                : `${getCurrencySymbol(toCurrency)}${formatAmount(convertedAmount, toCurrency, locale)}`}
+            </output>
+          </label>
+        </div>
+
+        <aside className="exchange-rate-mobile-trend" aria-label={t("trip.rate.historyShort")}>
+          <div>
+            <TrendingUp size={15} aria-hidden="true" />
+            <strong>{t("trip.rate.historyShort")}</strong>
+          </div>
+          {activeData && activeData.history.length >= 2 && trend ? (
+            <>
+              <RateSparkline points={activeData.history} locale={locale} currency={activeData.target} />
+              <span className="exchange-rate-mobile-change">
+                {`${trend.changePercent >= 0 ? "+" : ""}${trend.changePercent.toFixed(2)}%`}
+              </span>
+              <span>{t("trip.rate.lowShort", { rate: formatRate(trend.minimum, locale) })}</span>
+              <span>{t("trip.rate.highShort", { rate: formatRate(trend.maximum, locale) })}</span>
+            </>
+          ) : (
+            <span className="exchange-rate-mobile-trend-empty">—</span>
+          )}
+        </aside>
+      </div>
+
+      <div className="exchange-rate-mobile-status" aria-live="polite">
+        {loading ? (
+          <><Loader2 size={14} className="exchange-rate-spinner" aria-hidden="true" />{t("trip.rate.loading")}</>
+        ) : error ? (
+          <button type="button" onClick={onRetry}>
+            <RefreshCw size={14} aria-hidden="true" />{t("trip.rate.retry")}
+          </button>
+        ) : activeData ? (
+          <span>{`1 ${activeData.base} ≈ ${formatHeadlineRate(activeData.rate, locale)} ${activeData.target}`}</span>
+        ) : (
+          <span>{t("trip.rate.choosePrompt")}</span>
+        )}
+      </div>
+
+      <div className="exchange-rate-mobile-keypad" role="group" aria-label={t("trip.rate.calculatorKeys")}>
+        <button type="button" className="exchange-rate-key" onClick={clearCalculator} aria-label={t("trip.rate.clear")}>C</button>
+        <button type="button" className="exchange-rate-key" onClick={backspace} aria-label={t("trip.rate.backspace")}>
+          <Delete size={25} aria-hidden="true" />
+        </button>
+        <button type="button" className="exchange-rate-key" onClick={onSwap} aria-label={t("trip.rate.swap")} disabled={!fromCurrency || !toCurrency}>
+          <ArrowRightLeft size={25} aria-hidden="true" />
+        </button>
+        {operatorButton("divide", "÷", t("trip.rate.divide"))}
+        {(["7", "8", "9"] as const).map((digit) => (
+          <button key={digit} type="button" className="exchange-rate-key" onClick={() => inputDigit(digit)}>{digit}</button>
+        ))}
+        {operatorButton("multiply", "×", t("trip.rate.multiply"))}
+        {(["4", "5", "6"] as const).map((digit) => (
+          <button key={digit} type="button" className="exchange-rate-key" onClick={() => inputDigit(digit)}>{digit}</button>
+        ))}
+        {operatorButton("subtract", "−", t("trip.rate.subtract"))}
+        {(["1", "2", "3"] as const).map((digit) => (
+          <button key={digit} type="button" className="exchange-rate-key" onClick={() => inputDigit(digit)}>{digit}</button>
+        ))}
+        {operatorButton("add", "+", t("trip.rate.add"))}
+        <button type="button" className="exchange-rate-key" onClick={percentage} aria-label={t("trip.rate.percent")}>%</button>
+        <button type="button" className="exchange-rate-key" onClick={() => inputDigit("0")}>0</button>
+        <button type="button" className="exchange-rate-key" onClick={inputDecimal} aria-label={t("trip.rate.decimal")}>.</button>
+        <button type="button" className="exchange-rate-key exchange-rate-key--equals" onClick={equals} aria-label={t("trip.rate.equals")}>=</button>
+      </div>
+    </>
+  )
+}
+
 export function ExchangeRateCard({
   baseCurrency,
   defaultForeignCurrency,
@@ -205,11 +453,11 @@ export function ExchangeRateCard({
 
   const [fromCurrency, setFromCurrency] = useState(initialForeignCurrency)
   const [toCurrency, setToCurrency] = useState(normalizedBase)
-  const [amount, setAmount] = useState("100")
+  const [amount, setAmount] = useState("0")
   const [data, setData] = useState<ExchangeRateResponse | null>(null)
   const [error, setError] = useState(false)
   const [retryToken, setRetryToken] = useState(0)
-  const [calculatorOpen, setCalculatorOpen] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const pairKey = fromCurrency && toCurrency ? `${fromCurrency}:${toCurrency}` : ""
   const dataKey = data ? `${data.base}:${data.target}` : ""
@@ -281,9 +529,14 @@ export function ExchangeRateCard({
   const quoteTime = data ? formatQuoteTime(data.updatedAt) : null
   const sourceMeta = data ? SOURCE_META[data.source] : null
   const loading = Boolean(pairKey && dataKey !== pairKey && !error)
+  const retryRate = () => {
+    setError(false)
+    setRetryToken((value) => value + 1)
+  }
 
   return (
-    <section className="glass-card exchange-rate-card animate-fade-in-up" aria-labelledby="exchange-rate-title">
+    <>
+      <section className="glass-card exchange-rate-card animate-fade-in-up" aria-labelledby="exchange-rate-title">
       <div className="exchange-rate-header">
         <div>
           <div className="exchange-rate-title-row">
@@ -341,10 +594,7 @@ export function ExchangeRateCard({
           <span>{t("trip.rate.error")}</span>
           <button
             type="button"
-            onClick={() => {
-              setError(false)
-              setRetryToken((value) => value + 1)
-            }}
+            onClick={retryRate}
           >
             <RefreshCw size={15} aria-hidden="true" />
             {t("trip.rate.retry")}
@@ -371,18 +621,7 @@ export function ExchangeRateCard({
                 )}
               </div>
 
-              <button
-                type="button"
-                className="exchange-rate-calculator-toggle"
-                aria-expanded={calculatorOpen}
-                onClick={() => setCalculatorOpen((open) => !open)}
-              >
-                <Calculator size={17} aria-hidden="true" />
-                {t("trip.rate.calculator")}
-                {calculatorOpen ? <ChevronUp size={17} aria-hidden="true" /> : <ChevronDown size={17} aria-hidden="true" />}
-              </button>
-
-              <div className={`exchange-rate-calculator${calculatorOpen ? " is-open" : ""}`}>
+              <div className="exchange-rate-calculator">
                 <label>
                   <span>{t("trip.rate.amount", { currency: data.base })}</span>
                   <div className="exchange-rate-amount-input">
@@ -447,6 +686,70 @@ export function ExchangeRateCard({
           <p className="exchange-rate-disclaimer">{t("trip.rate.disclaimer")}</p>
         </>
       ) : null}
-    </section>
+      </section>
+
+      <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+        <Dialog.Trigger asChild>
+          <button
+            type="button"
+            className="exchange-rate-mobile-trigger"
+            aria-label={t("trip.rate.openCalculator")}
+            title={t("trip.rate.openCalculator")}
+          >
+            <Calculator size={22} aria-hidden="true" />
+          </button>
+        </Dialog.Trigger>
+
+        <Dialog.Portal>
+          <Dialog.Overlay className="exchange-rate-mobile-overlay" />
+          <Dialog.Content className="exchange-rate-mobile-dialog">
+            <header className="exchange-rate-mobile-header">
+              <div>
+                <Calculator size={19} aria-hidden="true" />
+                <Dialog.Title>{t("trip.rate.calculator")}</Dialog.Title>
+              </div>
+              <Dialog.Close asChild>
+                <button type="button" aria-label={t("trip.rate.closeCalculator")}>
+                  <X size={22} aria-hidden="true" />
+                </button>
+              </Dialog.Close>
+            </header>
+
+            <Dialog.Description className="exchange-rate-visually-hidden">
+              {`${t("trip.rate.subtitle")} ${t("trip.rate.disclaimer")}`}
+            </Dialog.Description>
+
+            <div className="exchange-rate-mobile-workspace">
+              <MobileExchangeCalculator
+                amount={amount}
+                convertedAmount={convertedAmount}
+                currencyOptions={currencyOptions}
+                data={data}
+                error={error}
+                fromCurrency={fromCurrency}
+                loading={loading}
+                locale={locale}
+                onAmountChange={setAmount}
+                onChangePair={changePair}
+                onRetry={retryRate}
+                onSwap={swapCurrencies}
+                toCurrency={toCurrency}
+                trend={trend}
+                t={t}
+              />
+            </div>
+
+            <footer className="exchange-rate-mobile-footer">
+              <span>{t("trip.rate.estimateOnly")}</span>
+              {sourceMeta && (
+                <a href={sourceMeta.href} target="_blank" rel="noreferrer">
+                  {t("trip.rate.source", { source: sourceMeta.label })}
+                </a>
+              )}
+            </footer>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
   )
 }
