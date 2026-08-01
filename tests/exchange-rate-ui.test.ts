@@ -23,22 +23,25 @@ function cssRule(selector: string) {
   return globalCss.slice(start, end)
 }
 
-test("exchange-rate card remounts only when the local day or automatic currency changes", () => {
+test("exchange-rate launcher remounts only when the local day or automatic currency changes", () => {
   assert.match(clientSource, /resolveTripDayCurrency\(\{/u)
   assert.match(clientSource, /const exchangeRateCardKey = `\$\{currentCalendarDay\}:\$\{automaticRateCurrency\}`/u)
   assert.match(clientSource, /<ExchangeRateCard\s+key=\{exchangeRateCardKey\}/u)
   assert.match(cardSource, /const \[fromCurrency, setFromCurrency\] = useState\(initialForeignCurrency\)/u)
 })
 
-test("exchange-rate swap control is centered and unavailable without a complete pair", () => {
-  const swapRule = cssRule(".exchange-rate-swap")
-  assert.match(swapRule, /display:\s*grid;/u)
-  assert.match(swapRule, /place-items:\s*center;/u)
-  assert.match(swapRule, /justify-self:\s*center;/u)
-  assert.match(swapRule, /padding:\s*0;/u)
-  assert.match(cssRule(".exchange-rate-swap svg"), /display:\s*block;/u)
-  assert.match(cardSource, /role="group" aria-label=\{t\("trip\.rate\.pair"\)\}/u)
-  assert.match(cardSource, /disabled=\{!fromCurrency \|\| !toCurrency\}/u)
+test("desktop exchange rate uses a compact trip-header launcher and right drawer", () => {
+  const triggerRule = cssRule(".exchange-rate-desktop-trigger")
+  assert.match(triggerRule, /display:\s*flex;/u)
+  assert.match(triggerRule, /height:\s*44px;/u)
+  assert.match(triggerRule, /max-width:\s*190px;/u)
+  assert.match(cardSource, /className="exchange-rate-desktop-trigger"/u)
+  assert.match(cardSource, /const desktopTriggerLabel = activeData/u)
+  assert.doesNotMatch(cardSource, /className="glass-card exchange-rate-card/u)
+  assert.match(
+    globalCss,
+    /@media \(min-width: 701px\)[\s\S]*?\.exchange-rate-mobile-dialog\s*\{[\s\S]*?inset:\s*0 0 0 auto;[\s\S]*?width:\s*min\(430px, 100vw\);/u,
+  )
 })
 
 test("mobile exchange rate stays out of the transaction flow and opens as a calculator", () => {
@@ -46,13 +49,13 @@ test("mobile exchange rate stays out of the transaction flow and opens as a calc
   assert.match(triggerRule, /position:\s*fixed;/u)
   assert.match(triggerRule, /left:\s*env\(safe-area-inset-left\);/u)
   assert.match(cardSource, /className="exchange-rate-mobile-trigger"/u)
-  assert.match(cardSource, /<Dialog\.Content className="exchange-rate-mobile-dialog">/u)
+  assert.match(cardSource, /<Dialog\.Content[\s\S]*?className="exchange-rate-mobile-dialog"/u)
   assert.match(cardSource, /className="exchange-rate-mobile-keypad"/u)
   assert.match(cardSource, /<ArrowLeft size=\{27\} aria-hidden="true" \/>/u)
   assert.doesNotMatch(cardSource, /<Delete\b/u)
   assert.match(
     globalCss,
-    /@media \(max-width: 700px\)[\s\S]*?\.exchange-rate-card\s*\{\s*display:\s*none;/u,
+    /@media \(max-width: 700px\)[\s\S]*?\.exchange-rate-desktop-trigger\s*\{\s*display:\s*none;/u,
   )
   assert.match(
     globalCss,

@@ -733,6 +733,12 @@ export default function TripDetailClient({
                   <Share2 size={18} />
                 </button>
               )}
+              <ExchangeRateCard
+                key={exchangeRateCardKey}
+                baseCurrency={trip.baseCurrency}
+                defaultForeignCurrency={automaticRateCurrency}
+                suggestedCurrencies={suggestedRateCurrencies}
+              />
             </div>
           </div>
 
@@ -859,13 +865,6 @@ export default function TripDetailClient({
             onSubmit={handleCreatedTransaction}
           />
         )}
-
-        <ExchangeRateCard
-          key={exchangeRateCardKey}
-          baseCurrency={trip.baseCurrency}
-          defaultForeignCurrency={automaticRateCurrency}
-          suggestedCurrencies={suggestedRateCurrencies}
-        />
 
         {/* 全部交易列表 */}
         {allTransactions.length > 0 && (
@@ -1364,7 +1363,7 @@ function TransactionThumbnail({
           src={src}
           alt=""
           fill
-          sizes="(max-width: 600px) 52px, 56px"
+          sizes="(max-width: 600px) 52px, 64px"
           unoptimized
           draggable={false}
           onError={() => setFailedSrc(src)}

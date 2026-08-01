@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import * as Dialog from "@radix-ui/react-dialog"
 import {
   ArrowLeft,
@@ -515,7 +515,8 @@ export function ExchangeRateCard({
   const [data, setData] = useState<ExchangeRateResponse | null>(null)
   const [error, setError] = useState(false)
   const [retryToken, setRetryToken] = useState(0)
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [calculatorOpen, setCalculatorOpen] = useState(false)
+  const calculatorTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const pairKey = fromCurrency && toCurrency ? `${fromCurrency}:${toCurrency}` : ""
   const dataKey = data ? `${data.base}:${data.target}` : ""
@@ -587,180 +588,57 @@ export function ExchangeRateCard({
   const quoteTime = data ? formatQuoteTime(data.updatedAt) : null
   const sourceMeta = data ? SOURCE_META[data.source] : null
   const loading = Boolean(pairKey && dataKey !== pairKey && !error)
+  const activeData = data && dataKey === pairKey ? data : null
+  const desktopTriggerLabel = activeData
+    ? `${activeData.base} → ${getCurrencySymbol(activeData.target)}${formatHeadlineRate(activeData.rate, locale)}`
+    : t("trip.rate.calculator")
   const retryRate = () => {
     setError(false)
     setRetryToken((value) => value + 1)
   }
+  const openCalculator = (event: MouseEvent<HTMLButtonElement>) => {
+    calculatorTriggerRef.current = event.currentTarget
+    setCalculatorOpen(true)
+  }
 
   return (
     <>
-      <section className="glass-card exchange-rate-card animate-fade-in-up" aria-labelledby="exchange-rate-title">
-      <div className="exchange-rate-header">
-        <div>
-          <div className="exchange-rate-title-row">
-            <TrendingUp size={19} aria-hidden="true" />
-            <h2 id="exchange-rate-title">{t("trip.rate.title")}</h2>
-          </div>
-          <p>{t("trip.rate.subtitle")}</p>
-        </div>
-        <span className="exchange-rate-refresh-chip">
-          <RefreshCw size={13} aria-hidden="true" />
-          {t("trip.rate.refresh", { minutes: String(data?.refreshIntervalMinutes || 30) })}
-        </span>
-      </div>
+      <button
+        type="button"
+        className="exchange-rate-desktop-trigger"
+        aria-label={t("trip.rate.openCalculator")}
+        aria-expanded={calculatorOpen}
+        aria-haspopup="dialog"
+        title={t("trip.rate.openCalculator")}
+        onClick={openCalculator}
+      >
+        <Calculator size={18} aria-hidden="true" />
+        <span>{desktopTriggerLabel}</span>
+      </button>
 
-      <div className="exchange-rate-pair-controls" role="group" aria-label={t("trip.rate.pair")}>
-        <label>
-          <span>{t("trip.rate.from")}</span>
-          <select value={fromCurrency} onChange={(event) => changePair("from", event.target.value)}>
-            {!fromCurrency && <option value="">{t("trip.rate.select")}</option>}
-            {currencyOptions.map((currency) => (
-              <option key={currency} value={currency} disabled={!fromCurrency && currency === toCurrency}>
-                {currencyLabel(currency)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="exchange-rate-swap"
-          onClick={swapCurrencies}
-          aria-label={t("trip.rate.swap")}
-          disabled={!fromCurrency || !toCurrency}
-        >
-          <ArrowRightLeft size={18} aria-hidden="true" />
-        </button>
-        <label>
-          <span>{t("trip.rate.to")}</span>
-          <select value={toCurrency} onChange={(event) => changePair("to", event.target.value)}>
-            {currencyOptions.map((currency) => (
-              <option key={currency} value={currency}>{currencyLabel(currency)}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <button
+        type="button"
+        className="exchange-rate-mobile-trigger"
+        aria-label={t("trip.rate.openCalculator")}
+        aria-expanded={calculatorOpen}
+        aria-haspopup="dialog"
+        title={t("trip.rate.openCalculator")}
+        onClick={openCalculator}
+      >
+        <Calculator size={22} aria-hidden="true" />
+      </button>
 
-      {!fromCurrency ? (
-        <div className="exchange-rate-state">{t("trip.rate.choosePrompt")}</div>
-      ) : loading && !data ? (
-        <div className="exchange-rate-state" role="status">
-          <Loader2 size={19} className="exchange-rate-spinner" aria-hidden="true" />
-          {t("trip.rate.loading")}
-        </div>
-      ) : error && !data ? (
-        <div className="exchange-rate-state exchange-rate-error" role="alert">
-          <span>{t("trip.rate.error")}</span>
-          <button
-            type="button"
-            onClick={retryRate}
-          >
-            <RefreshCw size={15} aria-hidden="true" />
-            {t("trip.rate.retry")}
-          </button>
-        </div>
-      ) : data ? (
-        <>
-          <div className="exchange-rate-content">
-            <div className="exchange-rate-quote-column">
-              <div className="exchange-rate-eyebrow">{t("trip.rate.latest")}</div>
-              <div className="exchange-rate-main-quote">
-                <span>1 {data.base}</span>
-                <strong className="exchange-rate-main-quote-value">
-                  ≈ {getCurrencySymbol(data.target)}{formatHeadlineRate(data.rate, locale)}
-                  <span>{data.target}</span>
-                </strong>
-              </div>
-              <div className="exchange-rate-meta">
-                {quoteTime && <span>{t("trip.rate.quotedAt", { time: quoteTime })}</span>}
-                {sourceMeta && (
-                  <a href={sourceMeta.href} target="_blank" rel="noreferrer">
-                    {t("trip.rate.source", { source: sourceMeta.label })}
-                  </a>
-                )}
-              </div>
-
-              <div className="exchange-rate-calculator">
-                <label>
-                  <span>{t("trip.rate.amount", { currency: data.base })}</span>
-                  <div className="exchange-rate-amount-input">
-                    <input
-                      value={amount}
-                      inputMode="decimal"
-                      aria-label={t("trip.rate.amount", { currency: data.base })}
-                      onChange={(event) => setAmount(event.target.value)}
-                    />
-                    <span>{data.base}</span>
-                  </div>
-                </label>
-                <div className="exchange-rate-calculator-result" aria-live="polite">
-                  <span>{t("trip.rate.estimated")}</span>
-                  <strong>
-                    {convertedAmount === null
-                      ? "—"
-                      : (
-                        <>
-                          <span>{`${getCurrencySymbol(data.target)}${formatAmount(convertedAmount, data.target, locale)}`}</span>
-                          <span className="exchange-rate-calculator-code">{data.target}</span>
-                        </>
-                      )}
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="exchange-rate-trend-column">
-              <div className="exchange-rate-trend-heading">
-                <div>
-                  <strong>{t("trip.rate.history", { count: String(data.history.length) })}</strong>
-                  {data.history.length > 0 && (
-                    <span>{`${formatShortDate(data.history[0].date)}–${formatShortDate(data.history[data.history.length - 1].date)}`}</span>
-                  )}
-                </div>
-                {trend && (
-                  <span className="exchange-rate-change">
-                    {trend.changePercent >= 0
-                      ? <ArrowUpRight size={16} aria-hidden="true" />
-                      : <ArrowDownRight size={16} aria-hidden="true" />}
-                    {t("trip.rate.change", {
-                      change: `${trend.changePercent >= 0 ? "+" : ""}${trend.changePercent.toFixed(2)}%`,
-                    })}
-                  </span>
-                )}
-              </div>
-              {data.history.length >= 2 && trend ? (
-                <>
-                  <RateSparkline points={data.history} locale={locale} currency={data.target} />
-                  <div className="exchange-rate-range">
-                    <span>{t("trip.rate.low", { rate: formatRate(trend.minimum, locale) })}</span>
-                    <span>{t("trip.rate.high", { rate: formatRate(trend.maximum, locale) })}</span>
-                  </div>
-                </>
-              ) : (
-                <div className="exchange-rate-history-empty">{t("trip.rate.noHistory")}</div>
-              )}
-            </div>
-          </div>
-
-          <p className="exchange-rate-disclaimer">{t("trip.rate.disclaimer")}</p>
-        </>
-      ) : null}
-      </section>
-
-      <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
-        <Dialog.Trigger asChild>
-          <button
-            type="button"
-            className="exchange-rate-mobile-trigger"
-            aria-label={t("trip.rate.openCalculator")}
-            title={t("trip.rate.openCalculator")}
-          >
-            <Calculator size={22} aria-hidden="true" />
-          </button>
-        </Dialog.Trigger>
+      <Dialog.Root open={calculatorOpen} onOpenChange={setCalculatorOpen}>
 
         <Dialog.Portal>
           <Dialog.Overlay className="exchange-rate-mobile-overlay" />
-          <Dialog.Content className="exchange-rate-mobile-dialog">
+          <Dialog.Content
+            className="exchange-rate-mobile-dialog"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              calculatorTriggerRef.current?.focus()
+            }}
+          >
             <header className="exchange-rate-mobile-header">
               <div className="exchange-rate-mobile-header-title">
                 <Calculator size={19} aria-hidden="true" />
@@ -873,7 +751,10 @@ export function ExchangeRateCard({
             </div>
 
             <footer className="exchange-rate-mobile-footer">
-              <span>{t("trip.rate.estimateOnly")}</span>
+              <span>
+                {t("trip.rate.estimateOnly")}
+                {quoteTime ? <small>{t("trip.rate.quotedAt", { time: quoteTime })}</small> : null}
+              </span>
               {sourceMeta && (
                 <a href={sourceMeta.href} target="_blank" rel="noreferrer">
                   {t("trip.rate.source", { source: sourceMeta.label })}
