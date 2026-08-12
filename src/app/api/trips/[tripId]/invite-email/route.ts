@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import nodemailer from "nodemailer"
 import { randomUUID } from "crypto"
+import { parseEmailInviteRole } from "@/lib/email-invite"
 
 // Gmail SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -32,9 +33,13 @@ export async function POST(
   try {
     const body = await req.json()
     const email = body.email?.trim()?.toLowerCase()
+    const role = parseEmailInviteRole(body.role)
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "請輸入有效的 Email" }, { status: 400 })
+    }
+    if (!role) {
+      return NextResponse.json({ error: "邀請權限無效" }, { status: 400 })
     }
 
     // 驗證權限（owner 或 member 可以邀請）
@@ -79,12 +84,22 @@ export async function POST(
     const expires = new Date()
     expires.setDate(expires.getDate() + 7) // 7 天有效
 
-    if (!existingInvite) {
+    if (existingInvite) {
+      await prisma.emailInvite.update({
+        where: { id: existingInvite.id },
+        data: {
+          role,
+          invitedBy: session.user.id,
+          expires,
+        },
+      })
+    } else {
       await prisma.emailInvite.create({
         data: {
           tripId,
           email,
           token,
+          role,
           invitedBy: session.user.id,
           expires,
         },
@@ -113,6 +128,7 @@ export async function POST(
         inviterName,
         dateRange,
         inviteUrl,
+        role,
       }),
     })
 
@@ -132,12 +148,16 @@ function generateInviteEmailHtml({
   inviterName,
   dateRange,
   inviteUrl,
+  role,
 }: {
   tripName: string
   inviterName: string
   dateRange: string
   inviteUrl: string
+  role: "member" | "viewer"
 }) {
+  const roleLabel = role === "viewer" ? "僅可查看" : "可共同記帳"
+
   return `
 <!DOCTYPE html>
 <html>
@@ -176,6 +196,9 @@ function generateInviteEmailHtml({
                 </div>
                 <div style="font-size: 13px; color: #94a3b8;">
                   📅 ${dateRange}
+                </div>
+                <div style="font-size: 13px; color: #64748b; margin-top: 8px;">
+                  🔐 加入權限：${roleLabel}
                 </div>
               </div>
 

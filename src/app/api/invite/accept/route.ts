@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
+import { parseEmailInviteRole } from "@/lib/email-invite"
 
 // POST — 接受邀請
 export async function POST(req: NextRequest) {
@@ -33,6 +34,11 @@ export async function POST(req: NextRequest) {
 
     if (invite.status !== "pending") {
       return NextResponse.json({ error: "此邀請已被使用" }, { status: 400 })
+    }
+
+    const role = parseEmailInviteRole(invite.role)
+    if (!role) {
+      return NextResponse.json({ error: "邀請權限無效" }, { status: 400 })
     }
 
     const sessionEmail = session.user.email?.trim().toLowerCase()
@@ -91,7 +97,7 @@ export async function POST(req: NextRequest) {
         data: {
           tripId: invite.tripId,
           userId: session.user.id,
-          role: invite.role,
+          role,
         },
       })
 
@@ -159,6 +165,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "邀請連結已過期" }, { status: 410 })
   }
 
+  const role = parseEmailInviteRole(invite.role)
+  if (!role) {
+    return NextResponse.json({ error: "邀請權限無效" }, { status: 400 })
+  }
+
   // 查詢邀請人名稱
   const inviter = await prisma.user.findUnique({
     where: { id: invite.invitedBy },
@@ -172,5 +183,6 @@ export async function GET(req: NextRequest) {
     endDate: invite.trip.endDate,
     inviterName: inviter?.name || "你的朋友",
     email: invite.email,
+    role,
   })
 }

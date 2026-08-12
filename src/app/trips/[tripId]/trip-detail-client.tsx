@@ -44,6 +44,8 @@ import { BatchReconcileModal } from "@/components/batch-reconcile-modal"
 import { TripStatsModal } from "@/components/trip-stats-modal"
 import { ExchangeRateCard } from "@/components/exchange-rate-card"
 import { ModalScrollLock } from "@/components/modal-scroll-lock"
+import { EmailInviteRoleSelector } from "@/components/email-invite-role-selector"
+import type { EmailInviteRole } from "@/lib/email-invite"
 import {
   SortableTransactionList,
   type SortableTransactionRootProps,
@@ -222,6 +224,7 @@ export default function TripDetailClient({
   const [editingDeposit, setEditingDeposit] = useState<DepositDisplayTransaction | null>(null)
   const [editingExchange, setEditingExchange] = useState<ExchangeDisplayTransaction | null>(null)
   const [gmailPrefix, setGmailPrefix] = useState('')
+  const [inviteRole, setInviteRole] = useState<EmailInviteRole>('member')
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteStatus, setInviteStatus] = useState<'idle' | 'sent' | 'error'>('idle')
   const [inviteError, setInviteError] = useState('')
@@ -1148,7 +1151,7 @@ export default function TripDetailClient({
                   const res = await fetch(`/api/trips/${tripId}/invite-email`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: fullEmail }),
+                    body: JSON.stringify({ email: fullEmail, role: inviteRole }),
                   })
                   const data = await res.json()
                   if (res.ok) {
@@ -1188,7 +1191,7 @@ export default function TripDetailClient({
                       autoFocus
                       autoComplete="off"
                       style={{
-                        flex: 1, padding: '0.75rem 0.875rem',
+                        flex: 1, minWidth: 0, padding: '0.75rem 0.875rem',
                         border: 'none', outline: 'none',
                         background: 'transparent',
                         color: 'var(--text-primary)',
@@ -1200,7 +1203,7 @@ export default function TripDetailClient({
                       padding: '0.75rem 0.875rem 0.75rem 0',
                       fontSize: '0.95rem', fontFamily: 'monospace',
                       color: 'var(--text-muted)',
-                      whiteSpace: 'nowrap', userSelect: 'none',
+                      whiteSpace: 'nowrap', userSelect: 'none', flexShrink: 0,
                     }}>
                       @gmail.com
                     </span>
@@ -1280,6 +1283,12 @@ export default function TripDetailClient({
                     </div>
                   )}
                 </div>
+
+                <EmailInviteRoleSelector
+                  value={inviteRole}
+                  onChange={setInviteRole}
+                  disabled={inviteSending}
+                />
 
                 <button
                   type="submit"

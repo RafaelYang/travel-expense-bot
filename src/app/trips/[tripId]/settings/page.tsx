@@ -15,6 +15,8 @@ import Link from "next/link"
 import { useLanguage } from "@/components/language-provider"
 import { getCountryCoverImage, parseTripCountryPlan, COUNTRIES } from "@/lib/countries"
 import { ALL_TRIPS_PATH } from "@/lib/active-trip"
+import { EmailInviteRoleSelector } from "@/components/email-invite-role-selector"
+import type { EmailInviteRole } from "@/lib/email-invite"
 import {
   isTripSettingsDraftDirty,
   type TripSettingsDraft,
@@ -93,6 +95,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [deleting, setDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
+  const [emailInviteRole, setEmailInviteRole] = useState<EmailInviteRole>("member")
   const [emailSending, setEmailSending] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState("")
@@ -770,7 +773,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
               const res = await fetch(`/api/trips/${tripId}/invite-email`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: inviteEmail.trim() }),
+                body: JSON.stringify({ email: inviteEmail.trim(), role: emailInviteRole }),
               })
               const data = await res.json()
               if (res.ok) {
@@ -785,32 +788,39 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             } finally {
               setEmailSending(false)
             }
-          }} style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="email"
-              className="input-field"
-              value={inviteEmail}
-              onChange={(e) => { setInviteEmail(e.target.value); setEmailError("") }}
-              placeholder={t('settings.emailInvite.placeholder')}
-              required
-              style={{ flex: 1 }}
-            />
-            <button
-              type="submit"
-              className="btn-primary"
+          }}>
+            <EmailInviteRoleSelector
+              value={emailInviteRole}
+              onChange={setEmailInviteRole}
               disabled={emailSending}
-              style={{
-                padding: '0.625rem 1rem',
-                whiteSpace: 'nowrap',
-                opacity: emailSending ? 0.7 : 1,
-              }}
-            >
-              {emailSending ? (
-                <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
-              ) : (
-                <><Send size={16} /> {t('settings.emailInvite.send')}</>
-              )}
-            </button>
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                type="email"
+                className="input-field"
+                value={inviteEmail}
+                onChange={(e) => { setInviteEmail(e.target.value); setEmailError("") }}
+                placeholder={t('settings.emailInvite.placeholder')}
+                required
+                style={{ flex: 1, minWidth: 0 }}
+              />
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={emailSending}
+                style={{
+                  padding: '0.625rem 1rem',
+                  whiteSpace: 'nowrap',
+                  opacity: emailSending ? 0.7 : 1,
+                }}
+              >
+                {emailSending ? (
+                  <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <><Send size={16} /> {t('settings.emailInvite.send')}</>
+                )}
+              </button>
+            </div>
           </form>
 
           {emailSent && (

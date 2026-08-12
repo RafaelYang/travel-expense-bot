@@ -14,6 +14,7 @@ import { Loader2, CheckCircle, XCircle, LogIn, Plane } from "lucide-react"
 import { useLanguage } from "@/components/language-provider"
 import { interpolate } from "@/lib/i18n"
 import { ALL_TRIPS_PATH } from "@/lib/active-trip"
+import type { EmailInviteRole } from "@/lib/email-invite"
 
 interface InviteInfo {
   tripName: string
@@ -22,6 +23,7 @@ interface InviteInfo {
   endDate: string
   inviterName: string
   email: string
+  role: EmailInviteRole
 }
 
 function InviteAcceptContent() {
@@ -221,6 +223,13 @@ function InviteAcceptContent() {
                 </div>
                 <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                   📅 {dateRange}
+                </div>
+                <div style={{
+                  fontSize: "0.8rem",
+                  color: "var(--text-secondary)",
+                  marginTop: "0.5rem",
+                }}>
+                  🔐 {t("settings.emailInvite.role")}：{t(`settings.emailInvite.role.${inviteInfo?.role || "member"}`)}
                 </div>
               </div>
 
