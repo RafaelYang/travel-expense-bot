@@ -678,7 +678,7 @@ export default function TripDetailClient({
         </div>
 
         {/* 行程標題卡片 */}
-        <div className="glass-card animate-fade-in-up" style={{
+        <div className="glass-card trip-summary-card animate-fade-in-up" style={{
           padding: '1.5rem',
           marginBottom: '1rem',
           position: 'relative',

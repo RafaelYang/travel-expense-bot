@@ -2064,6 +2064,10 @@ a:hover .trip-card-bg {
 }
 
 @media (max-width: 700px) {
+  .trip-summary-card {
+    min-height: 10rem;
+  }
+
   .exchange-rate-desktop-trigger {
     display: none;
   }
