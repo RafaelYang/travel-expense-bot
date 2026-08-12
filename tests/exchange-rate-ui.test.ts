@@ -47,6 +47,8 @@ test("desktop exchange rate uses a compact trip-header launcher and right drawer
 test("mobile exchange rate sits in the trip-card corner and opens as a calculator", () => {
   const triggerRule = cssRule(".exchange-rate-mobile-trigger")
   assert.match(clientSource, /className="glass-card trip-summary-card animate-fade-in-up"/u)
+  assert.match(clientSource, /className="trip-summary-meta"/u)
+  assert.equal(clientSource.match(/className="trip-summary-meta-item"/gu)?.length, 2)
   assert.match(triggerRule, /position:\s*absolute;/u)
   assert.match(triggerRule, /right:\s*1\.25rem;/u)
   assert.match(triggerRule, /bottom:\s*1\.25rem;/u)
@@ -61,6 +63,14 @@ test("mobile exchange rate sits in the trip-card corner and opens as a calculato
   assert.match(
     globalCss,
     /@media \(max-width: 700px\)[\s\S]*?\.trip-summary-card\s*\{\s*min-height:\s*10rem;/u,
+  )
+  assert.match(
+    globalCss,
+    /@media \(max-width: 700px\)[\s\S]*?\.trip-summary-meta\s*\{\s*padding-right:\s*4rem;/u,
+  )
+  assert.match(
+    globalCss,
+    /@media \(max-width: 700px\)[\s\S]*?\.trip-summary-meta-item\s*\{[\s\S]*?flex:\s*0 0 auto;[\s\S]*?white-space:\s*nowrap;/u,
   )
   assert.match(
     globalCss,

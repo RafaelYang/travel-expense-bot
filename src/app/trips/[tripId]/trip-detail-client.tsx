@@ -745,16 +745,17 @@ export default function TripDetailClient({
             </div>
           </div>
 
-          <div style={{
+          <div className="trip-summary-meta" style={{
             display: 'flex', gap: '1rem', flexWrap: 'wrap',
             fontSize: '0.9rem', color: 'var(--text-secondary)',
           }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <span className="trip-summary-meta-item" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <Calendar size={13} />
               {format(new Date(trip.startDate), 'yyyy/M/d', { locale: dateLocale })} - {format(new Date(trip.endDate), 'M/d', { locale: dateLocale })}
               （{totalDays} {t('trip.days')}）
             </span>
             <span
+              className="trip-summary-meta-item"
               onClick={() => setShowMemberList(!showMemberList)}
               style={{
                 display: 'flex', alignItems: 'center', gap: '0.25rem',

@@ -2068,6 +2068,19 @@ a:hover .trip-card-bg {
     min-height: 10rem;
   }
 
+  .trip-summary-meta {
+    padding-right: 4rem;
+  }
+
+  .trip-summary-meta-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .trip-summary-meta-item > svg {
+    flex-shrink: 0;
+  }
+
   .exchange-rate-desktop-trigger {
     display: none;
   }
