@@ -49,3 +49,14 @@ test("mobile transaction layout keeps the thumbnail column aligned across row ty
   assert.match(clientSource, /<Wallet size=\{23\}/u)
   assert.match(clientSource, /<Receipt size=\{23\}/u)
 })
+
+test("mobile day headers visually hide the daily-net label while preserving it for assistive technology", () => {
+  assert.match(
+    clientSource,
+    /<span className="transaction-day-net-label">\s*\{t\('trip\.dailyNet'\)\}/u,
+  )
+  assert.match(
+    globalCss,
+    /@media \(max-width: 600px\)[\s\S]*?\.transaction-day-net-label\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?clip:\s*rect\(0, 0, 0, 0\);/u,
+  )
+})

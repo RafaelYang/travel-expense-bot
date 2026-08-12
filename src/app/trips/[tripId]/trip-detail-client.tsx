@@ -936,7 +936,9 @@ export default function TripDetailClient({
                         color: group.dailyTotal < 0 ? 'var(--color-spend-decrease)' : 'var(--text-primary)',
                         whiteSpace: 'nowrap',
                       }}>
-                        {t('trip.dailyNet')}{' '}
+                        <span className="transaction-day-net-label">
+                          {t('trip.dailyNet')}{' '}
+                        </span>
                         {group.dailyTotal < 0 ? '−' : ''}{getCurrencySymbol(trip.baseCurrency)}
                         {Math.abs(group.dailyTotal).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                       </div>
