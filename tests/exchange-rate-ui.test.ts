@@ -44,10 +44,14 @@ test("desktop exchange rate uses a compact trip-header launcher and right drawer
   )
 })
 
-test("mobile exchange rate stays out of the transaction flow and opens as a calculator", () => {
+test("mobile exchange rate sits in the trip-card corner and opens as a calculator", () => {
   const triggerRule = cssRule(".exchange-rate-mobile-trigger")
-  assert.match(triggerRule, /position:\s*fixed;/u)
-  assert.match(triggerRule, /left:\s*env\(safe-area-inset-left\);/u)
+  assert.match(triggerRule, /position:\s*absolute;/u)
+  assert.match(triggerRule, /right:\s*1\.25rem;/u)
+  assert.match(triggerRule, /bottom:\s*1\.25rem;/u)
+  assert.match(triggerRule, /border-radius:\s*15px;/u)
+  assert.doesNotMatch(triggerRule, /position:\s*fixed;/u)
+  assert.doesNotMatch(triggerRule, /left:/u)
   assert.match(cardSource, /className="exchange-rate-mobile-trigger"/u)
   assert.match(cardSource, /<Dialog\.Content[\s\S]*?className="exchange-rate-mobile-dialog"/u)
   assert.match(cardSource, /className="exchange-rate-mobile-keypad"/u)
