@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   BarChart3,
   Banknote,
-  CheckCircle2,
   ChevronRight,
   CircleDollarSign,
   CreditCard,
@@ -106,14 +105,12 @@ export function TripStatsModal({
   trip,
   canEdit,
   onOpenChange,
-  onOpenBatchReconcile,
   onEditExpense,
 }: {
   open: boolean
   trip: TripStatsModalTrip
   canEdit: boolean
   onOpenChange: (open: boolean) => void
-  onOpenBatchReconcile: () => void
   onEditExpense: (expense: TripStatsExpense) => void
 }) {
   const { locale, t } = useLanguage()
@@ -167,7 +164,6 @@ export function TripStatsModal({
 
   const cardExpenses = trip.expenses.filter((expense) => expense.paymentMethod === "card")
   const pendingCardExpenses = cardExpenses.filter((expense) => !expense.reconciledAt)
-  const confirmedCardExpenses = cardExpenses.length - pendingCardExpenses.length
   const hasPendingForeignCard = pendingCardExpenses.some((expense) => (
     expense.currency.toUpperCase() !== trip.baseCurrency.toUpperCase()
   ))
@@ -379,29 +375,6 @@ export function TripStatsModal({
                       {totalIsEstimated && <span className={styles.estimated}> {t("trip.stats.estimated")}</span>}
                     </p>
                     <p className={styles.heroAmount}>{money(trip.totalSpent)}</p>
-                  </div>
-                  <div className={styles.reconcileRow}>
-                    <span>
-                      <CheckCircle2 size={16} aria-hidden="true" />
-                      {t("trip.stats.reconcileSummary", {
-                        confirmed: String(confirmedCardExpenses),
-                        pending: String(pendingCardExpenses.length),
-                      })}
-                    </span>
-                    {canEdit && pendingCardExpenses.length > 0 && (
-                      <button
-                        type="button"
-                        className={styles.secondaryButton}
-                        onClick={() => {
-                          modalHandoffRef.current = true
-                          handleOpenChange(false)
-                          onOpenBatchReconcile()
-                        }}
-                      >
-                        {t("trip.stats.reconcileAction")}
-                        <ChevronRight size={16} aria-hidden="true" />
-                      </button>
-                    )}
                   </div>
                 </section>
 
@@ -768,11 +741,6 @@ export function TripStatsModal({
                     const paymentLabel = expense.paymentMethod === "cash"
                       ? t("form.payment.cash")
                       : t("form.payment.card")
-                    const statusLabel = expense.paymentMethod === "cash"
-                      ? t("trip.stats.cashPaid")
-                      : expense.reconciledAt
-                        ? t("expense.reconcile.confirmed")
-                        : t("expense.reconcile.pending")
                     const baseAmountLabel = baseAmount === null
                       ? t("trip.stats.pendingConversion")
                       : money(baseAmount)
@@ -799,7 +767,6 @@ export function TripStatsModal({
                             date: formattedDate,
                             original: money(expense.amount, expense.currency),
                             payment: paymentLabel,
-                            status: statusLabel,
                             amount: baseAmountLabel,
                           })}
                         >
@@ -808,7 +775,6 @@ export function TripStatsModal({
                               <strong>{expense.item}</strong>
                               <small>
                                 <time dateTime={expense.date}>{formattedDate}</time>
-                                {" · "}{expense.user.name}
                               </small>
                             </span>
                             <span className={styles.expenseAmounts}>
@@ -830,13 +796,6 @@ export function TripStatsModal({
                                 : <CreditCard size={14} aria-hidden="true" />}
                               {paymentLabel}
                             </span>
-                            {expense.paymentMethod === "card" && (
-                              <span className={expense.reconciledAt ? styles.confirmedBadge : styles.pendingBadge}>
-                                {expense.reconciledAt
-                                  ? `✓ ${t("expense.reconcile.confirmed")}`
-                                  : t("expense.reconcile.pending")}
-                              </span>
-                            )}
                             {expense.note && <span className={styles.notePreview}>{expense.note}</span>}
                           </span>
                         </button>
@@ -885,10 +844,6 @@ export function TripStatsModal({
 
                 <dl className={styles.detailList}>
                   <div>
-                    <dt>{t("expense.detail.recordedBy")}</dt>
-                    <dd>{selectedExpense.user.name}</dd>
-                  </div>
-                  <div>
                     <dt>{t("expense.detail.time")}</dt>
                     <dd><time dateTime={selectedExpense.date}>{format(
                       new Date(selectedExpense.date),
@@ -904,26 +859,12 @@ export function TripStatsModal({
                     <dt>{t("expense.detail.payment")}</dt>
                     <dd>{selectedExpense.paymentMethod === "cash" ? t("form.payment.cash") : t("form.payment.card")}</dd>
                   </div>
-                  <div>
-                    <dt>{t("expense.reconcile.status")}</dt>
-                    <dd>{selectedExpense.paymentMethod === "cash"
-                      ? t("trip.stats.cashPaid")
-                      : selectedExpense.reconciledAt
-                        ? t("expense.reconcile.confirmed")
-                        : t("expense.reconcile.pending")}</dd>
-                  </div>
                   {selectedExpense.note && (
                     <div>
                       <dt>{t("expense.detail.note")}</dt>
                       <dd>{selectedExpense.note}</dd>
                     </div>
                   )}
-                  <div>
-                    <dt>{t("expense.detail.source")}</dt>
-                    <dd>{selectedExpense.source === "line"
-                      ? t("expense.detail.source.line")
-                      : t("expense.detail.source.web")}</dd>
-                  </div>
                 </dl>
 
                 {selectedExpense.images && selectedExpense.images.length > 0 && (

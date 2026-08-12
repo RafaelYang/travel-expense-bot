@@ -851,10 +851,6 @@ body::before {
   font-size: 0.75rem;
 }
 
-.transaction-list-status {
-  margin-top: 0.28rem;
-}
-
 /* ===== 滾動條美化 ===== */
 ::-webkit-scrollbar {
   width: 6px;
@@ -906,11 +902,12 @@ body::before {
     grid-template-areas:
       "thumbnail category amount"
       "thumbnail title title"
-      "thumbnail meta status";
-    grid-template-columns: 52px minmax(0, 1fr) max-content;
+      "thumbnail meta meta";
+    grid-template-columns: 68px minmax(0, 1fr) max-content;
     align-items: start;
-    gap: 0.4rem 0.5rem;
-    padding: 0.65rem;
+    gap: 0.42rem 0.65rem;
+    min-height: 92px;
+    padding: 0.7rem;
   }
 
   .transaction-list-main,
@@ -921,9 +918,10 @@ body::before {
 
   .transaction-list-thumbnail {
     grid-area: thumbnail;
-    width: 52px;
-    height: 52px;
+    width: 68px;
+    height: 68px;
     align-self: center;
+    border-radius: 15px;
   }
 
   .transaction-list-category {
@@ -943,7 +941,9 @@ body::before {
     width: 100%;
     display: -webkit-box;
     overflow: hidden;
-    line-height: 1.35;
+    font-size: 1rem;
+    font-weight: 650;
+    line-height: 1.4;
     overflow-wrap: anywhere;
     text-overflow: clip;
     white-space: normal;
@@ -965,10 +965,13 @@ body::before {
     min-width: max-content;
   }
 
-  .transaction-list-status {
-    grid-area: status;
-    justify-self: end;
-    margin-top: 0;
+  .transaction-list-value {
+    font-size: 1.08rem;
+    font-weight: 800;
+  }
+
+  .transaction-list-secondary {
+    font-size: 0.78rem;
   }
 }
 

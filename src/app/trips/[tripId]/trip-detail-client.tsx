@@ -40,7 +40,6 @@ import {
   type CashExchangeData,
   type CashWalletData,
 } from "@/components/cash-wallet-panel"
-import { BatchReconcileModal } from "@/components/batch-reconcile-modal"
 import { TripStatsModal } from "@/components/trip-stats-modal"
 import { ExchangeRateCard } from "@/components/exchange-rate-card"
 import { ModalScrollLock } from "@/components/modal-scroll-lock"
@@ -216,7 +215,6 @@ export default function TripDetailClient({
   const [showMemberList, setShowMemberList] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showStatsModal, setShowStatsModal] = useState(false)
-  const [showBatchReconcile, setShowBatchReconcile] = useState(false)
   const [reorderingTimeline, setReorderingTimeline] = useState(false)
   const reorderingTimelineRef = useRef(false)
   const [editingExpense, setEditingExpense] = useState<TripData['expenses'][0] | null>(null)
@@ -499,10 +497,6 @@ export default function TripDetailClient({
 
   const daysPassed = Math.max(0, differenceInDays(new Date(), new Date(trip.startDate)) + 1)
   const canEdit = trip.userRole !== 'viewer'
-  const pendingCardExpenses = trip.expenses.filter(
-    (expense) => expense.paymentMethod === 'card' && !expense.reconciledAt,
-  )
-
   // 日期由新到舊；同一天預設依實際加入順序，手動排序後則保留自訂順序。
   const parsedExpenses: ExpenseDisplayTransaction[] = trip.expenses.map(e => ({
     id: e.id,
@@ -881,22 +875,14 @@ export default function TripDetailClient({
                 <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>
                   {t('trip.allTransactions', { count: String(allTransactions.length) })}
                 </h3>
-                {canEdit && pendingCardExpenses.length > 0 && (
-                  <button
-                    type="button"
-                    className="btn-nav"
-                    onClick={() => setShowBatchReconcile(true)}
-                    style={{
-                      padding: '0.35rem 0.55rem',
-                      borderColor: 'rgba(245, 158, 11, 0.45)',
-                      background: 'rgba(245, 158, 11, 0.09)',
-                      color: 'var(--color-warning-text)', fontSize: '0.76rem', fontWeight: 800,
-                    }}
-                  >
-                    <ListChecks size={15} />
-                    {t('expense.reconcile.batch.open', { count: String(pendingCardExpenses.length) })}
-                  </button>
-                )}
+                <Link
+                  href={`/trips/${tripId}/records`}
+                  className="btn-nav"
+                  style={{ padding: '0.35rem 0.55rem', fontSize: '0.76rem', fontWeight: 800 }}
+                >
+                  <ListChecks size={15} />
+                  {t('trip.records.open')}
+                </Link>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{
@@ -981,11 +967,6 @@ export default function TripDetailClient({
                                 ? () => setEditingDeposit(transaction)
                                 : () => openExpenseModal(transaction)
                             }
-                            onReconcile={
-                              canEdit && transaction.kind === 'expense'
-                                ? () => openExpenseModal(transaction)
-                                : undefined
-                            }
                           />
                         ),
                       }))}
@@ -1033,20 +1014,8 @@ export default function TripDetailClient({
         trip={trip}
         canEdit={canEdit}
         onOpenChange={setShowStatsModal}
-        onOpenBatchReconcile={() => setShowBatchReconcile(true)}
         onEditExpense={(expense) => openExpenseModal(expense, 'edit')}
       />
-
-      {/* 批次核對信用卡交易 Modal */}
-      {showBatchReconcile && (
-        <BatchReconcileModal
-          tripId={tripId}
-          baseCurrency={trip.baseCurrency}
-          expenses={pendingCardExpenses}
-          onClose={() => setShowBatchReconcile(false)}
-          onSaved={() => fetchTrip(false)}
-        />
-      )}
 
       {/* 編輯花費 Modal */}
       {editingExpense && (
@@ -1375,7 +1344,7 @@ function TransactionThumbnail({
           src={src}
           alt=""
           fill
-          sizes="(max-width: 600px) 52px, 64px"
+          sizes="(max-width: 600px) 68px, 64px"
           unoptimized
           draggable={false}
           onError={() => setFailedSrc(src)}
@@ -1441,10 +1410,11 @@ function ExchangeRow({ exchange, baseCurrency, onEdit, sortableProps }: {
             {t(isBuy ? 'trip.exchange.buy' : 'trip.exchange.sell')}{' '}
             {exchange.foreignCurrency} {getCurrencySymbol(exchange.foreignCurrency)}{exchange.foreignAmount.toLocaleString()}
           </div>
-          <div className="transaction-list-meta transaction-list-meta-wide">
-            {exchange.user?.name}
-            {exchange.note && ` · ${exchange.note}`}
-          </div>
+          {exchange.note && (
+            <div className="transaction-list-meta transaction-list-meta-wide">
+              {exchange.note}
+            </div>
+          )}
         </div>
       </div>
       <div className="transaction-list-side">
@@ -1614,11 +1584,10 @@ function EditExchangeModal({ exchange, tripId, baseCurrency, onClose, onSave }: 
 }
 
 // === 花費列表行 ===
-function ExpenseRow({ expense, currency, onEdit, onReconcile, sortableProps }: {
+function ExpenseRow({ expense, currency, onEdit, sortableProps }: {
   expense: ExpenseOrDepositDisplayTransaction
   currency: string
   onEdit?: () => void
-  onReconcile?: () => void
   sortableProps?: SortableTransactionRootProps
 }) {
   const { t } = useLanguage()
@@ -1629,8 +1598,7 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile, sortableProps }: {
 
   // 使用實際幣種而非行程預設幣種
   const displayCurrency = expense.currency || currency
-  const isReconciled = !isIncome && Boolean(expense.reconciledAt)
-  const finalBaseAmount = !isIncome && expense.paymentMethod === 'card' && isReconciled
+  const finalBaseAmount = !isIncome && expense.paymentMethod === 'card' && expense.reconciledAt
     ? expense.settledAmount
     : undefined
   const {
@@ -1681,11 +1649,11 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile, sortableProps }: {
           <div className="transaction-list-title">
             {expense.item}
           </div>
-          <div className={`transaction-list-meta${isIncome ? ' transaction-list-meta-wide' : ''}`}>
-            {expense.user?.name}
-            {!isIncome && expense.source === 'line' && ' · 📱'}
-            {!isIncome && expense.paymentMethod === 'cash' && ` · ${t('form.payment.cash')}`}
-          </div>
+          {!isIncome && expense.paymentMethod === 'cash' && (
+            <div className="transaction-list-meta transaction-list-meta-wide">
+              {t('form.payment.cash')}
+            </div>
+          )}
         </div>
       </div>
       <div className="transaction-list-side">
@@ -1702,30 +1670,6 @@ function ExpenseRow({ expense, currency, onEdit, onReconcile, sortableProps }: {
             </div>
           )}
         </div>
-        {!isIncome && (
-          <button
-            className="transaction-list-status"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onReconcile?.()
-            }}
-            disabled={!onReconcile}
-            aria-pressed={isReconciled}
-            style={{
-              padding: '0.14rem 0.42rem', borderRadius: '9999px',
-              border: isReconciled
-                ? '1px solid rgba(34, 197, 94, 0.55)'
-                : '1px solid rgba(245, 158, 11, 0.5)',
-              background: isReconciled ? 'rgba(34, 197, 94, 0.12)' : 'rgba(245, 158, 11, 0.1)',
-              color: isReconciled ? '#22c55e' : '#f59e0b',
-              fontSize: '0.7rem', fontWeight: 800,
-              cursor: onReconcile ? 'pointer' : 'default', opacity: 1,
-            }}
-          >
-            {isReconciled ? `✓ ${t('expense.reconcile.confirmed')}` : t('expense.reconcile.pending')}
-          </button>
-        )}
       </div>
     </div>
   )

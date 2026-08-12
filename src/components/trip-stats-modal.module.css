@@ -602,8 +602,6 @@
 }
 
 .missingBadge,
-.pendingBadge,
-.confirmedBadge,
 .cashBadge,
 .cardBadge {
   display: inline-flex;
@@ -615,8 +613,7 @@
   line-height: 1.2;
 }
 
-.missingBadge,
-.pendingBadge {
+.missingBadge {
   color: var(--color-warning-text);
 }
 
@@ -780,17 +777,14 @@
 }
 
 .cashBadge,
-.cardBadge,
-.confirmedBadge,
-.pendingBadge {
+.cardBadge {
   flex: 0 0 auto;
   padding: 0.22rem 0.45rem;
   border: 1px solid var(--border-color-light);
   background: var(--bg-card-hover);
 }
 
-.cashBadge,
-.confirmedBadge {
+.cashBadge {
   color: var(--color-spend-decrease);
 }
 
