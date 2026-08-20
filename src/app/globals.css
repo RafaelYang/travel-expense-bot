@@ -1008,11 +1008,33 @@ body::before {
 }
 
 /* 日期選擇器跟著主題切換 */
+.new-trip-date-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.new-trip-date-field,
+.new-trip-date-field .date-input {
+  min-width: 0;
+}
+
 .date-input {
   color-scheme: dark;
 }
 [data-theme="light"] .date-input {
   color-scheme: light;
+}
+
+@media (max-width: 600px) {
+  .new-trip-date-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.875rem;
+  }
+
+  .new-trip-date-field .date-input {
+    min-height: 48px;
+  }
 }
 
 /* ===== 行程卡片背景 hover 效果 ===== */

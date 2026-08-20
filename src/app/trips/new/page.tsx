@@ -333,8 +333,8 @@ export default function NewTripPage() {
             </div>
 
             {/* 日期 */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div>
+            <div className="new-trip-date-grid">
+              <div className="new-trip-date-field">
                 <label style={{
                   display: 'flex', alignItems: 'center', gap: '0.25rem',
                   fontSize: '0.8rem', color: 'var(--text-secondary)',
@@ -343,17 +343,15 @@ export default function NewTripPage() {
                   {t('newTrip.startDate')} <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
-                  type={form.startDate ? "date" : "text"}
-                  placeholder={t('newTrip.startDate')}
+                  type="date"
                   className="input-field date-input"
                   value={form.startDate}
                   onChange={(e) => updateDate("startDate", e.target.value)}
-                  onFocus={(e) => (e.target.type = "date")}
-                  onBlur={(e) => { if (!e.target.value) e.target.type = "text" }}
+                  max={form.endDate || undefined}
                   required
                 />
               </div>
-              <div>
+              <div className="new-trip-date-field">
                 <label style={{
                   display: 'flex', alignItems: 'center', gap: '0.25rem',
                   fontSize: '0.8rem', color: 'var(--text-secondary)',
@@ -362,13 +360,11 @@ export default function NewTripPage() {
                   {t('newTrip.endDate')} <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
-                  type={form.endDate ? "date" : "text"}
-                  placeholder={t('newTrip.endDate')}
+                  type="date"
                   className="input-field date-input"
                   value={form.endDate}
                   onChange={(e) => updateDate("endDate", e.target.value)}
-                  onFocus={(e) => (e.target.type = "date")}
-                  onBlur={(e) => { if (!e.target.value) e.target.type = "text" }}
+                  min={form.startDate || undefined}
                   required
                 />
               </div>
