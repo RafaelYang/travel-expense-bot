@@ -12,6 +12,10 @@ import {
   isForeignCardExpense,
 } from "@/lib/expense-reconciliation"
 import { getCurrencySymbol } from "@/lib/utils"
+import {
+  hasAnyExpenseAdjustmentOption,
+  type ExpenseAdjustmentOptions,
+} from "@/lib/expense-adjustment-options"
 
 export interface BatchReconcileExpense {
   id: string
@@ -54,14 +58,14 @@ function parseAdjustment(value: string | undefined) {
 export function BatchReconcileModal({
   tripId,
   baseCurrency,
-  expenseAdjustmentsEnabled,
+  adjustmentOptions,
   expenses,
   onClose,
   onSaved,
 }: {
   tripId: string
   baseCurrency: string
-  expenseAdjustmentsEnabled: boolean
+  adjustmentOptions: ExpenseAdjustmentOptions
   expenses: BatchReconcileExpense[]
   onClose: () => void
   onSaved: () => Promise<void>
@@ -159,11 +163,15 @@ export function BatchReconcileModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...payloadResult.payload,
-          ...(expenseAdjustmentsEnabled ? {
-            serviceFee: parseAdjustment(serviceFees[expense.id]),
-            shopbackReward: parseAdjustment(shopbackRewards[expense.id]),
-            creditCardReward: parseAdjustment(creditCardRewards[expense.id]),
-          } : {}),
+          ...(adjustmentOptions.serviceFeeEnabled
+            ? { serviceFee: parseAdjustment(serviceFees[expense.id]) }
+            : {}),
+          ...(adjustmentOptions.shopbackRewardEnabled
+            ? { shopbackReward: parseAdjustment(shopbackRewards[expense.id]) }
+            : {}),
+          ...(adjustmentOptions.creditCardRewardEnabled
+            ? { creditCardReward: parseAdjustment(creditCardRewards[expense.id]) }
+            : {}),
         }),
       })
       if (!response.ok) {
@@ -361,7 +369,7 @@ export function BatchReconcileModal({
                             {t("expense.reconcile.batch.actualRequired")}
                           </span>
                         )}
-                        {expenseAdjustmentsEnabled && (
+                        {hasAnyExpenseAdjustmentOption(adjustmentOptions) && (
                           <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", lineHeight: 1.45 }}>
                             {t("expense.reconcile.actualCharge.adjustmentsHint")}
                           </span>
@@ -377,7 +385,7 @@ export function BatchReconcileModal({
                       </div>
                     )}
 
-                    {expenseAdjustmentsEnabled && (
+                    {hasAnyExpenseAdjustmentOption(adjustmentOptions) && (
                       <fieldset style={{
                         display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
                         gap: "0.55rem", margin: "0.7rem 0 0", padding: "0.7rem",
@@ -387,10 +395,12 @@ export function BatchReconcileModal({
                           {t("expense.adjustments.title", { currency: baseCurrency })}
                         </legend>
                         {([
-                          ["serviceFee", "expense.adjustments.serviceFee", serviceFees, setServiceFees],
-                          ["shopbackReward", "expense.adjustments.shopback", shopbackRewards, setShopbackRewards],
-                          ["creditCardReward", "expense.adjustments.creditCard", creditCardRewards, setCreditCardRewards],
-                        ] as const).map(([field, label, values, setter]) => (
+                          ["serviceFee", "expense.adjustments.serviceFee", "serviceFeeEnabled", serviceFees, setServiceFees],
+                          ["shopbackReward", "expense.adjustments.shopback", "shopbackRewardEnabled", shopbackRewards, setShopbackRewards],
+                          ["creditCardReward", "expense.adjustments.creditCard", "creditCardRewardEnabled", creditCardRewards, setCreditCardRewards],
+                        ] as const)
+                          .filter(([, , option]) => adjustmentOptions[option])
+                          .map(([field, label, , values, setter]) => (
                           <label key={field} style={{ display: "flex", flexDirection: "column", gap: "0.25rem", color: "var(--text-secondary)", fontSize: "0.72rem" }}>
                             {t(label)}
                             <input

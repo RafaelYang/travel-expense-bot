@@ -61,8 +61,12 @@ import {
   timelineItemDateKey,
   timelineItemKey,
 } from "@/lib/timeline-order"
+import {
+  hasAnyExpenseAdjustmentOption,
+  type ExpenseAdjustmentOptions,
+} from "@/lib/expense-adjustment-options"
 
-export interface TripData {
+export interface TripData extends ExpenseAdjustmentOptions {
   id: string
   name: string
   description?: string
@@ -70,7 +74,6 @@ export interface TripData {
   endDate: string
   defaultCurrency: string
   baseCurrency: string
-  expenseAdjustmentsEnabled: boolean
   countries: string[]
   budgetAmount?: number
   status: string
@@ -864,7 +867,7 @@ export default function TripDetailClient({
             currentUserId={trip.currentUserId}
             defaultCurrency={trip.defaultCurrency}
             baseCurrency={trip.baseCurrency}
-            expenseAdjustmentsEnabled={trip.expenseAdjustmentsEnabled}
+            adjustmentOptions={trip}
             countries={trip.countries}
             cashWallets={trip.cashWallets}
             onClose={() => setShowExpenseForm(false)}
@@ -1032,7 +1035,7 @@ export default function TripDetailClient({
           tripId={tripId}
           defaultCurrency={trip.defaultCurrency}
           baseCurrency={trip.baseCurrency}
-          expenseAdjustmentsEnabled={trip.expenseAdjustmentsEnabled}
+          adjustmentOptions={trip}
           countries={trip.countries}
           cashWallets={trip.cashWallets}
           initialMode={editingExpenseInitialMode}
@@ -1700,12 +1703,14 @@ function ExpenseAdjustmentFields({
   baseCurrency,
   baseAmount,
   values,
+  options,
   disabled = false,
   onChange,
 }: {
   baseCurrency: string
   baseAmount: number | null
   values: ExpenseAdjustmentValues
+  options: ExpenseAdjustmentOptions
   disabled?: boolean
   onChange: (field: keyof ExpenseAdjustmentValues, value: string) => void
 }) {
@@ -1717,11 +1722,11 @@ function ExpenseAdjustmentFields({
     ? null
     : baseAmount + serviceFee - shopbackReward - creditCardReward
 
-  const fields = [
-    ['serviceFee', 'expense.adjustments.serviceFee'],
-    ['shopbackReward', 'expense.adjustments.shopback'],
-    ['creditCardReward', 'expense.adjustments.creditCard'],
-  ] as const
+  const fields = ([
+    ['serviceFee', 'expense.adjustments.serviceFee', 'serviceFeeEnabled'],
+    ['shopbackReward', 'expense.adjustments.shopback', 'shopbackRewardEnabled'],
+    ['creditCardReward', 'expense.adjustments.creditCard', 'creditCardRewardEnabled'],
+  ] as const).filter(([, , option]) => options[option])
 
   return (
     <fieldset style={{
@@ -1767,12 +1772,12 @@ function ExpenseAdjustmentFields({
 }
 
 // === 記帳表單 ===
-function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, expenseAdjustmentsEnabled, countries, cashWallets, onClose, onSubmit }: {
+function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, adjustmentOptions, countries, cashWallets, onClose, onSubmit }: {
   tripId: string
   currentUserId: string
   defaultCurrency: string
   baseCurrency: string
-  expenseAdjustmentsEnabled: boolean
+  adjustmentOptions: ExpenseAdjustmentOptions
   countries: string[]
   cashWallets: CashWalletData[]
   onClose: () => void
@@ -1955,15 +1960,15 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, exp
         ? {
           ...form,
           amount: parseFloat(form.amount),
-          serviceFee: expenseAdjustmentsEnabled && form.paymentMethod === 'card'
-            ? parseAdjustmentInput(form.serviceFee)
-            : 0,
-          shopbackReward: expenseAdjustmentsEnabled && form.paymentMethod === 'card'
-            ? parseAdjustmentInput(form.shopbackReward)
-            : 0,
-          creditCardReward: expenseAdjustmentsEnabled && form.paymentMethod === 'card'
-            ? parseAdjustmentInput(form.creditCardReward)
-            : 0,
+          ...(form.paymentMethod === 'card' && adjustmentOptions.serviceFeeEnabled
+            ? { serviceFee: parseAdjustmentInput(form.serviceFee) }
+            : {}),
+          ...(form.paymentMethod === 'card' && adjustmentOptions.shopbackRewardEnabled
+            ? { shopbackReward: parseAdjustmentInput(form.shopbackReward) }
+            : {}),
+          ...(form.paymentMethod === 'card' && adjustmentOptions.creditCardRewardEnabled
+            ? { creditCardReward: parseAdjustmentInput(form.creditCardReward) }
+            : {}),
           date: calendarDayToLocalNoonIso(form.date),
           images,
         }
@@ -2235,7 +2240,7 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, exp
           )}
         </div>
 
-        {isExpense && expenseAdjustmentsEnabled && form.paymentMethod === 'card' && (
+        {isExpense && hasAnyExpenseAdjustmentOption(adjustmentOptions) && form.paymentMethod === 'card' && (
           <ExpenseAdjustmentFields
             baseCurrency={baseCurrency}
             baseAmount={Number(form.amount) > 0
@@ -2246,6 +2251,7 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, exp
                   : null
               : null}
             values={form}
+            options={adjustmentOptions}
             onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
           />
         )}
@@ -2547,7 +2553,7 @@ function EditExpenseModal({
   tripId,
   defaultCurrency,
   baseCurrency,
-  expenseAdjustmentsEnabled,
+  adjustmentOptions,
   countries,
   cashWallets,
   initialMode = 'view',
@@ -2559,7 +2565,7 @@ function EditExpenseModal({
   tripId: string
   defaultCurrency: string
   baseCurrency: string
-  expenseAdjustmentsEnabled: boolean
+  adjustmentOptions: ExpenseAdjustmentOptions
   countries: string[]
   cashWallets: CashWalletData[]
   initialMode?: 'view' | 'edit'
@@ -2659,11 +2665,15 @@ function EditExpenseModal({
               ? parseFloat(form.settledAmount)
               : undefined,
           reconciled: form.reconciled,
-          ...(expenseAdjustmentsEnabled ? {
-            serviceFee: form.paymentMethod === 'card' ? parseAdjustmentInput(form.serviceFee) : 0,
-            shopbackReward: form.paymentMethod === 'card' ? parseAdjustmentInput(form.shopbackReward) : 0,
-            creditCardReward: form.paymentMethod === 'card' ? parseAdjustmentInput(form.creditCardReward) : 0,
-          } : {}),
+          ...(form.paymentMethod === 'card' && adjustmentOptions.serviceFeeEnabled
+            ? { serviceFee: parseAdjustmentInput(form.serviceFee) }
+            : {}),
+          ...(form.paymentMethod === 'card' && adjustmentOptions.shopbackRewardEnabled
+            ? { shopbackReward: parseAdjustmentInput(form.shopbackReward) }
+            : {}),
+          ...(form.paymentMethod === 'card' && adjustmentOptions.creditCardRewardEnabled
+            ? { creditCardReward: parseAdjustmentInput(form.creditCardReward) }
+            : {}),
           note: form.note || null,
           images: editImages,
           date: calendarDayToLocalNoonIso(form.date),
@@ -3137,12 +3147,13 @@ function EditExpenseModal({
                 ))}
               </div>
 
-              {expenseAdjustmentsEnabled && form.paymentMethod === 'card' && (
+              {hasAnyExpenseAdjustmentOption(adjustmentOptions) && form.paymentMethod === 'card' && (
                 <div style={{ marginBottom: '0.75rem' }}>
                   <ExpenseAdjustmentFields
                     baseCurrency={baseCurrency}
                     baseAmount={adjustmentBaseAmount}
                     values={form}
+                    options={adjustmentOptions}
                     disabled={saving}
                     onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
                   />

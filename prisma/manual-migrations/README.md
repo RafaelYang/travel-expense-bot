@@ -95,3 +95,18 @@ falls back to `DATABASE_URL` without printing either value.
 
 The paired rollback drops saved fee and reward values and is destructive after
 users start using the feature.
+
+## Independent fee and reward options
+
+`20260830_expense_adjustment_options.sql` splits the combined trip setting into
+independent service-fee, ShopBack-reward, and credit-card-reward display flags.
+For trips with existing values, the backfill enables only the populated kinds.
+An enabled trip with no existing adjustment values keeps all three options so
+the previous combined setting is not silently narrowed.
+
+Before deploying application code that reads these columns, run
+`node scripts/expense-adjustment-options-migration.mjs`. After its transactional
+dry run verifies the schema and rollback, use the same command with `--apply`.
+The runner reads `DIRECT_URL` first and falls back to `DATABASE_URL` without
+printing either value. The paired rollback drops only the three new settings;
+the legacy aggregate setting remains available for an application rollback.

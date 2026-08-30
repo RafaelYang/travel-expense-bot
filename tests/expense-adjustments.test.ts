@@ -12,6 +12,7 @@ const updateRouteSource = source("../src/app/api/trips/[tripId]/expenses/[expens
 const tripClientSource = source("../src/app/trips/[tripId]/trip-detail-client.tsx")
 const newTripSource = source("../src/app/trips/new/page.tsx")
 const settingsSource = source("../src/app/trips/[tripId]/settings/page.tsx")
+const optionSelectorSource = source("../src/components/expense-adjustment-option-selector.tsx")
 const recordsPageSource = source("../src/app/trips/[tripId]/records/page.tsx")
 const recordsClientSource = source("../src/app/trips/[tripId]/records/records-client.tsx")
 const batchSource = source("../src/components/batch-reconcile-modal.tsx")
@@ -19,30 +20,39 @@ const statsModalSource = source("../src/components/trip-stats-modal.tsx")
 const statisticsSource = source("../src/lib/trip-statistics.ts")
 const i18nSource = source("../src/lib/i18n.ts")
 
-test("trip and expense schemas persist the adjustment toggle and three base-currency values", () => {
+test("trip and expense schemas persist independent adjustment options and three base-currency values", () => {
   assert.match(schemaSource, /expenseAdjustmentsEnabled Boolean @default\(false\)/u)
+  assert.match(schemaSource, /serviceFeeEnabled\s+Boolean @default\(false\)/u)
+  assert.match(schemaSource, /shopbackRewardEnabled\s+Boolean @default\(false\)/u)
+  assert.match(schemaSource, /creditCardRewardEnabled\s+Boolean @default\(false\)/u)
   assert.match(schemaSource, /serviceFee\s+Float\s+@default\(0\)/u)
   assert.match(schemaSource, /shopbackReward\s+Float\s+@default\(0\)/u)
   assert.match(schemaSource, /creditCardReward\s+Float\s+@default\(0\)/u)
 })
 
-test("expense APIs validate non-negative finite adjustments and guard the trip setting", () => {
+test("expense APIs validate non-negative finite adjustments and guard each trip setting", () => {
   for (const routeSource of [createRouteSource, updateRouteSource]) {
     for (const field of ["serviceFee", "shopbackReward", "creditCardReward"]) {
       assert.match(routeSource, new RegExp(`${field}: z\\.number\\(\\)\\.nonnegative\\(\\)\\.finite\\(\\)`))
     }
-    assert.match(routeSource, /expenseAdjustmentsEnabled/u)
+    for (const option of ["serviceFeeEnabled", "shopbackRewardEnabled", "creditCardRewardEnabled"]) {
+      assert.match(routeSource, new RegExp(option))
+    }
   }
-  assert.match(createRouteSource, /hasAdjustments && !trip\?\.expenseAdjustmentsEnabled/u)
-  assert.match(updateRouteSource, /adjustmentsChanged && !expenseAdjustmentsEnabled/u)
+  assert.match(createRouteSource, /data\.serviceFee > 0 && !trip\?\.serviceFeeEnabled/u)
+  assert.match(updateRouteSource, /data\.serviceFee !== undefined && !adjustmentOptions\?\.serviceFeeEnabled/u)
 })
 
-test("new and existing trips let users choose whether adjustment inputs are shown", () => {
-  assert.match(newTripSource, /expenseAdjustmentsEnabled: false/u)
-  assert.match(newTripSource, /checked=\{form\.expenseAdjustmentsEnabled\}/u)
-  assert.match(settingsSource, /checked=\{editForm\.expenseAdjustmentsEnabled\}/u)
-  assert.match(settingsSource, /expenseAdjustmentsEnabled: Boolean\(data\.expenseAdjustmentsEnabled\)/u)
-  assert.match(tripClientSource, /expenseAdjustmentsEnabled && form\.paymentMethod === 'card'/u)
+test("new and existing trips show three separate option cards without hint copy", () => {
+  for (const option of ["serviceFeeEnabled", "shopbackRewardEnabled", "creditCardRewardEnabled"]) {
+    assert.match(newTripSource, new RegExp(`${option}: false`))
+    assert.match(settingsSource, new RegExp(`${option}: false`))
+    assert.match(optionSelectorSource, new RegExp(`\\[\"${option}\"`))
+  }
+  assert.match(newTripSource, /<ExpenseAdjustmentOptionSelector/u)
+  assert.match(settingsSource, /<ExpenseAdjustmentOptionSelector/u)
+  assert.doesNotMatch(optionSelectorSource, /hint|<small|<p/u)
+  assert.match(tripClientSource, /hasAnyExpenseAdjustmentOption\(adjustmentOptions\)/u)
 })
 
 test("create, edit, records, and batch reconciliation all expose the three numeric fields", () => {

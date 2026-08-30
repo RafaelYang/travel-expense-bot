@@ -23,7 +23,9 @@ export default async function TripRecordsPage({
       id: true,
       name: true,
       baseCurrency: true,
-      expenseAdjustmentsEnabled: true,
+      serviceFeeEnabled: true,
+      shopbackRewardEnabled: true,
+      creditCardRewardEnabled: true,
       members: {
         where: { userId: session.user.id },
         select: { role: true },
@@ -81,7 +83,9 @@ export default async function TripRecordsPage({
     id: trip.id,
     name: trip.name,
     baseCurrency: trip.baseCurrency,
-    expenseAdjustmentsEnabled: trip.expenseAdjustmentsEnabled,
+    serviceFeeEnabled: trip.serviceFeeEnabled,
+    shopbackRewardEnabled: trip.shopbackRewardEnabled,
+    creditCardRewardEnabled: trip.creditCardRewardEnabled,
     userRole: trip.members[0].role,
     expenses: trip.expenses.map((expense) => ({
       ...expense,

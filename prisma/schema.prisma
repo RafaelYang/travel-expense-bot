@@ -81,7 +81,10 @@ model Trip {
   countries       String[] @default([]) // 目的地國家代碼（ISO 3166-1 alpha-2）
   status          String   @default("planning") // planning, active, completed
   coverImage      String? // 封面圖片 URL
-  expenseAdjustmentsEnabled Boolean @default(false) // 是否在支出表單顯示服務費與回饋欄位
+  expenseAdjustmentsEnabled Boolean @default(false) // 舊版相容：任一服務費／回饋欄位已啟用
+  serviceFeeEnabled         Boolean @default(false) // 是否在支出表單顯示服務費
+  shopbackRewardEnabled     Boolean @default(false) // 是否在支出表單顯示 ShopBack 回饋
+  creditCardRewardEnabled   Boolean @default(false) // 是否在支出表單顯示信用卡回饋
   timelineOrder   Json     @default("{}") // 每日跨類型交易的手動顯示順序
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

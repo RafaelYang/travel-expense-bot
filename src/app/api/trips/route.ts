@@ -16,7 +16,10 @@ const createTripSchema = z.object({
   endDate: z.string(),
   countries: z.array(z.string()).default([]),
   baseCurrency: z.string().default("TWD"),
-  expenseAdjustmentsEnabled: z.boolean().default(false),
+  expenseAdjustmentsEnabled: z.boolean().optional(),
+  serviceFeeEnabled: z.boolean().optional(),
+  shopbackRewardEnabled: z.boolean().optional(),
+  creditCardRewardEnabled: z.boolean().optional(),
 })
 
 // GET — 取得我的行程列表
@@ -44,6 +47,15 @@ export async function POST(req: NextRequest) {
     const countryPlan = parseTripCountryPlan(data.countries)
     const tripCurrencies = getCurrenciesFromCountries(countryPlan.list)
     const defaultCurrency = tripCurrencies[0] || data.baseCurrency
+    const serviceFeeEnabled = data.serviceFeeEnabled
+      ?? data.expenseAdjustmentsEnabled
+      ?? false
+    const shopbackRewardEnabled = data.shopbackRewardEnabled
+      ?? data.expenseAdjustmentsEnabled
+      ?? false
+    const creditCardRewardEnabled = data.creditCardRewardEnabled
+      ?? data.expenseAdjustmentsEnabled
+      ?? false
 
     // 計算行程天數，並預設初始化每一天的目的地為第一個國家
     const start = new Date(data.startDate)
@@ -73,7 +85,11 @@ export async function POST(req: NextRequest) {
         countries: countriesPayload,
         defaultCurrency,
         baseCurrency: data.baseCurrency,
-        expenseAdjustmentsEnabled: data.expenseAdjustmentsEnabled,
+        expenseAdjustmentsEnabled:
+          serviceFeeEnabled || shopbackRewardEnabled || creditCardRewardEnabled,
+        serviceFeeEnabled,
+        shopbackRewardEnabled,
+        creditCardRewardEnabled,
         members: {
           create: {
             userId: session.user.id,

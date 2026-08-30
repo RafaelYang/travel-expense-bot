@@ -148,6 +148,64 @@ export async function PUT(
     countriesPayload = [countriesPayload]
   }
 
+  const adjustmentOptionFields = [
+    "serviceFeeEnabled",
+    "shopbackRewardEnabled",
+    "creditCardRewardEnabled",
+  ] as const
+  const hasLegacyAdjustmentOption = Object.hasOwn(body, "expenseAdjustmentsEnabled")
+  const hasAdjustmentOptionUpdate = hasLegacyAdjustmentOption
+    || adjustmentOptionFields.some((field) => Object.hasOwn(body, field))
+
+  if (hasLegacyAdjustmentOption && typeof body.expenseAdjustmentsEnabled !== "boolean") {
+    return NextResponse.json({ error: "服務費與回饋設定格式錯誤" }, { status: 400 })
+  }
+  for (const field of adjustmentOptionFields) {
+    if (Object.hasOwn(body, field) && typeof body[field] !== "boolean") {
+      return NextResponse.json({ error: "服務費與回饋設定格式錯誤" }, { status: 400 })
+    }
+  }
+
+  let adjustmentOptionUpdate: {
+    expenseAdjustmentsEnabled?: boolean
+    serviceFeeEnabled?: boolean
+    shopbackRewardEnabled?: boolean
+    creditCardRewardEnabled?: boolean
+  } = {}
+  if (hasAdjustmentOptionUpdate) {
+    const current = await prisma.trip.findUnique({
+      where: { id: tripId },
+      select: {
+        serviceFeeEnabled: true,
+        shopbackRewardEnabled: true,
+        creditCardRewardEnabled: true,
+      },
+    })
+    if (!current) {
+      return NextResponse.json({ error: "找不到行程" }, { status: 404 })
+    }
+
+    const legacyValue = hasLegacyAdjustmentOption
+      ? body.expenseAdjustmentsEnabled as boolean
+      : undefined
+    const serviceFeeEnabled = body.serviceFeeEnabled
+      ?? legacyValue
+      ?? current.serviceFeeEnabled
+    const shopbackRewardEnabled = body.shopbackRewardEnabled
+      ?? legacyValue
+      ?? current.shopbackRewardEnabled
+    const creditCardRewardEnabled = body.creditCardRewardEnabled
+      ?? legacyValue
+      ?? current.creditCardRewardEnabled
+    adjustmentOptionUpdate = {
+      expenseAdjustmentsEnabled:
+        serviceFeeEnabled || shopbackRewardEnabled || creditCardRewardEnabled,
+      serviceFeeEnabled,
+      shopbackRewardEnabled,
+      creditCardRewardEnabled,
+    }
+  }
+
   const trip = await prisma.trip.update({
     where: { id: tripId },
     data: {
@@ -157,10 +215,7 @@ export async function PUT(
       endDate: body.endDate ? new Date(body.endDate) : undefined,
       defaultCurrency: body.defaultCurrency,
       baseCurrency: body.baseCurrency,
-      expenseAdjustmentsEnabled:
-        typeof body.expenseAdjustmentsEnabled === "boolean"
-          ? body.expenseAdjustmentsEnabled
-          : undefined,
+      ...adjustmentOptionUpdate,
       budgetAmount: body.budgetAmount,
       status: body.status,
       countries: countriesPayload,

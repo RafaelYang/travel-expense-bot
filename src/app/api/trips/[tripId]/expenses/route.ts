@@ -101,18 +101,30 @@ export async function POST(
     // 查詢行程的基準幣種
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
-      select: { baseCurrency: true, expenseAdjustmentsEnabled: true },
+      select: {
+        baseCurrency: true,
+        serviceFeeEnabled: true,
+        shopbackRewardEnabled: true,
+        creditCardRewardEnabled: true,
+      },
     })
     const baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
-    const hasAdjustments = data.serviceFee > 0
-      || data.shopbackReward > 0
-      || data.creditCardReward > 0
-    if (hasAdjustments && !trip?.expenseAdjustmentsEnabled) {
+    const disabledAdjustment = data.serviceFee > 0 && !trip?.serviceFeeEnabled
+      ? "服務費"
+      : data.shopbackReward > 0 && !trip?.shopbackRewardEnabled
+        ? "ShopBack 回饋"
+        : data.creditCardReward > 0 && !trip?.creditCardRewardEnabled
+          ? "信用卡回饋"
+          : null
+    if (disabledAdjustment) {
       return NextResponse.json(
-        { error: "請先在行程設定啟用服務費與回饋" },
+        { error: `請先在行程設定啟用${disabledAdjustment}欄位` },
         { status: 400 },
       )
     }
+    const hasAdjustments = data.serviceFee > 0
+      || data.shopbackReward > 0
+      || data.creditCardReward > 0
     if (hasAdjustments && data.paymentMethod !== "card") {
       return NextResponse.json(
         { error: "服務費與回饋只能套用在刷卡／額外支出" },

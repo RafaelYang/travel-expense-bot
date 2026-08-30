@@ -11,7 +11,9 @@ const savedDraft: TripSettingsDraft = {
   startDate: "2026-07-17",
   endDate: "2026-07-28",
   baseCurrency: "TWD",
-  expenseAdjustmentsEnabled: false,
+  serviceFeeEnabled: false,
+  shopbackRewardEnabled: false,
+  creditCardRewardEnabled: false,
   coverImage: "https://example.com/cover.jpg",
   countriesList: ["AT", "CZ", "HU"],
   dailyCountries: ["AT", "AT", "CZ", "HU"],
@@ -37,7 +39,9 @@ test("every scalar trip setting participates in dirty detection", () => {
     ["startDate", "2026-07-18"],
     ["endDate", "2026-07-29"],
     ["baseCurrency", "EUR"],
-    ["expenseAdjustmentsEnabled", true],
+    ["serviceFeeEnabled", true],
+    ["shopbackRewardEnabled", true],
+    ["creditCardRewardEnabled", true],
     ["coverImage", "https://example.com/new-cover.jpg"],
   ]
 

@@ -4,7 +4,9 @@ export interface TripSettingsDraft {
   startDate: string
   endDate: string
   baseCurrency: string
-  expenseAdjustmentsEnabled: boolean
+  serviceFeeEnabled: boolean
+  shopbackRewardEnabled: boolean
+  creditCardRewardEnabled: boolean
   coverImage: string
   countriesList: readonly string[]
   dailyCountries: readonly string[]
@@ -33,7 +35,9 @@ export function isTripSettingsDraftDirty(
     || saved.startDate !== current.startDate
     || saved.endDate !== current.endDate
     || saved.baseCurrency !== current.baseCurrency
-    || saved.expenseAdjustmentsEnabled !== current.expenseAdjustmentsEnabled
+    || saved.serviceFeeEnabled !== current.serviceFeeEnabled
+    || saved.shopbackRewardEnabled !== current.shopbackRewardEnabled
+    || saved.creditCardRewardEnabled !== current.creditCardRewardEnabled
     || saved.coverImage !== current.coverImage
     || !equalStringArrays(saved.countriesList, current.countriesList)
     || !equalStringArrays(saved.dailyCountries, current.dailyCountries)

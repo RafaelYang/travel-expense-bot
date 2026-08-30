@@ -92,21 +92,47 @@ export async function PATCH(
     const needsBaseCurrency =
       estimateFieldsChanged || settledAmount !== undefined || reconciled === true || adjustmentsChanged
     let baseCurrency: string | undefined
-    let expenseAdjustmentsEnabled: boolean | undefined
+    let adjustmentOptions: {
+      serviceFeeEnabled: boolean
+      shopbackRewardEnabled: boolean
+      creditCardRewardEnabled: boolean
+    } | undefined
 
     if (needsBaseCurrency) {
       // 查詢行程基準幣種
       const trip = await prisma.trip.findUnique({
         where: { id: tripId },
-        select: { baseCurrency: true, expenseAdjustmentsEnabled: true },
+        select: {
+          baseCurrency: true,
+          serviceFeeEnabled: true,
+          shopbackRewardEnabled: true,
+          creditCardRewardEnabled: true,
+        },
       })
       baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
-      expenseAdjustmentsEnabled = trip?.expenseAdjustmentsEnabled ?? false
+      adjustmentOptions = trip
+        ? {
+          serviceFeeEnabled: trip.serviceFeeEnabled,
+          shopbackRewardEnabled: trip.shopbackRewardEnabled,
+          creditCardRewardEnabled: trip.creditCardRewardEnabled,
+        }
+        : {
+          serviceFeeEnabled: false,
+          shopbackRewardEnabled: false,
+          creditCardRewardEnabled: false,
+        }
     }
 
-    if (adjustmentsChanged && !expenseAdjustmentsEnabled) {
+    const disabledAdjustment = data.serviceFee !== undefined && !adjustmentOptions?.serviceFeeEnabled
+      ? "服務費"
+      : data.shopbackReward !== undefined && !adjustmentOptions?.shopbackRewardEnabled
+        ? "ShopBack 回饋"
+        : data.creditCardReward !== undefined && !adjustmentOptions?.creditCardRewardEnabled
+          ? "信用卡回饋"
+          : null
+    if (disabledAdjustment) {
       return NextResponse.json(
-        { error: "請先在行程設定啟用服務費與回饋" },
+        { error: `請先在行程設定啟用${disabledAdjustment}欄位` },
         { status: 400 },
       )
     }

@@ -15,6 +15,7 @@ import Link from "next/link"
 import { COUNTRIES, type Country } from "@/lib/countries"
 import { CURRENCIES } from "@/lib/utils"
 import { ALL_TRIPS_PATH } from "@/lib/active-trip"
+import { ExpenseAdjustmentOptionSelector } from "@/components/expense-adjustment-option-selector"
 
 const CURRENCY_CHANGE_EVENT = "travel-expense-currency-change"
 
@@ -67,7 +68,9 @@ export default function NewTripPage() {
     endDate: "",
     countries: [] as string[],
     baseCurrency: "",
-    expenseAdjustmentsEnabled: false,
+    serviceFeeEnabled: false,
+    shopbackRewardEnabled: false,
+    creditCardRewardEnabled: false,
   })
 
   // 搜尋過濾國家
@@ -394,34 +397,14 @@ export default function NewTripPage() {
             </div>
 
             {/* 服務費與回饋設定 */}
-            <label style={{
-              display: 'flex', alignItems: 'flex-start', gap: '0.7rem',
-              padding: '0.9rem', borderRadius: '12px', cursor: 'pointer',
-              border: form.expenseAdjustmentsEnabled
-                ? '1px solid rgba(14, 165, 233, 0.45)'
-                : '1px solid var(--border-color)',
-              background: form.expenseAdjustmentsEnabled
-                ? 'rgba(14, 165, 233, 0.08)'
-                : 'var(--bg-card-hover)',
-            }}>
-              <input
-                type="checkbox"
-                checked={form.expenseAdjustmentsEnabled}
-                onChange={(event) => setForm({
-                  ...form,
-                  expenseAdjustmentsEnabled: event.target.checked,
-                })}
-                style={{ width: 20, height: 20, flexShrink: 0, accentColor: 'var(--color-primary)' }}
-              />
-              <span>
-                <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
-                  {t('newTrip.adjustments')}
-                </strong>
-                <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5 }}>
-                  {t('newTrip.adjustments.hint')}
-                </span>
-              </span>
-            </label>
+            <ExpenseAdjustmentOptionSelector
+              value={form}
+              disabled={loading}
+              onChange={(field, enabled) => setForm((current) => ({
+                ...current,
+                [field]: enabled,
+              }))}
+            />
 
             {/* 每日目的地設定 */}
             {dailyCountries.length > 0 && form.countries.length > 0 && (

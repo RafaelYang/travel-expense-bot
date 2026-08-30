@@ -21,6 +21,7 @@ import { useLanguage } from "@/components/language-provider"
 import { Navbar } from "@/components/navbar"
 import { getExpenseBaseAmount } from "@/lib/money"
 import { getCurrencySymbol } from "@/lib/utils"
+import type { ExpenseAdjustmentOptions } from "@/lib/expense-adjustment-options"
 
 import styles from "./records-client.module.css"
 
@@ -28,11 +29,10 @@ const BatchReconcileModal = dynamic(
   () => import("@/components/batch-reconcile-modal").then((module) => module.BatchReconcileModal),
 )
 
-export interface RecordsTripData {
+export interface RecordsTripData extends ExpenseAdjustmentOptions {
   id: string
   name: string
   baseCurrency: string
-  expenseAdjustmentsEnabled: boolean
   userRole: string
   expenses: {
     id: string
@@ -247,7 +247,7 @@ export default function RecordsClient({ initialTrip }: { initialTrip: RecordsTri
         <BatchReconcileModal
           tripId={initialTrip.id}
           baseCurrency={initialTrip.baseCurrency}
-          expenseAdjustmentsEnabled={initialTrip.expenseAdjustmentsEnabled}
+          adjustmentOptions={initialTrip}
           expenses={pendingCardExpenses}
           onClose={() => setBatchOpen(false)}
           onSaved={async () => { router.refresh() }}
