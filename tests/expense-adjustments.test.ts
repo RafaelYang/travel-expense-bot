@@ -74,7 +74,7 @@ test("desktop expense detail and editing share the wide no-scroll layout without
   assert.match(tripClientSource, /expense-editor-content/u)
   assert.match(
     globalsSource,
-    /@media \(min-width: 768px\)[\s\S]*\.trip-modal\.expense-detail-modal \{\s*max-width: 980px !important;[\s\S]*max-height: calc\(100dvh - 6rem\) !important;/u,
+    /@media \(min-width: 768px\)[\s\S]*\.trip-modal\.expense-detail-modal \{\s*max-width: 980px !important;[\s\S]*max-height: calc\(100dvh - 5rem\) !important;/u,
   )
   assert.match(
     globalsSource,

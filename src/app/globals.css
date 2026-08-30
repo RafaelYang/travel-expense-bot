@@ -2153,7 +2153,7 @@ a:hover .trip-card-bg {
   /* 花費詳情與編輯在桌機共用寬版，將垂直內容改排為左右欄。 */
   .trip-modal.expense-detail-modal {
     max-width: 980px !important;
-    max-height: calc(100dvh - 6rem) !important;
+    max-height: calc(100dvh - 5rem) !important;
     padding: 1.5rem !important;
   }
 
@@ -2202,15 +2202,16 @@ a:hover .trip-card-bg {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      "categories payment"
-      "basics currencies"
+      "categories categories"
+      "payment basics"
+      "currencies currencies"
       "adjustments reconciliation"
       "note date"
-      "images images"
-      "error error"
-      "actions actions";
-    gap: 0.75rem 1rem;
+      "images actions"
+      "error error";
+    gap: 0.5rem 1rem;
     align-content: start;
+    align-items: start;
     overflow-y: auto !important;
     overflow-x: hidden;
     padding-right: 0 !important;
@@ -2230,7 +2231,10 @@ a:hover .trip-card-bg {
   .expense-editor-date { grid-area: date; }
   .expense-editor-images { grid-area: images; }
   .expense-editor-error { grid-area: error; }
-  .expense-editor-actions { grid-area: actions; }
+  .expense-editor-actions {
+    grid-area: actions;
+    align-self: end;
+  }
 
   .expense-editor-content > .expense-editor-categories,
   .expense-editor-content > .expense-editor-payment,
