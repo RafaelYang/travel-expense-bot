@@ -30,6 +30,7 @@ interface TripSettings {
   endDate: string
   defaultCurrency: string
   baseCurrency: string
+  expenseAdjustmentsEnabled: boolean
   budgetAmount?: number
   status: string
   coverImage?: string | null
@@ -113,6 +114,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
     startDate: "",
     endDate: "",
     baseCurrency: "",
+    expenseAdjustmentsEnabled: false,
     coverImage: "",
   })
 
@@ -204,6 +206,7 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
         startDate: data.startDate.split("T")[0],
         endDate: data.endDate.split("T")[0],
         baseCurrency: data.baseCurrency,
+        expenseAdjustmentsEnabled: Boolean(data.expenseAdjustmentsEnabled),
         coverImage: data.coverImage || "",
       }
       const countryPlan = parseTripCountryPlan(data.countries)
@@ -448,6 +451,36 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
                   onBlur={(e) => { if (!e.target.value) e.target.type = "text" }} />
               </div>
             </div>
+
+            {/* 服務費與回饋設定 */}
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: '0.7rem',
+              padding: '0.9rem', borderRadius: '12px', cursor: 'pointer',
+              border: editForm.expenseAdjustmentsEnabled
+                ? '1px solid rgba(14, 165, 233, 0.45)'
+                : '1px solid var(--border-color)',
+              background: editForm.expenseAdjustmentsEnabled
+                ? 'rgba(14, 165, 233, 0.08)'
+                : 'var(--bg-card-hover)',
+            }}>
+              <input
+                type="checkbox"
+                checked={editForm.expenseAdjustmentsEnabled}
+                onChange={(event) => setEditForm({
+                  ...editForm,
+                  expenseAdjustmentsEnabled: event.target.checked,
+                })}
+                style={{ width: 20, height: 20, flexShrink: 0, accentColor: 'var(--color-primary)' }}
+              />
+              <span>
+                <strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                  {t('settings.adjustments')}
+                </strong>
+                <span style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5 }}>
+                  {t('settings.adjustments.hint')}
+                </span>
+              </span>
+            </label>
 
             {/* 每日目的地設定 */}
             {dailyCountries.length > 0 && (

@@ -81,6 +81,7 @@ model Trip {
   countries       String[] @default([]) // 目的地國家代碼（ISO 3166-1 alpha-2）
   status          String   @default("planning") // planning, active, completed
   coverImage      String? // 封面圖片 URL
+  expenseAdjustmentsEnabled Boolean @default(false) // 是否在支出表單顯示服務費與回饋欄位
   timelineOrder   Json     @default("{}") // 每日跨類型交易的手動顯示順序
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -133,6 +134,9 @@ model Expense {
   paymentMethod   String    @default("card") // card, cash
   settledAmount   Float? // 信用卡帳單的最終基準幣扣款（保留原 convertedAmount 估算）
   reconciledAt    DateTime? // 已與真實帳單／扣款記錄核對的時間
+  serviceFee      Float     @default(0) // 基準幣別的國外交易服務費
+  shopbackReward  Float     @default(0) // 基準幣別的 ShopBack 回饋
+  creditCardReward Float    @default(0) // 基準幣別的信用卡回饋
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

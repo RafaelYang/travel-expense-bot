@@ -20,6 +20,9 @@ const expenseSchema = z.object({
   currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()),
   date: z.string().datetime().optional(),
   note: z.string().max(1_000).optional(),
+  serviceFee: z.number().nonnegative().finite().default(0),
+  shopbackReward: z.number().nonnegative().finite().default(0),
+  creditCardReward: z.number().nonnegative().finite().default(0),
   images: z.array(imageDataUrlSchema).max(3).default([]),
   paymentMethod: z.enum(["card", "cash"]).default("card"),
 })
@@ -98,9 +101,24 @@ export async function POST(
     // 查詢行程的基準幣種
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
-      select: { baseCurrency: true },
+      select: { baseCurrency: true, expenseAdjustmentsEnabled: true },
     })
     const baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
+    const hasAdjustments = data.serviceFee > 0
+      || data.shopbackReward > 0
+      || data.creditCardReward > 0
+    if (hasAdjustments && !trip?.expenseAdjustmentsEnabled) {
+      return NextResponse.json(
+        { error: "請先在行程設定啟用服務費與回饋" },
+        { status: 400 },
+      )
+    }
+    if (hasAdjustments && data.paymentMethod !== "card") {
+      return NextResponse.json(
+        { error: "服務費與回饋只能套用在刷卡／額外支出" },
+        { status: 400 },
+      )
+    }
 
     // 自動查詢即時匯率並換算
     let convertedAmount: number | null
@@ -156,6 +174,9 @@ export async function POST(
           exchangeRate,
           date: data.date ? new Date(data.date) : new Date(),
           note: data.note,
+          serviceFee: data.serviceFee,
+          shopbackReward: data.shopbackReward,
+          creditCardReward: data.creditCardReward,
           images: data.images,
           source: "web",
           paymentMethod: data.paymentMethod,

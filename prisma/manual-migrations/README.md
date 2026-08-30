@@ -78,3 +78,20 @@ verification passes. The runner reads `DIRECT_URL` first and falls back to
 `20260720_timeline_order_rollback.sql` drops independent income dates and saved
 manual ordering. It is destructive after the new application starts writing
 either field and must not be used once that data needs to be retained.
+
+## Expense fees and rewards
+
+`20260830_expense_adjustments.sql` is an expand-only change that adds a
+trip-level display toggle plus non-negative base-currency fields for service
+fees, ShopBack rewards, and credit-card rewards. Existing trips default to the
+fields being hidden, and existing expenses default all three values to zero.
+
+Before deploying application code that reads these columns, back up the target
+database and run `node scripts/expense-adjustments-migration.mjs`. After the
+transactional dry run reports a verified rollback, run
+`node scripts/expense-adjustments-migration.mjs --apply` and confirm the
+post-migration verification passes. The runner reads `DIRECT_URL` first and
+falls back to `DATABASE_URL` without printing either value.
+
+The paired rollback drops saved fee and reward values and is destructive after
+users start using the feature.

@@ -56,6 +56,47 @@ test("cash expenses never use a stored card settlement", () => {
   assert.deepEqual(result, { total: 3_100, missingConversionCount: 0 })
 })
 
+test("service fees increase spending while ShopBack and card rewards reduce it", () => {
+  const result = summarizeExpenses([{
+    amount: 1_000,
+    currency: "TWD",
+    serviceFee: 15,
+    shopbackReward: 30,
+    creditCardReward: 20,
+    paymentMethod: "card",
+  }], "TWD")
+
+  assert.deepEqual(result, { total: 965, missingConversionCount: 0 })
+})
+
+test("expense adjustments apply after a reconciled foreign-card charge", () => {
+  const result = summarizeExpenses([{
+    amount: 100,
+    currency: "USD",
+    convertedAmount: 3_100,
+    settledAmount: 3_180,
+    reconciledAt: "2026-07-16T00:00:00.000Z",
+    paymentMethod: "card",
+    serviceFee: 48,
+    shopbackReward: 60,
+    creditCardReward: 32,
+  }], "TWD")
+
+  assert.deepEqual(result, { total: 3_136, missingConversionCount: 0 })
+})
+
+test("invalid legacy adjustment values never corrupt totals", () => {
+  const result = summarizeExpenses([{
+    amount: 500,
+    currency: "TWD",
+    serviceFee: Number.NaN,
+    shopbackReward: -20,
+    creditCardReward: Number.POSITIVE_INFINITY,
+  }], "TWD")
+
+  assert.deepEqual(result, { total: 500, missingConversionCount: 0 })
+})
+
 test("deposit totals only include values already denominated in the base currency", () => {
   const result = summarizeDeposits([
     { amount: 500, currency: "TWD" },

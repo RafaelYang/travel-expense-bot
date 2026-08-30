@@ -70,6 +70,7 @@ export interface TripData {
   endDate: string
   defaultCurrency: string
   baseCurrency: string
+  expenseAdjustmentsEnabled: boolean
   countries: string[]
   budgetAmount?: number
   status: string
@@ -96,6 +97,9 @@ export interface TripData {
     convertedAmount?: number
     exchangeRate?: number
     settledAmount?: number
+    serviceFee: number
+    shopbackReward: number
+    creditCardReward: number
     date: string
     createdAt: string
     note?: string
@@ -509,6 +513,9 @@ export default function TripDetailClient({
     convertedAmount: e.convertedAmount,
     exchangeRate: e.exchangeRate,
     settledAmount: e.settledAmount,
+    serviceFee: e.serviceFee,
+    shopbackReward: e.shopbackReward,
+    creditCardReward: e.creditCardReward,
     date: e.date,
     note: e.note,
     images: e.images,
@@ -857,6 +864,7 @@ export default function TripDetailClient({
             currentUserId={trip.currentUserId}
             defaultCurrency={trip.defaultCurrency}
             baseCurrency={trip.baseCurrency}
+            expenseAdjustmentsEnabled={trip.expenseAdjustmentsEnabled}
             countries={trip.countries}
             cashWallets={trip.cashWallets}
             onClose={() => setShowExpenseForm(false)}
@@ -1024,6 +1032,7 @@ export default function TripDetailClient({
           tripId={tripId}
           defaultCurrency={trip.defaultCurrency}
           baseCurrency={trip.baseCurrency}
+          expenseAdjustmentsEnabled={trip.expenseAdjustmentsEnabled}
           countries={trip.countries}
           cashWallets={trip.cashWallets}
           initialMode={editingExpenseInitialMode}
@@ -1598,9 +1607,10 @@ function ExpenseRow({ expense, currency, onEdit, sortableProps }: {
 
   // 使用實際幣種而非行程預設幣種
   const displayCurrency = expense.currency || currency
-  const finalBaseAmount = !isIncome && expense.paymentMethod === 'card' && expense.reconciledAt
-    ? expense.settledAmount
-    : undefined
+  const finalBaseAmount = isIncome ? null : getExpenseBaseAmount(expense, currency)
+  const hasAdjustments = !isIncome && (
+    expense.serviceFee > 0 || expense.shopbackReward > 0 || expense.creditCardReward > 0
+  )
   const {
     ref: sortableRef,
     style: sortableStyle,
@@ -1663,10 +1673,10 @@ function ExpenseRow({ expense, currency, onEdit, sortableProps }: {
           }}>
             {isIncome ? '+' : ''}{getCurrencySymbol(displayCurrency)}{expense.amount.toLocaleString()}
           </span>
-          {(finalBaseAmount || expense.convertedAmount) && expense.currency !== currency && (
+          {finalBaseAmount !== null && (expense.currency !== currency || hasAdjustments) && (
             <div className="transaction-list-secondary">
-              {finalBaseAmount ? '=' : '≈'} {getCurrencySymbol(currency)}
-              {(finalBaseAmount || expense.convertedAmount || 0).toLocaleString()}
+              = {getCurrencySymbol(currency)}
+              {finalBaseAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </div>
           )}
         </div>
@@ -1675,12 +1685,94 @@ function ExpenseRow({ expense, currency, onEdit, sortableProps }: {
   )
 }
 
+type ExpenseAdjustmentValues = {
+  serviceFee: string
+  shopbackReward: string
+  creditCardReward: string
+}
+
+function parseAdjustmentInput(value: string) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
+function ExpenseAdjustmentFields({
+  baseCurrency,
+  baseAmount,
+  values,
+  disabled = false,
+  onChange,
+}: {
+  baseCurrency: string
+  baseAmount: number | null
+  values: ExpenseAdjustmentValues
+  disabled?: boolean
+  onChange: (field: keyof ExpenseAdjustmentValues, value: string) => void
+}) {
+  const { t } = useLanguage()
+  const serviceFee = parseAdjustmentInput(values.serviceFee)
+  const shopbackReward = parseAdjustmentInput(values.shopbackReward)
+  const creditCardReward = parseAdjustmentInput(values.creditCardReward)
+  const netAmount = baseAmount === null
+    ? null
+    : baseAmount + serviceFee - shopbackReward - creditCardReward
+
+  const fields = [
+    ['serviceFee', 'expense.adjustments.serviceFee'],
+    ['shopbackReward', 'expense.adjustments.shopback'],
+    ['creditCardReward', 'expense.adjustments.creditCard'],
+  ] as const
+
+  return (
+    <fieldset style={{
+      margin: 0, padding: '0.85rem', borderRadius: '12px',
+      border: '1px solid rgba(14, 165, 233, 0.3)',
+      background: 'rgba(14, 165, 233, 0.06)',
+    }}>
+      <legend style={{ padding: '0 0.3rem', color: 'var(--text-primary)', fontSize: '0.82rem', fontWeight: 800 }}>
+        {t('expense.adjustments.title', { currency: baseCurrency })}
+      </legend>
+      <p style={{ margin: '0 0 0.7rem', color: 'var(--text-muted)', fontSize: '0.72rem', lineHeight: 1.5 }}>
+        {t('expense.adjustments.hint')}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem' }}>
+        {fields.map(([field, label]) => (
+          <label key={field} style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+            {t(label)}
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
+              className="input-field"
+              value={values[field]}
+              disabled={disabled}
+              onChange={(event) => onChange(field, event.target.value)}
+              placeholder="0"
+              style={{ textAlign: 'right', fontWeight: 700 }}
+            />
+          </label>
+        ))}
+      </div>
+      {netAmount !== null && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', marginTop: '0.7rem', paddingTop: '0.65rem', borderTop: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
+          <span style={{ color: 'var(--text-secondary)' }}>{t('expense.adjustments.net')}</span>
+          <strong style={{ color: 'var(--color-primary-text)' }}>
+            {getCurrencySymbol(baseCurrency)}{netAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </strong>
+        </div>
+      )}
+    </fieldset>
+  )
+}
+
 // === 記帳表單 ===
-function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, countries, cashWallets, onClose, onSubmit }: {
+function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, expenseAdjustmentsEnabled, countries, cashWallets, onClose, onSubmit }: {
   tripId: string
   currentUserId: string
   defaultCurrency: string
   baseCurrency: string
+  expenseAdjustmentsEnabled: boolean
   countries: string[]
   cashWallets: CashWalletData[]
   onClose: () => void
@@ -1707,6 +1799,9 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, cou
     amount: '',
     currency: tripCurrencies[0] || defaultCurrency,
     paymentMethod: 'card' as 'card' | 'cash',
+    serviceFee: '',
+    shopbackReward: '',
+    creditCardReward: '',
     note: '',
     date: initialRecentEntry.day,
   }))
@@ -1857,7 +1952,21 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, cou
         ? `/api/trips/${tripId}/expenses`
         : `/api/trips/${tripId}/deposits`
       const body = mode === 'expense'
-        ? { ...form, amount: parseFloat(form.amount), date: calendarDayToLocalNoonIso(form.date), images }
+        ? {
+          ...form,
+          amount: parseFloat(form.amount),
+          serviceFee: expenseAdjustmentsEnabled && form.paymentMethod === 'card'
+            ? parseAdjustmentInput(form.serviceFee)
+            : 0,
+          shopbackReward: expenseAdjustmentsEnabled && form.paymentMethod === 'card'
+            ? parseAdjustmentInput(form.shopbackReward)
+            : 0,
+          creditCardReward: expenseAdjustmentsEnabled && form.paymentMethod === 'card'
+            ? parseAdjustmentInput(form.creditCardReward)
+            : 0,
+          date: calendarDayToLocalNoonIso(form.date),
+          images,
+        }
         : { amount: parseFloat(form.amount), currency: form.currency, note: form.item, date: calendarDayToLocalNoonIso(form.date) }
       const res = await fetch(url, {
         method: 'POST',
@@ -1883,6 +1992,10 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, cou
             currency: data.currency,
             convertedAmount: data.convertedAmount ?? undefined,
             exchangeRate: data.exchangeRate ?? undefined,
+            settledAmount: data.settledAmount ?? undefined,
+            serviceFee: data.serviceFee ?? 0,
+            shopbackReward: data.shopbackReward ?? 0,
+            creditCardReward: data.creditCardReward ?? 0,
             date: data.date,
             note: data.note ?? undefined,
             images: Array.isArray(data.images) ? data.images : [],
@@ -2005,7 +2118,14 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, cou
               </button>
               <button type="button" disabled={spendableCashWallets.length === 0} onClick={() => {
                 const wallet = spendableCashWallets[0]
-                if (wallet) setForm(current => ({ ...current, paymentMethod: 'cash', currency: wallet.currency }))
+                if (wallet) setForm(current => ({
+                  ...current,
+                  paymentMethod: 'cash',
+                  currency: wallet.currency,
+                  serviceFee: '',
+                  shopbackReward: '',
+                  creditCardReward: '',
+                }))
               }}
                 aria-pressed={form.paymentMethod === 'cash'}
                 className="trip-choice-button trip-choice-button--segment trip-choice-button--cash"
@@ -2114,6 +2234,21 @@ function ExpenseForm({ tripId, currentUserId, defaultCurrency, baseCurrency, cou
             </div>
           )}
         </div>
+
+        {isExpense && expenseAdjustmentsEnabled && form.paymentMethod === 'card' && (
+          <ExpenseAdjustmentFields
+            baseCurrency={baseCurrency}
+            baseAmount={Number(form.amount) > 0
+              ? form.currency === baseCurrency
+                ? Number(form.amount)
+                : preferredCur === baseCurrency && previewRate
+                  ? Number(form.amount) * previewRate
+                  : null
+              : null}
+            values={form}
+            onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
+          />
+        )}
 
         {/* 備註（僅限支出） */}
         {isExpense && (
@@ -2412,6 +2547,7 @@ function EditExpenseModal({
   tripId,
   defaultCurrency,
   baseCurrency,
+  expenseAdjustmentsEnabled,
   countries,
   cashWallets,
   initialMode = 'view',
@@ -2423,6 +2559,7 @@ function EditExpenseModal({
   tripId: string
   defaultCurrency: string
   baseCurrency: string
+  expenseAdjustmentsEnabled: boolean
   countries: string[]
   cashWallets: CashWalletData[]
   initialMode?: 'view' | 'edit'
@@ -2438,6 +2575,9 @@ function EditExpenseModal({
     currency: expense.currency,
     paymentMethod: expense.paymentMethod,
     settledAmount: String(expense.settledAmount ?? expense.convertedAmount ?? ''),
+    serviceFee: expense.serviceFee > 0 ? String(expense.serviceFee) : '',
+    shopbackReward: expense.shopbackReward > 0 ? String(expense.shopbackReward) : '',
+    creditCardReward: expense.creditCardReward > 0 ? String(expense.creditCardReward) : '',
     reconciled: Boolean(expense.reconciledAt),
     note: expense.note || '',
     date: getLocalCalendarDay(new Date(expense.date)),
@@ -2519,6 +2659,11 @@ function EditExpenseModal({
               ? parseFloat(form.settledAmount)
               : undefined,
           reconciled: form.reconciled,
+          ...(expenseAdjustmentsEnabled ? {
+            serviceFee: form.paymentMethod === 'card' ? parseAdjustmentInput(form.serviceFee) : 0,
+            shopbackReward: form.paymentMethod === 'card' ? parseAdjustmentInput(form.shopbackReward) : 0,
+            creditCardReward: form.paymentMethod === 'card' ? parseAdjustmentInput(form.creditCardReward) : 0,
+          } : {}),
           note: form.note || null,
           images: editImages,
           date: calendarDayToLocalNoonIso(form.date),
@@ -2570,6 +2715,19 @@ function EditExpenseModal({
   const finalRate = needsSettledAmount && parsedSettledAmount > 0 && Number(form.amount) > 0
     ? parsedSettledAmount / Number(form.amount)
     : null
+  const adjustmentBaseAmount = Number(form.amount) > 0
+    ? form.currency === baseCurrency
+      ? Number(form.amount)
+      : form.reconciled && parsedSettledAmount > 0
+        ? parsedSettledAmount
+        : form.currency === expense.currency && typeof expense.exchangeRate === 'number'
+          ? Number(form.amount) * expense.exchangeRate
+          : null
+    : null
+  const hasAdjustments = expense.serviceFee > 0
+    || expense.shopbackReward > 0
+    || expense.creditCardReward > 0
+  const netBaseAmount = getExpenseBaseAmount(expense, baseCurrency)
 
   const isBusy = saving || deleting
 
@@ -2751,6 +2909,22 @@ function EditExpenseModal({
                   })}
                 </div>
               )}
+              {hasAdjustments && netBaseAmount !== null && (
+                <div style={{
+                  marginBottom: '1rem', padding: '0.75rem', borderRadius: '10px',
+                  background: 'rgba(14, 165, 233, 0.08)',
+                  border: '1px solid rgba(14, 165, 233, 0.28)',
+                  fontSize: '0.8rem', lineHeight: 1.6,
+                }}>
+                  {expense.serviceFee > 0 && <div>+ {t('expense.adjustments.serviceFee')} {getCurrencySymbol(baseCurrency)}{expense.serviceFee.toLocaleString()}</div>}
+                  {expense.shopbackReward > 0 && <div>− {t('expense.adjustments.shopback')} {getCurrencySymbol(baseCurrency)}{expense.shopbackReward.toLocaleString()}</div>}
+                  {expense.creditCardReward > 0 && <div>− {t('expense.adjustments.creditCard')} {getCurrencySymbol(baseCurrency)}{expense.creditCardReward.toLocaleString()}</div>}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.35rem', paddingTop: '0.35rem', borderTop: '1px solid var(--border-color)', fontWeight: 800 }}>
+                    <span>{t('expense.adjustments.net')}</span>
+                    <span>{getCurrencySymbol(baseCurrency)}{netBaseAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              )}
 
               {/* 資訊列 */}
               <div style={{
@@ -2904,7 +3078,14 @@ function EditExpenseModal({
                 <button type="button" disabled={spendableCashCurrencies.length === 0} onClick={() => {
                   const currency = spendableCashCurrencies.includes(form.currency) ? form.currency : spendableCashCurrencies[0]
                   if (currency) setForm({
-                    ...form, paymentMethod: 'cash', currency, reconciled: false, settledAmount: '',
+                    ...form,
+                    paymentMethod: 'cash',
+                    currency,
+                    reconciled: false,
+                    settledAmount: '',
+                    serviceFee: '',
+                    shopbackReward: '',
+                    creditCardReward: '',
                   })
                 }}
                   aria-pressed={form.paymentMethod === 'cash'}
@@ -2955,6 +3136,18 @@ function EditExpenseModal({
                   </button>
                 ))}
               </div>
+
+              {expenseAdjustmentsEnabled && form.paymentMethod === 'card' && (
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <ExpenseAdjustmentFields
+                    baseCurrency={baseCurrency}
+                    baseAmount={adjustmentBaseAmount}
+                    values={form}
+                    disabled={saving}
+                    onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
+                  />
+                </div>
+              )}
 
               {/* 信用卡帳單／交易核對 */}
               <div style={{

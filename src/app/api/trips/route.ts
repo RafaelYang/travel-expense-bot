@@ -16,6 +16,7 @@ const createTripSchema = z.object({
   endDate: z.string(),
   countries: z.array(z.string()).default([]),
   baseCurrency: z.string().default("TWD"),
+  expenseAdjustmentsEnabled: z.boolean().default(false),
 })
 
 // GET — 取得我的行程列表
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
         countries: countriesPayload,
         defaultCurrency,
         baseCurrency: data.baseCurrency,
+        expenseAdjustmentsEnabled: data.expenseAdjustmentsEnabled,
         members: {
           create: {
             userId: session.user.id,

@@ -28,6 +28,9 @@ const updateSchema = z.object({
   settledAmount: z.number().positive().finite().nullable().optional(),
   reconciled: z.boolean().optional(),
   note: z.string().optional().nullable(),
+  serviceFee: z.number().nonnegative().finite().optional(),
+  shopbackReward: z.number().nonnegative().finite().optional(),
+  creditCardReward: z.number().nonnegative().finite().optional(),
   images: z.array(imageInputSchema).max(3).optional(),
   date: z.string().optional(),
 })
@@ -81,19 +84,49 @@ export async function PATCH(
       (data.amount !== undefined && data.amount !== existing.amount) ||
       (data.currency !== undefined && data.currency !== existing.currency) ||
       (data.paymentMethod !== undefined && data.paymentMethod !== existing.paymentMethod)
+    const adjustmentsChanged = data.serviceFee !== undefined
+      || data.shopbackReward !== undefined
+      || data.creditCardReward !== undefined
     const settlementChanged =
       settledAmount !== undefined && settledAmount !== existing.settledAmount
     const needsBaseCurrency =
-      estimateFieldsChanged || settledAmount !== undefined || reconciled === true
+      estimateFieldsChanged || settledAmount !== undefined || reconciled === true || adjustmentsChanged
     let baseCurrency: string | undefined
+    let expenseAdjustmentsEnabled: boolean | undefined
 
     if (needsBaseCurrency) {
       // 查詢行程基準幣種
       const trip = await prisma.trip.findUnique({
         where: { id: tripId },
-        select: { baseCurrency: true },
+        select: { baseCurrency: true, expenseAdjustmentsEnabled: true },
       })
       baseCurrency = (trip?.baseCurrency || "TWD").toUpperCase()
+      expenseAdjustmentsEnabled = trip?.expenseAdjustmentsEnabled ?? false
+    }
+
+    if (adjustmentsChanged && !expenseAdjustmentsEnabled) {
+      return NextResponse.json(
+        { error: "請先在行程設定啟用服務費與回饋" },
+        { status: 400 },
+      )
+    }
+
+    const requestedAdjustments = [
+      data.serviceFee ?? existing.serviceFee,
+      data.shopbackReward ?? existing.shopbackReward,
+      data.creditCardReward ?? existing.creditCardReward,
+    ]
+    if (newPaymentMethod !== "card" && requestedAdjustments.some((value) => value > 0)) {
+      if (data.paymentMethod === "cash" && !adjustmentsChanged) {
+        updateData.serviceFee = 0
+        updateData.shopbackReward = 0
+        updateData.creditCardReward = 0
+      } else {
+        return NextResponse.json(
+          { error: "服務費與回饋只能套用在刷卡／額外支出" },
+          { status: 400 },
+        )
+      }
     }
 
     const isForeignCard =

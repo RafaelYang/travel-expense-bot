@@ -20,6 +20,9 @@ export interface BatchReconcileExpense {
   currency: string
   convertedAmount?: number | null
   settledAmount?: number | null
+  serviceFee: number
+  shopbackReward: number
+  creditCardReward: number
   date: string
   paymentMethod: "card" | "cash"
   reconciledAt?: string
@@ -35,15 +38,30 @@ function initialActualCharges(expenses: BatchReconcileExpense[]) {
   )
 }
 
+type AdjustmentField = "serviceFee" | "shopbackReward" | "creditCardReward"
+
+function initialAdjustments(expenses: BatchReconcileExpense[], field: AdjustmentField) {
+  return Object.fromEntries(
+    expenses.map((expense) => [expense.id, expense[field] > 0 ? String(expense[field]) : ""]),
+  )
+}
+
+function parseAdjustment(value: string | undefined) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
 export function BatchReconcileModal({
   tripId,
   baseCurrency,
+  expenseAdjustmentsEnabled,
   expenses,
   onClose,
   onSaved,
 }: {
   tripId: string
   baseCurrency: string
+  expenseAdjustmentsEnabled: boolean
   expenses: BatchReconcileExpense[]
   onClose: () => void
   onSaved: () => Promise<void>
@@ -58,6 +76,15 @@ export function BatchReconcileModal({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [actualCharges, setActualCharges] = useState<Record<string, string>>(
     () => initialActualCharges(pendingExpenses),
+  )
+  const [serviceFees, setServiceFees] = useState<Record<string, string>>(
+    () => initialAdjustments(pendingExpenses, "serviceFee"),
+  )
+  const [shopbackRewards, setShopbackRewards] = useState<Record<string, string>>(
+    () => initialAdjustments(pendingExpenses, "shopbackReward"),
+  )
+  const [creditCardRewards, setCreditCardRewards] = useState<Record<string, string>>(
+    () => initialAdjustments(pendingExpenses, "creditCardReward"),
   )
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
   const [resultMessage, setResultMessage] = useState("")
@@ -94,6 +121,15 @@ export function BatchReconcileModal({
     if (value.trim()) toggleSelected(expenseId, true)
   }
 
+  const updateAdjustment = (
+    setter: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    expenseId: string,
+    value: string,
+  ) => {
+    setter((current) => ({ ...current, [expenseId]: value }))
+    if (value.trim()) toggleSelected(expenseId, true)
+  }
+
   const toggleAll = () => {
     setSelectedIds(allSelected ? [] : pendingExpenses.map((expense) => expense.id))
     setRowErrors({})
@@ -121,7 +157,14 @@ export function BatchReconcileModal({
       const response = await fetch(`/api/trips/${tripId}/expenses/${encodeURIComponent(expense.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payloadResult.payload),
+        body: JSON.stringify({
+          ...payloadResult.payload,
+          ...(expenseAdjustmentsEnabled ? {
+            serviceFee: parseAdjustment(serviceFees[expense.id]),
+            shopbackReward: parseAdjustment(shopbackRewards[expense.id]),
+            creditCardReward: parseAdjustment(creditCardRewards[expense.id]),
+          } : {}),
+        }),
       })
       if (!response.ok) {
         const data = await response.json().catch(() => null)
@@ -318,6 +361,11 @@ export function BatchReconcileModal({
                             {t("expense.reconcile.batch.actualRequired")}
                           </span>
                         )}
+                        {expenseAdjustmentsEnabled && (
+                          <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", lineHeight: 1.45 }}>
+                            {t("expense.reconcile.actualCharge.adjustmentsHint")}
+                          </span>
+                        )}
                       </label>
                     ) : (
                       <div style={{
@@ -327,6 +375,36 @@ export function BatchReconcileModal({
                         <CreditCard size={14} />
                         {t("expense.reconcile.batch.baseReady", { currency: baseCurrency })}
                       </div>
+                    )}
+
+                    {expenseAdjustmentsEnabled && (
+                      <fieldset style={{
+                        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                        gap: "0.55rem", margin: "0.7rem 0 0", padding: "0.7rem",
+                        border: "1px solid var(--border-color)", borderRadius: "10px",
+                      }}>
+                        <legend style={{ padding: "0 0.25rem", color: "var(--text-secondary)", fontSize: "0.76rem", fontWeight: 750 }}>
+                          {t("expense.adjustments.title", { currency: baseCurrency })}
+                        </legend>
+                        {([
+                          ["serviceFee", "expense.adjustments.serviceFee", serviceFees, setServiceFees],
+                          ["shopbackReward", "expense.adjustments.shopback", shopbackRewards, setShopbackRewards],
+                          ["creditCardReward", "expense.adjustments.creditCard", creditCardRewards, setCreditCardRewards],
+                        ] as const).map(([field, label, values, setter]) => (
+                          <label key={field} style={{ display: "flex", flexDirection: "column", gap: "0.25rem", color: "var(--text-secondary)", fontSize: "0.72rem" }}>
+                            {t(label)}
+                            <input
+                              type="number" min="0" step="any" inputMode="decimal"
+                              className="input-field"
+                              value={values[expense.id] ?? ""}
+                              onChange={(event) => updateAdjustment(setter, expense.id, event.target.value)}
+                              disabled={submitting}
+                              placeholder="0"
+                              style={{ textAlign: "right", fontWeight: 700 }}
+                            />
+                          </label>
+                        ))}
+                      </fieldset>
                     )}
 
                     {rowError && (

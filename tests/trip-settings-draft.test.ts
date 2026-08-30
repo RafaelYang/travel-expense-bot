@@ -11,6 +11,7 @@ const savedDraft: TripSettingsDraft = {
   startDate: "2026-07-17",
   endDate: "2026-07-28",
   baseCurrency: "TWD",
+  expenseAdjustmentsEnabled: false,
   coverImage: "https://example.com/cover.jpg",
   countriesList: ["AT", "CZ", "HU"],
   dailyCountries: ["AT", "AT", "CZ", "HU"],
@@ -30,12 +31,13 @@ test("settings draft stays clean before loading and across equivalent copies", (
 })
 
 test("every scalar trip setting participates in dirty detection", () => {
-  const scalarChanges: Array<[keyof TripSettingsDraft, string]> = [
+  const scalarChanges: Array<[keyof TripSettingsDraft, string | boolean]> = [
     ["name", "Another trip"],
     ["description", "Updated description"],
     ["startDate", "2026-07-18"],
     ["endDate", "2026-07-29"],
     ["baseCurrency", "EUR"],
+    ["expenseAdjustmentsEnabled", true],
     ["coverImage", "https://example.com/new-cover.jpg"],
   ]
 

@@ -5,6 +5,9 @@ export interface ExpenseAmount {
   settledAmount?: number | null
   reconciledAt?: Date | string | null
   paymentMethod?: string | null
+  serviceFee?: number | null
+  shopbackReward?: number | null
+  creditCardReward?: number | null
 }
 
 export interface DepositAmount {
@@ -30,16 +33,32 @@ export function getExpenseBaseAmount(
     typeof expense.settledAmount === "number" &&
     Number.isFinite(expense.settledAmount)
   ) {
-    return expense.settledAmount
+    return applyExpenseAdjustments(expense.settledAmount, expense)
   }
 
   if (!isForeignCurrency) {
-    return expense.amount
+    return applyExpenseAdjustments(expense.amount, expense)
   }
 
   return typeof expense.convertedAmount === "number" && Number.isFinite(expense.convertedAmount)
-    ? expense.convertedAmount
+    ? applyExpenseAdjustments(expense.convertedAmount, expense)
     : null
+}
+
+function nonNegativeAdjustment(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : 0
+}
+
+export function applyExpenseAdjustments(
+  baseAmount: number,
+  expense: Pick<ExpenseAmount, "serviceFee" | "shopbackReward" | "creditCardReward">,
+) {
+  return baseAmount
+    + nonNegativeAdjustment(expense.serviceFee)
+    - nonNegativeAdjustment(expense.shopbackReward)
+    - nonNegativeAdjustment(expense.creditCardReward)
 }
 
 export function summarizeExpenses(

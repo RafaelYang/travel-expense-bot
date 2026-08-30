@@ -19,6 +19,7 @@ import { useMemo, useState } from "react"
 
 import { useLanguage } from "@/components/language-provider"
 import { Navbar } from "@/components/navbar"
+import { getExpenseBaseAmount } from "@/lib/money"
 import { getCurrencySymbol } from "@/lib/utils"
 
 import styles from "./records-client.module.css"
@@ -31,6 +32,7 @@ export interface RecordsTripData {
   id: string
   name: string
   baseCurrency: string
+  expenseAdjustmentsEnabled: boolean
   userRole: string
   expenses: {
     id: string
@@ -39,6 +41,9 @@ export interface RecordsTripData {
     currency: string
     convertedAmount?: number
     settledAmount?: number
+    serviceFee: number
+    shopbackReward: number
+    creditCardReward: number
     date: string
     createdAt: string
     paymentMethod: "card" | "cash"
@@ -74,6 +79,7 @@ interface RecordsItem {
   kind: "expense" | "deposit" | "exchange"
   item: string
   amountLabel: string
+  netAmountLabel?: string
   date: string
   createdAt: string
   recorder: string
@@ -89,16 +95,30 @@ export default function RecordsClient({ initialTrip }: { initialTrip: RecordsTri
   const canEdit = initialTrip.userRole !== "viewer"
 
   const records = useMemo<RecordsItem[]>(() => {
-    const expenses: RecordsItem[] = initialTrip.expenses.map((expense) => ({
-      id: expense.id,
-      kind: "expense",
-      item: expense.item,
-      amountLabel: `${getCurrencySymbol(expense.currency)}${expense.amount.toLocaleString()}`,
-      date: expense.date,
-      createdAt: expense.createdAt,
-      recorder: expense.user.name,
-      status: expense.reconciledAt ? "confirmed" : "pending",
-    }))
+    const expenses: RecordsItem[] = initialTrip.expenses.map((expense) => {
+      const hasAdjustments = expense.serviceFee > 0
+        || expense.shopbackReward > 0
+        || expense.creditCardReward > 0
+      const netAmount = hasAdjustments
+        ? getExpenseBaseAmount(expense, initialTrip.baseCurrency)
+        : null
+      return {
+        id: expense.id,
+        kind: "expense",
+        item: expense.item,
+        amountLabel: `${getCurrencySymbol(expense.currency)}${expense.amount.toLocaleString()}`,
+        netAmountLabel: netAmount === null
+          ? undefined
+          : t("trip.records.netAmount", {
+            currency: initialTrip.baseCurrency,
+            amount: netAmount.toLocaleString(locale, { maximumFractionDigits: 2 }),
+          }),
+        date: expense.date,
+        createdAt: expense.createdAt,
+        recorder: expense.user.name,
+        status: expense.reconciledAt ? "confirmed" : "pending",
+      }
+    })
     const deposits: RecordsItem[] = initialTrip.deposits.map((deposit) => ({
       id: deposit.id,
       kind: "deposit",
@@ -125,7 +145,7 @@ export default function RecordsClient({ initialTrip }: { initialTrip: RecordsTri
       if (dateDifference !== 0) return dateDifference
       return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
     })
-  }, [initialTrip, t])
+  }, [initialTrip, locale, t])
 
   const filteredRecords = filter === "all"
     ? records
@@ -211,6 +231,7 @@ export default function RecordsClient({ initialTrip }: { initialTrip: RecordsTri
                 </div>
                 <div className={styles.amountStatus}>
                   <strong>{record.amountLabel}</strong>
+                  {record.netAmountLabel && <small className={styles.netAmount}>{record.netAmountLabel}</small>}
                   <span className={`${styles.status} ${styles[record.status]}`}>
                     {record.status === "confirmed" && <CheckCircle2 size={14} aria-hidden="true" />}
                     {statusLabel(record.status)}
@@ -226,6 +247,7 @@ export default function RecordsClient({ initialTrip }: { initialTrip: RecordsTri
         <BatchReconcileModal
           tripId={initialTrip.id}
           baseCurrency={initialTrip.baseCurrency}
+          expenseAdjustmentsEnabled={initialTrip.expenseAdjustmentsEnabled}
           expenses={pendingCardExpenses}
           onClose={() => setBatchOpen(false)}
           onSaved={async () => { router.refresh() }}

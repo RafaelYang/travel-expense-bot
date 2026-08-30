@@ -38,6 +38,9 @@ export interface TripStatsExpense {
   convertedAmount?: number
   exchangeRate?: number
   settledAmount?: number
+  serviceFee: number
+  shopbackReward: number
+  creditCardReward: number
   date: string
   createdAt: string
   note?: string
@@ -744,9 +747,9 @@ export function TripStatsModal({
                     const baseAmountLabel = baseAmount === null
                       ? t("trip.stats.pendingConversion")
                       : money(baseAmount)
-                    const hasFinalCardAmount = expense.paymentMethod === "card"
-                      && Boolean(expense.reconciledAt)
-                      && typeof expense.settledAmount === "number"
+                    const hasAdjustments = expense.serviceFee > 0
+                      || expense.shopbackReward > 0
+                      || expense.creditCardReward > 0
 
                     return (
                       <li key={expense.id}>
@@ -779,11 +782,11 @@ export function TripStatsModal({
                             </span>
                             <span className={styles.expenseAmounts}>
                               <strong>{money(expense.amount, expense.currency)}</strong>
-                              {expense.currency !== trip.baseCurrency && (
+                              {(expense.currency !== trip.baseCurrency || hasAdjustments) && (
                                 <small>
                                   {baseAmount === null
                                     ? t("trip.stats.pendingConversion")
-                                    : `${hasFinalCardAmount ? "✓" : "≈"} ${money(baseAmount)}`}
+                                    : `= ${money(baseAmount)}`}
                                 </small>
                               )}
                             </span>
@@ -836,10 +839,46 @@ export function TripStatsModal({
                       : (
                         <>
                           <span>{t("trip.stats.estimatedConversion")}</span>
-                          <strong>≈ {money(selectedExpenseDetail.baseAmount)}</strong>
+                          <strong>≈ {money(
+                            selectedExpenseDetail.baseAmount
+                              - selectedExpense.serviceFee
+                              + selectedExpense.shopbackReward
+                              + selectedExpense.creditCardReward,
+                          )}</strong>
                         </>
                       )}
                   </div>
+                )}
+
+                {(selectedExpense.serviceFee > 0
+                  || selectedExpense.shopbackReward > 0
+                  || selectedExpense.creditCardReward > 0) && (
+                  <dl className={styles.detailList}>
+                    {selectedExpense.serviceFee > 0 && (
+                      <div>
+                        <dt>{t("expense.adjustments.serviceFee")}</dt>
+                        <dd>+ {money(selectedExpense.serviceFee)}</dd>
+                      </div>
+                    )}
+                    {selectedExpense.shopbackReward > 0 && (
+                      <div>
+                        <dt>{t("expense.adjustments.shopback")}</dt>
+                        <dd>− {money(selectedExpense.shopbackReward)}</dd>
+                      </div>
+                    )}
+                    {selectedExpense.creditCardReward > 0 && (
+                      <div>
+                        <dt>{t("expense.adjustments.creditCard")}</dt>
+                        <dd>− {money(selectedExpense.creditCardReward)}</dd>
+                      </div>
+                    )}
+                    <div>
+                      <dt>{t("expense.adjustments.net")}</dt>
+                      <dd><strong>{selectedExpenseDetail.baseAmount === null
+                        ? t("trip.stats.pendingConversion")
+                        : money(selectedExpenseDetail.baseAmount)}</strong></dd>
+                    </div>
+                  </dl>
                 )}
 
                 <dl className={styles.detailList}>

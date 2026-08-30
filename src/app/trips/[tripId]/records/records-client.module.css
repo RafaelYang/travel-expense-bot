@@ -214,6 +214,13 @@
   white-space: nowrap;
 }
 
+.netAmount {
+  color: var(--color-primary-text);
+  font-size: 0.7rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .status {
   display: inline-flex;
   align-items: center;

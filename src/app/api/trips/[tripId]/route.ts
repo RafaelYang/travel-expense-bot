@@ -157,6 +157,10 @@ export async function PUT(
       endDate: body.endDate ? new Date(body.endDate) : undefined,
       defaultCurrency: body.defaultCurrency,
       baseCurrency: body.baseCurrency,
+      expenseAdjustmentsEnabled:
+        typeof body.expenseAdjustmentsEnabled === "boolean"
+          ? body.expenseAdjustmentsEnabled
+          : undefined,
       budgetAmount: body.budgetAmount,
       status: body.status,
       countries: countriesPayload,

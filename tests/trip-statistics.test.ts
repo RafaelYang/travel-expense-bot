@@ -111,6 +111,29 @@ test("daily fund flow counts card spending and exchanges without double-counting
   assert.equal(result.fundFlowMissingConversionCount, 1)
 })
 
+test("daily and category statistics include fees and subtract both reward types", () => {
+  const result = buildTripStatistics({
+    expenses: [expense({
+      id: "adjusted-card",
+      dayKey: "2026-07-18",
+      amount: 1_000,
+      serviceFee: 30,
+      shopbackReward: 80,
+      creditCardReward: 20,
+    })],
+    exchanges: [],
+    baseCurrency: "TWD",
+    range,
+    scope: "trip",
+    categoryOrder: categories,
+  })
+
+  assert.equal(result.dailyFundFlow[0].net, 930)
+  assert.equal(result.netFundFlowTotal, 930)
+  assert.equal(result.consumptionTotal, 930)
+  assert.equal(result.categories[0].total, 930)
+})
+
 test("the selected date scope applies to both fund flow and consumption", () => {
   const result = buildTripStatistics({
     expenses: [

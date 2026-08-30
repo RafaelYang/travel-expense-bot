@@ -94,6 +94,9 @@ export async function getTripDashboard(userId: string): Promise<DashboardTrip[]>
           settledAmount: true,
           reconciledAt: true,
           paymentMethod: true,
+          serviceFee: true,
+          shopbackReward: true,
+          creditCardReward: true,
         },
       })
     : []
