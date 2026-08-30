@@ -1729,7 +1729,7 @@ function ExpenseAdjustmentFields({
   ] as const).filter(([, , option]) => options[option])
 
   return (
-    <fieldset style={{
+    <fieldset className="expense-adjustment-fields" style={{
       margin: 0, padding: '0.85rem', borderRadius: '12px',
       border: '1px solid rgba(14, 165, 233, 0.3)',
       background: 'rgba(14, 165, 233, 0.06)',
@@ -3054,6 +3054,9 @@ function EditExpenseModal({
 
             {/* 內容：桌機以雙欄壓縮高度，窄螢幕仍維持原本順序。 */}
             <div className="trip-modal-scroll-area expense-editor-content" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+              <div className="expense-editor-panel expense-editor-overview">
+                <div className="expense-editor-panel-title">基本資料</div>
+
               {/* 分類 */}
               <div
                 className="expense-editor-categories"
@@ -3075,83 +3078,99 @@ function EditExpenseModal({
                 ))}
               </div>
 
-              <div
-                className="expense-editor-payment"
-                role="group"
-                aria-label={locale === 'en' ? 'Payment method' : '付款方式'}
-                style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setForm({
-                    ...form, paymentMethod: 'card', reconciled: false, settledAmount: '',
-                  })}
-                  aria-pressed={form.paymentMethod === 'card'}
-                  className="trip-choice-button trip-choice-button--segment"
-                >{t('form.payment.card')}</button>
-                <button type="button" disabled={spendableCashCurrencies.length === 0} onClick={() => {
-                  const currency = spendableCashCurrencies.includes(form.currency) ? form.currency : spendableCashCurrencies[0]
-                  if (currency) setForm({
-                    ...form,
-                    paymentMethod: 'cash',
-                    currency,
-                    reconciled: false,
-                    settledAmount: '',
-                    serviceFee: '',
-                    shopbackReward: '',
-                    creditCardReward: '',
-                  })
-                }}
-                  aria-pressed={form.paymentMethod === 'cash'}
-                  className="trip-choice-button trip-choice-button--segment trip-choice-button--cash"
-                >{t('form.payment.cash')}</button>
-              </div>
+              <div className="expense-editor-overview-grid">
+                <div className="expense-editor-payment-field">
+                  <span className="expense-editor-field-label">付款方式</span>
+                  <div
+                    className="expense-editor-payment"
+                    role="group"
+                    aria-label={locale === 'en' ? 'Payment method' : '付款方式'}
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setForm({
+                        ...form, paymentMethod: 'card', reconciled: false, settledAmount: '',
+                      })}
+                      aria-pressed={form.paymentMethod === 'card'}
+                      className="trip-choice-button trip-choice-button--segment"
+                    >{t('form.payment.card')}</button>
+                    <button type="button" disabled={spendableCashCurrencies.length === 0} onClick={() => {
+                      const currency = spendableCashCurrencies.includes(form.currency) ? form.currency : spendableCashCurrencies[0]
+                      if (currency) setForm({
+                        ...form,
+                        paymentMethod: 'cash',
+                        currency,
+                        reconciled: false,
+                        settledAmount: '',
+                        serviceFee: '',
+                        shopbackReward: '',
+                        creditCardReward: '',
+                      })
+                    }}
+                      aria-pressed={form.paymentMethod === 'cash'}
+                      className="trip-choice-button trip-choice-button--segment trip-choice-button--cash"
+                    >{t('form.payment.cash')}</button>
+                  </div>
+                </div>
 
-              {/* 品名 + 金額 */}
-              <div className="expense-editor-basics" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <input
-                  className="input-field"
-                  value={form.item}
-                  onChange={(e) => setForm({ ...form, item: e.target.value })}
-                  placeholder="項目名稱"
-                />
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="any"
-                  className="input-field"
-                  value={form.amount}
-                  onChange={(e) => setForm({
-                    ...form, amount: e.target.value, reconciled: false, settledAmount: '',
-                  })}
-                  placeholder="金額"
-                  style={{ fontWeight: 700, textAlign: 'right' }}
-                />
+                {/* 品名 + 金額 */}
+                <div className="expense-editor-basics" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <label className="expense-editor-field">
+                    <span className="expense-editor-field-label">項目名稱</span>
+                    <input
+                      className="input-field"
+                      value={form.item}
+                      onChange={(e) => setForm({ ...form, item: e.target.value })}
+                      placeholder="項目名稱"
+                    />
+                  </label>
+                  <label className="expense-editor-field">
+                    <span className="expense-editor-field-label">金額</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="any"
+                      className="input-field"
+                      value={form.amount}
+                      onChange={(e) => setForm({
+                        ...form, amount: e.target.value, reconciled: false, settledAmount: '',
+                      })}
+                      placeholder="金額"
+                      style={{ fontWeight: 700, textAlign: 'right' }}
+                    />
+                  </label>
+                </div>
               </div>
 
               {/* 幣種 */}
-              <div
-                className="expense-editor-currencies"
-                role="group"
-                aria-label={t('form.currency')}
-                style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
-              >
-                {editCurrencyOptions.map(cur => (
-                  <button
-                    key={cur}
-                    type="button"
-                    onClick={() => setForm({
-                      ...form, currency: cur, reconciled: false, settledAmount: '',
-                    })}
-                    aria-pressed={form.currency === cur}
-                    className="trip-choice-button trip-choice-button--compact"
-                  >
-                    {getCurrencyChipLabel(cur, cleanCountries, locale)}
-                  </button>
-                ))}
+              <div className="expense-editor-currency-field">
+                <span className="expense-editor-field-label">幣種</span>
+                <div
+                  className="expense-editor-currencies"
+                  role="group"
+                  aria-label={t('form.currency')}
+                  style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
+                >
+                  {editCurrencyOptions.map(cur => (
+                    <button
+                      key={cur}
+                      type="button"
+                      onClick={() => setForm({
+                        ...form, currency: cur, reconciled: false, settledAmount: '',
+                      })}
+                      aria-pressed={form.currency === cur}
+                      className="trip-choice-button trip-choice-button--compact"
+                    >
+                      {getCurrencyChipLabel(cur, cleanCountries, locale)}
+                    </button>
+                  ))}
+                </div>
+              </div>
               </div>
 
+              <div className="expense-editor-lower-grid">
               {hasAnyExpenseAdjustmentOption(adjustmentOptions) && form.paymentMethod === 'card' && (
                 <div className="expense-editor-adjustments" style={{ marginBottom: '0.75rem' }}>
                   <ExpenseAdjustmentFields
@@ -3166,13 +3185,15 @@ function EditExpenseModal({
               )}
 
               {/* 信用卡帳單／交易核對 */}
-              <div className="expense-editor-reconciliation" style={{
-                marginBottom: '0.75rem', padding: '0.8rem', borderRadius: '10px',
-                border: form.reconciled
-                  ? '1px solid rgba(34, 197, 94, 0.45)'
-                  : '1px solid var(--border-color)',
-                background: form.reconciled ? 'rgba(34, 197, 94, 0.08)' : 'var(--bg-card-hover)',
-              }}>
+              <div className="expense-editor-panel expense-editor-reconciliation">
+                <div className="expense-editor-panel-title">帳單核對與日期</div>
+                <div className="expense-editor-reconciliation-status" style={{
+                  padding: '0.8rem', borderRadius: '10px',
+                  border: form.reconciled
+                    ? '1px solid rgba(34, 197, 94, 0.45)'
+                    : '1px solid var(--border-color)',
+                  background: form.reconciled ? 'rgba(34, 197, 94, 0.08)' : 'var(--bg-card-hover)',
+                }}>
                 {needsSettledAmount && (
                   <>
                     <label style={{
@@ -3223,31 +3244,35 @@ function EditExpenseModal({
                     {t('expense.reconcile.actualCharge.hint')}
                   </div>
                 )}
-              </div>
+                </div>
 
-              {/* 備註 */}
-              <input
-                data-layout="expense-editor-note"
-                className="input-field"
-                value={form.note}
-                onChange={(e) => setForm({ ...form, note: e.target.value })}
-                placeholder="備註（選填）"
-                style={{ marginBottom: '0.75rem' }}
-              />
-
-              {/* 消費日期 */}
-              <div className="expense-editor-date" style={{ marginBottom: '0.75rem' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                  消費日期
+                {/* 消費日期 */}
+                <label className="expense-editor-field expense-editor-date" style={{ marginTop: '0.75rem' }}>
+                  <span className="expense-editor-field-label">消費日期</span>
+                  <input
+                    type="date"
+                    className="input-field"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    style={{ fontSize: '0.85rem' }}
+                  />
                 </label>
-                <input
-                  type="date"
-                  className="input-field"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  style={{ fontSize: '0.85rem' }}
-                />
               </div>
+              </div>
+
+              <div className="expense-editor-panel expense-editor-meta">
+                <div className="expense-editor-panel-title">其他資訊</div>
+                <div className="expense-editor-meta-grid">
+                {/* 備註 */}
+                <label className="expense-editor-field expense-editor-note">
+                  <span className="expense-editor-field-label">備註</span>
+                  <input
+                    className="input-field"
+                    value={form.note}
+                    onChange={(e) => setForm({ ...form, note: e.target.value })}
+                    placeholder="備註（選填）"
+                  />
+                </label>
 
               {/* 圖片編輯 */}
               <div className="expense-editor-images" style={{ marginBottom: '1rem' }}>
@@ -3313,6 +3338,8 @@ function EditExpenseModal({
                     </button>
                   </>
                 )}
+              </div>
+                </div>
               </div>
 
               {saveError && (

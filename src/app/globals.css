@@ -2141,6 +2141,16 @@ a:hover .trip-card-bg {
   }
 }
 
+/* 編輯花費的分組標籤只在桌機寬版顯示，手機維持原本的精簡單欄。 */
+.expense-editor-field {
+  display: block;
+}
+
+.expense-editor-panel-title,
+.expense-editor-field-label {
+  display: none;
+}
+
 /* ===== 電腦版彈窗（大螢幕）與字體優化 ===== */
 @media (min-width: 768px) {
   /* 彈窗整體放大 */
@@ -2199,19 +2209,9 @@ a:hover .trip-card-bg {
   }
 
   .expense-detail-modal .expense-editor-content {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "categories categories"
-      "payment basics"
-      "currencies currencies"
-      "adjustments reconciliation"
-      "note date"
-      "images actions"
-      "error error";
-    gap: 0.5rem 1rem;
-    align-content: start;
-    align-items: start;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
     overflow-y: auto !important;
     overflow-x: hidden;
     padding-right: 0 !important;
@@ -2221,36 +2221,98 @@ a:hover .trip-card-bg {
     min-width: 0;
   }
 
-  .expense-editor-categories { grid-area: categories; }
-  .expense-editor-payment { grid-area: payment; }
-  .expense-editor-basics { grid-area: basics; }
-  .expense-editor-currencies { grid-area: currencies; }
-  .expense-editor-adjustments { grid-area: adjustments; }
-  .expense-editor-reconciliation { grid-area: reconciliation; }
-  .expense-editor-content > [data-layout="expense-editor-note"] { grid-area: note; }
-  .expense-editor-date { grid-area: date; }
-  .expense-editor-images { grid-area: images; }
-  .expense-editor-error { grid-area: error; }
-  .expense-editor-actions {
-    grid-area: actions;
-    align-self: end;
+  .expense-editor-panel {
+    padding: 0.85rem;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-card-hover) 70%, transparent);
   }
 
-  .expense-editor-content > .expense-editor-categories,
-  .expense-editor-content > .expense-editor-payment,
-  .expense-editor-content > .expense-editor-basics,
-  .expense-editor-content > .expense-editor-currencies,
-  .expense-editor-content > .expense-editor-adjustments,
-  .expense-editor-content > .expense-editor-reconciliation,
-  .expense-editor-content > [data-layout="expense-editor-note"],
-  .expense-editor-content > .expense-editor-date,
-  .expense-editor-content > .expense-editor-images,
-  .expense-editor-content > .expense-editor-error {
+  .expense-editor-panel-title {
+    display: block;
+    margin-bottom: 0.65rem;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
+  .expense-editor-overview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 0.85rem;
+    align-items: end;
+  }
+
+  .expense-editor-field {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .expense-editor-field-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .expense-editor-categories,
+  .expense-editor-payment,
+  .expense-editor-basics,
+  .expense-editor-currencies,
+  .expense-editor-adjustments,
+  .expense-editor-images {
     margin-bottom: 0 !important;
   }
 
-  .expense-editor-content > [data-layout="expense-editor-note"] {
-    align-self: end;
+  .expense-editor-currency-field {
+    margin-top: 0.7rem;
+  }
+
+  .expense-editor-currencies {
+    margin-top: 0.35rem;
+  }
+
+  .expense-editor-lower-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    align-items: stretch;
+  }
+
+  .expense-editor-lower-grid > :only-child {
+    grid-column: 1 / -1;
+  }
+
+  .expense-editor-adjustments .expense-adjustment-fields {
+    height: 100%;
+    background: color-mix(in srgb, rgba(14, 165, 233, 0.08) 70%, var(--bg-card));
+  }
+
+  .expense-editor-adjustments .expense-adjustment-fields > p {
+    display: none;
+  }
+
+  .expense-editor-reconciliation {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .expense-editor-reconciliation-status {
+    flex: 1;
+  }
+
+  .expense-editor-date {
+    margin-top: 0.65rem;
+  }
+
+  .expense-editor-meta-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(250px, 0.8fr);
+    gap: 0.85rem;
+    align-items: end;
   }
 
   .expense-editor-images > div {
@@ -2258,6 +2320,18 @@ a:hover .trip-card-bg {
     vertical-align: middle;
     margin-right: 0.75rem;
     margin-bottom: 0 !important;
+  }
+
+  .expense-editor-error {
+    margin-bottom: 0 !important;
+  }
+
+  .expense-editor-actions {
+    justify-content: flex-end;
+  }
+
+  .expense-editor-actions .btn-primary {
+    max-width: 340px;
   }
 
   /* 支出與收入大標題 */

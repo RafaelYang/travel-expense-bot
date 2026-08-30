@@ -68,10 +68,13 @@ test("create, edit, records, and batch reconciliation all expose the three numer
   assert.match(recordsClientSource, /getExpenseBaseAmount\(expense, initialTrip\.baseCurrency\)/u)
 })
 
-test("desktop expense detail and editing share the wide no-scroll layout without changing mobile", () => {
+test("desktop expense detail and editing use a wide grouped layout without changing mobile", () => {
   assert.match(tripClientSource, /trip-modal expense-detail-modal/u)
   assert.match(tripClientSource, /expense-detail-content/u)
   assert.match(tripClientSource, /expense-editor-content/u)
+  assert.match(tripClientSource, /expense-editor-panel expense-editor-overview/u)
+  assert.match(tripClientSource, /expense-editor-lower-grid/u)
+  assert.match(tripClientSource, /expense-editor-panel expense-editor-meta/u)
   assert.match(
     globalsSource,
     /@media \(min-width: 768px\)[\s\S]*\.trip-modal\.expense-detail-modal \{\s*max-width: 980px !important;[\s\S]*max-height: calc\(100dvh - 5rem\) !important;/u,
@@ -82,7 +85,11 @@ test("desktop expense detail and editing share the wide no-scroll layout without
   )
   assert.match(
     globalsSource,
-    /\.expense-detail-modal \.expense-editor-content \{[\s\S]*grid-template-areas:[\s\S]*overflow-y: auto !important;/u,
+    /\.expense-detail-modal \.expense-editor-content \{[\s\S]*display: flex;[\s\S]*overflow-y: auto !important;/u,
+  )
+  assert.match(
+    globalsSource,
+    /\.expense-editor-lower-grid \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u,
   )
   assert.doesNotMatch(
     globalsSource.slice(0, globalsSource.indexOf("@media (min-width: 768px)")),
