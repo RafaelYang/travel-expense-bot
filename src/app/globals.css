@@ -2150,9 +2150,110 @@ a:hover .trip-card-bg {
     font-size: 0.95rem !important;
   }
 
-  /* 編輯花費欄位較多，僅在電腦版增加水平空間。 */
-  .trip-modal.expense-editor-modal {
-    max-width: 680px !important;
+  /* 花費詳情與編輯在桌機共用寬版，將垂直內容改排為左右欄。 */
+  .trip-modal.expense-detail-modal {
+    max-width: 980px !important;
+    max-height: calc(100dvh - 6rem) !important;
+    padding: 1.5rem !important;
+  }
+
+  .expense-detail-modal .expense-detail-content {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(340px, 1.1fr);
+    gap: 1.25rem;
+    align-items: start;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    padding-right: 0 !important;
+  }
+
+  .expense-detail-modal .expense-detail-summary {
+    min-width: 0;
+  }
+
+  .expense-detail-modal .expense-detail-summary:only-child {
+    grid-column: 1 / -1;
+  }
+
+  .expense-detail-modal .expense-detail-gallery {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem !important;
+    min-width: 0;
+  }
+
+  .expense-detail-modal .expense-detail-gallery > div:first-child:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .expense-detail-modal .expense-detail-gallery img {
+    width: 100% !important;
+    height: min(52vh, 470px) !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    background: var(--bg-card-hover);
+  }
+
+  .expense-detail-modal .expense-detail-gallery > div:not(:first-child:last-child) img {
+    height: min(25vh, 220px) !important;
+  }
+
+  .expense-detail-modal .expense-editor-content {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "categories payment"
+      "basics currencies"
+      "adjustments reconciliation"
+      "note date"
+      "images images"
+      "error error"
+      "actions actions";
+    gap: 0.75rem 1rem;
+    align-content: start;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    padding-right: 0 !important;
+  }
+
+  .expense-editor-content > * {
+    min-width: 0;
+  }
+
+  .expense-editor-categories { grid-area: categories; }
+  .expense-editor-payment { grid-area: payment; }
+  .expense-editor-basics { grid-area: basics; }
+  .expense-editor-currencies { grid-area: currencies; }
+  .expense-editor-adjustments { grid-area: adjustments; }
+  .expense-editor-reconciliation { grid-area: reconciliation; }
+  .expense-editor-content > [data-layout="expense-editor-note"] { grid-area: note; }
+  .expense-editor-date { grid-area: date; }
+  .expense-editor-images { grid-area: images; }
+  .expense-editor-error { grid-area: error; }
+  .expense-editor-actions { grid-area: actions; }
+
+  .expense-editor-content > .expense-editor-categories,
+  .expense-editor-content > .expense-editor-payment,
+  .expense-editor-content > .expense-editor-basics,
+  .expense-editor-content > .expense-editor-currencies,
+  .expense-editor-content > .expense-editor-adjustments,
+  .expense-editor-content > .expense-editor-reconciliation,
+  .expense-editor-content > [data-layout="expense-editor-note"],
+  .expense-editor-content > .expense-editor-date,
+  .expense-editor-content > .expense-editor-images,
+  .expense-editor-content > .expense-editor-error {
+    margin-bottom: 0 !important;
+  }
+
+  .expense-editor-content > [data-layout="expense-editor-note"] {
+    align-self: end;
+  }
+
+  .expense-editor-images > div {
+    display: inline-flex !important;
+    vertical-align: middle;
+    margin-right: 0.75rem;
+    margin-bottom: 0 !important;
   }
 
   /* 支出與收入大標題 */

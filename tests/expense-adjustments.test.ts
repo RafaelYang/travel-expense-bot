@@ -68,15 +68,25 @@ test("create, edit, records, and batch reconciliation all expose the three numer
   assert.match(recordsClientSource, /getExpenseBaseAmount\(expense, initialTrip\.baseCurrency\)/u)
 })
 
-test("desktop expense editing is wider without changing the mobile modal width", () => {
-  assert.match(tripClientSource, /mode === 'edit' \? ' expense-editor-modal' : ''/u)
+test("desktop expense detail and editing share the wide no-scroll layout without changing mobile", () => {
+  assert.match(tripClientSource, /trip-modal expense-detail-modal/u)
+  assert.match(tripClientSource, /expense-detail-content/u)
+  assert.match(tripClientSource, /expense-editor-content/u)
   assert.match(
     globalsSource,
-    /@media \(min-width: 768px\)[\s\S]*\.trip-modal\.expense-editor-modal \{\s*max-width: 680px !important;/u,
+    /@media \(min-width: 768px\)[\s\S]*\.trip-modal\.expense-detail-modal \{\s*max-width: 980px !important;[\s\S]*max-height: calc\(100dvh - 6rem\) !important;/u,
+  )
+  assert.match(
+    globalsSource,
+    /\.expense-detail-modal \.expense-detail-content \{[\s\S]*grid-template-columns:[\s\S]*overflow-y: auto !important;/u,
+  )
+  assert.match(
+    globalsSource,
+    /\.expense-detail-modal \.expense-editor-content \{[\s\S]*grid-template-areas:[\s\S]*overflow-y: auto !important;/u,
   )
   assert.doesNotMatch(
     globalsSource.slice(0, globalsSource.indexOf("@media (min-width: 768px)")),
-    /expense-editor-modal/u,
+    /\.expense-detail-modal \.expense-(?:detail|editor)-(?:content|gallery)/u,
   )
 })
 

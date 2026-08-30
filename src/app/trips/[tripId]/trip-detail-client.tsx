@@ -2827,7 +2827,7 @@ function EditExpenseModal({
         tabIndex={-1}
         onKeyDown={handleDialogKeyDown}
         onClick={(e) => e.stopPropagation()}
-        className={`glass-card trip-modal${mode === 'edit' ? ' expense-editor-modal' : ''}`}
+        className={`glass-card trip-modal expense-detail-modal${mode === 'edit' ? ' expense-editor-modal' : ''}`}
         style={{
           width: '100%', maxWidth: '420px', padding: '1.75rem',
           animation: 'fadeInDown 0.2s ease-out',
@@ -2876,8 +2876,9 @@ function EditExpenseModal({
               </div>
             </div>
 
-            {/* 內容 (可滾動) */}
-            <div className="trip-modal-scroll-area" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+            {/* 內容：桌機雙欄完整呈現，窄螢幕保留垂直捲動。 */}
+            <div className="trip-modal-scroll-area expense-detail-content" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+              <div className="expense-detail-summary">
               {/* 項目名稱 */}
               <h2 ref={modalHeadingRef} tabIndex={-1} style={{
                 fontSize: '1.25rem', fontWeight: 700,
@@ -2998,10 +2999,11 @@ function EditExpenseModal({
                   </span>
                 </div>
               </div>
+              </div>
 
               {/* 圖片（完整顯示） */}
               {expense.images && expense.images.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div className="expense-detail-gallery" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {expense.images.map((src, idx) => (
                     <div key={idx} style={{
                       borderRadius: '10px', overflow: 'hidden',
@@ -3050,10 +3052,11 @@ function EditExpenseModal({
               </button>
             </div>
 
-            {/* 內容 (可滾動) */}
-            <div className="trip-modal-scroll-area" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+            {/* 內容：桌機以雙欄壓縮高度，窄螢幕仍維持原本順序。 */}
+            <div className="trip-modal-scroll-area expense-editor-content" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
               {/* 分類 */}
               <div
+                className="expense-editor-categories"
                 role="group"
                 aria-label={locale === 'en' ? 'Category' : '分類'}
                 style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
@@ -3073,6 +3076,7 @@ function EditExpenseModal({
               </div>
 
               <div
+                className="expense-editor-payment"
                 role="group"
                 aria-label={locale === 'en' ? 'Payment method' : '付款方式'}
                 style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}
@@ -3104,7 +3108,7 @@ function EditExpenseModal({
               </div>
 
               {/* 品名 + 金額 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div className="expense-editor-basics" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
                 <input
                   className="input-field"
                   value={form.item}
@@ -3128,6 +3132,7 @@ function EditExpenseModal({
 
               {/* 幣種 */}
               <div
+                className="expense-editor-currencies"
                 role="group"
                 aria-label={t('form.currency')}
                 style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
@@ -3148,7 +3153,7 @@ function EditExpenseModal({
               </div>
 
               {hasAnyExpenseAdjustmentOption(adjustmentOptions) && form.paymentMethod === 'card' && (
-                <div style={{ marginBottom: '0.75rem' }}>
+                <div className="expense-editor-adjustments" style={{ marginBottom: '0.75rem' }}>
                   <ExpenseAdjustmentFields
                     baseCurrency={baseCurrency}
                     baseAmount={adjustmentBaseAmount}
@@ -3161,7 +3166,7 @@ function EditExpenseModal({
               )}
 
               {/* 信用卡帳單／交易核對 */}
-              <div style={{
+              <div className="expense-editor-reconciliation" style={{
                 marginBottom: '0.75rem', padding: '0.8rem', borderRadius: '10px',
                 border: form.reconciled
                   ? '1px solid rgba(34, 197, 94, 0.45)'
@@ -3222,6 +3227,7 @@ function EditExpenseModal({
 
               {/* 備註 */}
               <input
+                data-layout="expense-editor-note"
                 className="input-field"
                 value={form.note}
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
@@ -3230,7 +3236,7 @@ function EditExpenseModal({
               />
 
               {/* 消費日期 */}
-              <div style={{ marginBottom: '0.75rem' }}>
+              <div className="expense-editor-date" style={{ marginBottom: '0.75rem' }}>
                 <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
                   消費日期
                 </label>
@@ -3244,7 +3250,7 @@ function EditExpenseModal({
               </div>
 
               {/* 圖片編輯 */}
-              <div style={{ marginBottom: '1rem' }}>
+              <div className="expense-editor-images" style={{ marginBottom: '1rem' }}>
                 <label style={{
                   display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)',
                   marginBottom: '0.375rem',
@@ -3310,13 +3316,13 @@ function EditExpenseModal({
               </div>
 
               {saveError && (
-                <div role="alert" style={{ color: 'var(--color-danger)', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
+                <div className="expense-editor-error" role="alert" style={{ color: 'var(--color-danger)', fontSize: '0.78rem', marginBottom: '0.75rem' }}>
                   {saveError}
                 </div>
               )}
 
               {/* 操作按鈕 */}
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <div className="expense-editor-actions" style={{ display: 'flex', gap: '0.75rem' }}>
                 <button
                   onClick={handleDelete}
                   disabled={deleting}
