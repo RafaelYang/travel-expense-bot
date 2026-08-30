@@ -20,6 +20,17 @@ export interface CashExchangeAmount {
   baseAmount: number
 }
 
+export interface ExpenseAdjustmentSummary {
+  serviceFee: number
+  shopbackReward: number
+  creditCardReward: number
+  totalRewards: number
+  netAdjustment: number
+  serviceFeeCount: number
+  shopbackRewardCount: number
+  creditCardRewardCount: number
+}
+
 export function getExpenseBaseAmount(
   expense: ExpenseAmount,
   baseCurrency: string,
@@ -59,6 +70,41 @@ export function applyExpenseAdjustments(
     + nonNegativeAdjustment(expense.serviceFee)
     - nonNegativeAdjustment(expense.shopbackReward)
     - nonNegativeAdjustment(expense.creditCardReward)
+}
+
+export function summarizeExpenseAdjustments(
+  expenses: readonly Pick<ExpenseAmount, "serviceFee" | "shopbackReward" | "creditCardReward">[],
+): ExpenseAdjustmentSummary {
+  let serviceFee = 0
+  let shopbackReward = 0
+  let creditCardReward = 0
+  let serviceFeeCount = 0
+  let shopbackRewardCount = 0
+  let creditCardRewardCount = 0
+
+  for (const expense of expenses) {
+    const expenseServiceFee = nonNegativeAdjustment(expense.serviceFee)
+    const expenseShopbackReward = nonNegativeAdjustment(expense.shopbackReward)
+    const expenseCreditCardReward = nonNegativeAdjustment(expense.creditCardReward)
+    serviceFee += expenseServiceFee
+    shopbackReward += expenseShopbackReward
+    creditCardReward += expenseCreditCardReward
+    if (expenseServiceFee > 0) serviceFeeCount += 1
+    if (expenseShopbackReward > 0) shopbackRewardCount += 1
+    if (expenseCreditCardReward > 0) creditCardRewardCount += 1
+  }
+
+  const totalRewards = shopbackReward + creditCardReward
+  return {
+    serviceFee,
+    shopbackReward,
+    creditCardReward,
+    totalRewards,
+    netAdjustment: serviceFee - totalRewards,
+    serviceFeeCount,
+    shopbackRewardCount,
+    creditCardRewardCount,
+  }
 }
 
 export function summarizeExpenses(

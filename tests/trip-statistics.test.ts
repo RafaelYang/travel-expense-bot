@@ -132,6 +132,63 @@ test("daily and category statistics include fees and subtract both reward types"
   assert.equal(result.netFundFlowTotal, 930)
   assert.equal(result.consumptionTotal, 930)
   assert.equal(result.categories[0].total, 930)
+  assert.deepEqual(result.adjustmentSummary, {
+    serviceFee: 30,
+    shopbackReward: 80,
+    creditCardReward: 20,
+    totalRewards: 100,
+    netAdjustment: -70,
+    serviceFeeCount: 1,
+    shopbackRewardCount: 1,
+    creditCardRewardCount: 1,
+  })
+})
+
+test("fee and reward analysis follows the selected date scope", () => {
+  const result = buildTripStatistics({
+    expenses: [
+      expense({
+        id: "before",
+        dayKey: "2026-07-16",
+        serviceFee: 25,
+        shopbackReward: 40,
+      }),
+      expense({
+        id: "during-one",
+        dayKey: "2026-07-17",
+        serviceFee: 30,
+        shopbackReward: 50,
+        creditCardReward: 20,
+      }),
+      expense({
+        id: "during-two",
+        dayKey: "2026-07-18",
+        serviceFee: 10,
+        creditCardReward: 5,
+      }),
+      expense({
+        id: "after",
+        dayKey: "2026-07-29",
+        serviceFee: 100,
+      }),
+    ],
+    exchanges: [],
+    baseCurrency: "TWD",
+    range,
+    scope: "trip",
+    categoryOrder: categories,
+  })
+
+  assert.deepEqual(result.adjustmentSummary, {
+    serviceFee: 40,
+    shopbackReward: 50,
+    creditCardReward: 25,
+    totalRewards: 75,
+    netAdjustment: -35,
+    serviceFeeCount: 2,
+    shopbackRewardCount: 1,
+    creditCardRewardCount: 2,
+  })
 })
 
 test("the selected date scope applies to both fund flow and consumption", () => {

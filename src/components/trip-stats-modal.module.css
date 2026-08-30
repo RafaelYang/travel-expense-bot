@@ -241,7 +241,7 @@
 }
 
 .segmented {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 1rem;
 }
 
@@ -490,6 +490,94 @@
   font-size: 0.78rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.adjustmentGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.adjustmentCard {
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 13px;
+  background: var(--bg-input);
+}
+
+.adjustmentCard span,
+.adjustmentCard small {
+  color: var(--text-secondary);
+}
+
+.adjustmentCard span {
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.adjustmentCard strong {
+  margin-top: 0.35rem;
+  font-size: clamp(1rem, 3.5vw, 1.25rem);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.adjustmentCard small {
+  margin-top: 0.25rem;
+  font-size: 0.68rem;
+}
+
+.adjustmentFee strong {
+  color: var(--color-warning-text);
+}
+
+.adjustmentReward strong {
+  color: var(--color-success);
+}
+
+.adjustmentSummary {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card-hover);
+}
+
+.adjustmentSummary div {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.adjustmentSummary div + div {
+  border-top: 1px solid var(--border-color);
+}
+
+.adjustmentSummary dt {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.adjustmentSummary dd {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.adjustmentOutcome {
+  margin-top: 0.7rem;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .negativeMoney {
@@ -1017,6 +1105,19 @@
 
   .selectedDay dl {
     grid-template-columns: 1fr;
+  }
+
+  .segmented button {
+    padding-inline: 0.35rem;
+    font-size: 0.76rem;
+  }
+
+  .adjustmentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adjustmentCard {
+    min-height: 88px;
   }
 
   .categoryBottomline {

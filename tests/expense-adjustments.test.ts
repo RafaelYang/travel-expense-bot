@@ -15,6 +15,9 @@ const settingsSource = source("../src/app/trips/[tripId]/settings/page.tsx")
 const recordsPageSource = source("../src/app/trips/[tripId]/records/page.tsx")
 const recordsClientSource = source("../src/app/trips/[tripId]/records/records-client.tsx")
 const batchSource = source("../src/components/batch-reconcile-modal.tsx")
+const statsModalSource = source("../src/components/trip-stats-modal.tsx")
+const statisticsSource = source("../src/lib/trip-statistics.ts")
+const i18nSource = source("../src/lib/i18n.ts")
 
 test("trip and expense schemas persist the adjustment toggle and three base-currency values", () => {
   assert.match(schemaSource, /expenseAdjustmentsEnabled Boolean @default\(false\)/u)
@@ -52,4 +55,13 @@ test("create, edit, records, and batch reconciliation all expose the three numer
     assert.match(batchSource, new RegExp(`${field}: parseAdjustment`))
   }
   assert.match(recordsClientSource, /getExpenseBaseAmount\(expense, initialTrip\.baseCurrency\)/u)
+})
+
+test("statistics expose a scoped fee and reward analysis without merging it into categories", () => {
+  assert.match(statisticsSource, /adjustmentSummary: summarizeExpenseAdjustments\(scopedExpenses\)/u)
+  assert.match(statsModalSource, /type StatsTab = "daily" \| "categories" \| "adjustments"/u)
+  assert.match(statsModalSource, /trip\.stats\.tab\.adjustments/u)
+  assert.match(statsModalSource, /statistics\.adjustmentSummary\.totalRewards/u)
+  assert.match(statsModalSource, /statistics\.adjustmentSummary\.netAdjustment/u)
+  assert.match(i18nSource, /'trip\.stats\.adjustmentsTitle': '服務費與回饋分析'/u)
 })

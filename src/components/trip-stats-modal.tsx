@@ -5,6 +5,7 @@ import { format } from "date-fns"
 import { enUS, zhTW } from "date-fns/locale"
 import {
   ArrowLeft,
+  BadgePercent,
   BarChart3,
   Banknote,
   ChevronRight,
@@ -77,7 +78,7 @@ type StatsView =
   | { kind: "category"; category: string }
   | { kind: "expense"; category: string; expenseId: string }
 
-type StatsTab = "daily" | "categories"
+type StatsTab = "daily" | "categories" | "adjustments"
 type PendingFocus =
   | { kind: "title" }
   | { kind: "category"; category: string }
@@ -200,6 +201,9 @@ export function TripStatsModal({
     ?? latestActivityPoint
     ?? statistics.dailyFundFlow.at(-1)
   const selectedPointDayKey = selectedPoint?.dayKey
+  const hasAdjustmentActivity = statistics.adjustmentSummary.serviceFeeCount > 0
+    || statistics.adjustmentSummary.shopbackRewardCount > 0
+    || statistics.adjustmentSummary.creditCardRewardCount > 0
 
   const maxPositive = Math.max(0, ...statistics.dailyFundFlow.map((point) => point.net))
   const maxNegative = Math.max(0, ...statistics.dailyFundFlow.map((point) => -point.net))
@@ -436,6 +440,15 @@ export function TripStatsModal({
                     <ReceiptText size={17} aria-hidden="true" />
                     {t("trip.stats.tab.categories")}
                   </button>
+                  <button
+                    type="button"
+                    className={tab === "adjustments" ? styles.segmentActive : undefined}
+                    onClick={() => setTab("adjustments")}
+                    aria-pressed={tab === "adjustments"}
+                  >
+                    <BadgePercent size={17} aria-hidden="true" />
+                    {t("trip.stats.tab.adjustments")}
+                  </button>
                 </div>
 
                 <div
@@ -583,7 +596,7 @@ export function TripStatsModal({
                       </div>
                     )}
                   </section>
-                ) : (
+                ) : tab === "categories" ? (
                   <section className={styles.sectionCard} aria-labelledby="category-consumption-title">
                     <div className={styles.sectionHeading}>
                       <div>
@@ -667,6 +680,69 @@ export function TripStatsModal({
                       </div>
                     )}
                   </section>
+                ) : (
+                  <section className={styles.sectionCard} aria-labelledby="expense-adjustment-title">
+                    <div className={styles.sectionHeading}>
+                      <div>
+                        <h3 id="expense-adjustment-title">{t("trip.stats.adjustmentsTitle")}</h3>
+                        <p>{t("trip.stats.adjustmentsHelp")}</p>
+                      </div>
+                      <div className={styles.sectionMetric}>
+                        <span>{t(scopeTranslationKey(scope))}</span>
+                        <strong className={statistics.adjustmentSummary.netAdjustment < 0 ? styles.negativeMoney : undefined}>
+                          {statistics.adjustmentSummary.netAdjustment > 0 ? "+" : ""}
+                          {money(statistics.adjustmentSummary.netAdjustment)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {hasAdjustmentActivity ? (
+                      <>
+                        <div className={styles.adjustmentGrid}>
+                          <article className={`${styles.adjustmentCard} ${styles.adjustmentFee}`}>
+                            <span>{t("expense.adjustments.serviceFee")}</span>
+                            <strong>+{money(statistics.adjustmentSummary.serviceFee)}</strong>
+                            <small>{t("trip.stats.adjustmentCount", { count: String(statistics.adjustmentSummary.serviceFeeCount) })}</small>
+                          </article>
+                          <article className={`${styles.adjustmentCard} ${styles.adjustmentReward}`}>
+                            <span>{t("expense.adjustments.shopback")}</span>
+                            <strong>−{money(statistics.adjustmentSummary.shopbackReward)}</strong>
+                            <small>{t("trip.stats.adjustmentCount", { count: String(statistics.adjustmentSummary.shopbackRewardCount) })}</small>
+                          </article>
+                          <article className={`${styles.adjustmentCard} ${styles.adjustmentReward}`}>
+                            <span>{t("expense.adjustments.creditCard")}</span>
+                            <strong>−{money(statistics.adjustmentSummary.creditCardReward)}</strong>
+                            <small>{t("trip.stats.adjustmentCount", { count: String(statistics.adjustmentSummary.creditCardRewardCount) })}</small>
+                          </article>
+                        </div>
+                        <dl className={styles.adjustmentSummary}>
+                          <div>
+                            <dt>{t("trip.stats.totalRewards")}</dt>
+                            <dd>−{money(statistics.adjustmentSummary.totalRewards)}</dd>
+                          </div>
+                          <div>
+                            <dt>{t("trip.stats.netAdjustment")}</dt>
+                            <dd className={statistics.adjustmentSummary.netAdjustment < 0 ? styles.negativeMoney : undefined}>
+                              {statistics.adjustmentSummary.netAdjustment > 0 ? "+" : ""}
+                              {money(statistics.adjustmentSummary.netAdjustment)}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className={styles.adjustmentOutcome}>
+                          {statistics.adjustmentSummary.netAdjustment < 0
+                            ? t("trip.stats.adjustmentSaved", { amount: money(Math.abs(statistics.adjustmentSummary.netAdjustment)) })
+                            : statistics.adjustmentSummary.netAdjustment > 0
+                              ? t("trip.stats.adjustmentAdded", { amount: money(statistics.adjustmentSummary.netAdjustment) })
+                              : t("trip.stats.adjustmentEven")}
+                        </p>
+                      </>
+                    ) : (
+                      <div className={styles.emptyState}>
+                        <BadgePercent size={28} aria-hidden="true" />
+                        <p>{t("trip.stats.emptyAdjustments")}</p>
+                      </div>
+                    )}
+                  </section>
                 )}
 
                 <section className={styles.fundSummary} aria-label={t("trip.stats.fundSummary")}>
@@ -692,6 +768,7 @@ export function TripStatsModal({
                     </summary>
                     <p>{t("trip.stats.calculationFundFlow")}</p>
                     <p>{t("trip.stats.calculationCategories")}</p>
+                    <p>{t("trip.stats.calculationAdjustments")}</p>
                     {((trip.missingConversionCount ?? 0) > 0 || (trip.foreignCurrencyDepositCount ?? 0) > 0) && (
                       <p className={styles.warningText}>
                         {t("trip.total.incomplete", {

@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   summarizeDeposits,
+  summarizeExpenseAdjustments,
   summarizeExpenses,
   summarizeTripSpending,
 } from "../src/lib/money.ts"
@@ -95,6 +96,25 @@ test("invalid legacy adjustment values never corrupt totals", () => {
   }], "TWD")
 
   assert.deepEqual(result, { total: 500, missingConversionCount: 0 })
+})
+
+test("expense adjustment summaries separate fees, reward sources, counts, and net effect", () => {
+  const result = summarizeExpenseAdjustments([
+    { serviceFee: 30, shopbackReward: 80, creditCardReward: 20 },
+    { serviceFee: 15, shopbackReward: 0, creditCardReward: 10 },
+    { serviceFee: Number.NaN, shopbackReward: -5, creditCardReward: Number.POSITIVE_INFINITY },
+  ])
+
+  assert.deepEqual(result, {
+    serviceFee: 45,
+    shopbackReward: 80,
+    creditCardReward: 30,
+    totalRewards: 110,
+    netAdjustment: -65,
+    serviceFeeCount: 2,
+    shopbackRewardCount: 1,
+    creditCardRewardCount: 2,
+  })
 })
 
 test("deposit totals only include values already denominated in the base currency", () => {

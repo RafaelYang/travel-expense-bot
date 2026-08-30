@@ -1,5 +1,6 @@
 import {
   getExpenseBaseAmount,
+  summarizeExpenseAdjustments,
   type CashExchangeAmount,
   type ExpenseAmount,
 } from "./money.ts"
@@ -260,6 +261,7 @@ export function buildTripStatistics<
   return {
     dailyFundFlow,
     categories,
+    adjustmentSummary: summarizeExpenseAdjustments(scopedExpenses),
     netFundFlowTotal: dailyFundFlow.reduce((total, point) => total + point.net, 0),
     consumptionTotal,
     fundFlowMissingConversionCount: dailyFundFlow.reduce(
