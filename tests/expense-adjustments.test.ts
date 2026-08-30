@@ -19,6 +19,7 @@ const batchSource = source("../src/components/batch-reconcile-modal.tsx")
 const statsModalSource = source("../src/components/trip-stats-modal.tsx")
 const statisticsSource = source("../src/lib/trip-statistics.ts")
 const i18nSource = source("../src/lib/i18n.ts")
+const globalsSource = source("../src/app/globals.css")
 
 test("trip and expense schemas persist independent adjustment options and three base-currency values", () => {
   assert.match(schemaSource, /expenseAdjustmentsEnabled Boolean @default\(false\)/u)
@@ -65,6 +66,18 @@ test("create, edit, records, and batch reconciliation all expose the three numer
     assert.match(batchSource, new RegExp(`${field}: parseAdjustment`))
   }
   assert.match(recordsClientSource, /getExpenseBaseAmount\(expense, initialTrip\.baseCurrency\)/u)
+})
+
+test("desktop expense editing is wider without changing the mobile modal width", () => {
+  assert.match(tripClientSource, /mode === 'edit' \? ' expense-editor-modal' : ''/u)
+  assert.match(
+    globalsSource,
+    /@media \(min-width: 768px\)[\s\S]*\.trip-modal\.expense-editor-modal \{\s*max-width: 680px !important;/u,
+  )
+  assert.doesNotMatch(
+    globalsSource.slice(0, globalsSource.indexOf("@media (min-width: 768px)")),
+    /expense-editor-modal/u,
+  )
 })
 
 test("statistics expose a scoped fee and reward analysis without merging it into categories", () => {

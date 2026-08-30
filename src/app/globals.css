@@ -2150,6 +2150,11 @@ a:hover .trip-card-bg {
     font-size: 0.95rem !important;
   }
 
+  /* 編輯花費欄位較多，僅在電腦版增加水平空間。 */
+  .trip-modal.expense-editor-modal {
+    max-width: 680px !important;
+  }
+
   /* 支出與收入大標題 */
   .trip-modal h2 {
     font-size: 1.6rem !important;

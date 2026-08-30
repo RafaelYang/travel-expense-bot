@@ -2827,7 +2827,7 @@ function EditExpenseModal({
         tabIndex={-1}
         onKeyDown={handleDialogKeyDown}
         onClick={(e) => e.stopPropagation()}
-        className="glass-card trip-modal"
+        className={`glass-card trip-modal${mode === 'edit' ? ' expense-editor-modal' : ''}`}
         style={{
           width: '100%', maxWidth: '420px', padding: '1.75rem',
           animation: 'fadeInDown 0.2s ease-out',
