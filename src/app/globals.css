@@ -2151,6 +2151,81 @@ a:hover .trip-card-bg {
   display: none;
 }
 
+.expense-editor-image-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.625rem;
+}
+
+.expense-editor-image-preview,
+.expense-editor-image-add {
+  width: 118px;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+}
+
+.expense-editor-image-preview {
+  position: relative;
+}
+
+.expense-editor-image-thumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.expense-editor-image-remove {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 9999px;
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.24);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.expense-editor-image-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem;
+  border: 1.5px dashed color-mix(in srgb, var(--color-primary) 46%, var(--border-color));
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  opacity: 0.72;
+  transition: opacity 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+}
+
+.expense-editor-image-add:hover,
+.expense-editor-image-add:focus-visible {
+  border-color: color-mix(in srgb, var(--color-primary) 72%, var(--border-color));
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  opacity: 1;
+}
+
+.expense-editor-image-add--loading {
+  cursor: wait;
+}
+
 /* ===== 電腦版彈窗（大螢幕）與字體優化 ===== */
 @media (min-width: 768px) {
   /* 彈窗整體放大 */
@@ -2237,6 +2312,14 @@ a:hover .trip-card-bg {
     letter-spacing: 0.04em;
   }
 
+  .expense-editor-classification-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
   .expense-editor-overview-grid {
     display: grid;
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -2268,11 +2351,18 @@ a:hover .trip-card-bg {
   }
 
   .expense-editor-currency-field {
-    margin-top: 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0;
+    padding-left: 1rem;
+    border-left: 1px solid var(--border-color);
+    white-space: nowrap;
   }
 
   .expense-editor-currencies {
-    margin-top: 0.35rem;
+    flex-wrap: nowrap !important;
+    margin-top: 0;
   }
 
   .expense-editor-lower-grid {
@@ -2310,16 +2400,32 @@ a:hover .trip-card-bg {
 
   .expense-editor-meta-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(250px, 0.8fr);
+    grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
     gap: 0.85rem;
     align-items: end;
   }
 
-  .expense-editor-images > div {
-    display: inline-flex !important;
-    vertical-align: middle;
-    margin-right: 0.75rem;
-    margin-bottom: 0 !important;
+  .expense-editor-image-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.625rem;
+  }
+
+  .expense-editor-image-preview,
+  .expense-editor-image-add {
+    width: 100%;
+    min-width: 0;
+    aspect-ratio: 4 / 3;
+  }
+
+  .expense-detail-modal .expense-editor-image-remove {
+    padding: 0 !important;
+    font-size: 0.72rem !important;
+  }
+
+  .expense-detail-modal .expense-editor-image-add {
+    padding: 0.65rem !important;
+    font-size: 0.75rem !important;
   }
 
   .expense-editor-error {

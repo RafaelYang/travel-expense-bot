@@ -91,6 +91,22 @@ test("desktop expense detail and editing use a wide grouped layout without chang
     globalsSource,
     /\.expense-editor-lower-grid \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/u,
   )
+  assert.match(
+    tripClientSource,
+    /expense-editor-classification-row[\s\S]*expense-editor-categories[\s\S]*expense-editor-currency-field[\s\S]*expense-editor-overview-grid/u,
+  )
+  assert.match(
+    globalsSource,
+    /\.expense-editor-classification-row \{[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto;/u,
+  )
+  assert.match(
+    tripClientSource,
+    /expense-editor-image-strip[\s\S]*expense-editor-image-preview[\s\S]*expense-editor-image-thumbnail[\s\S]*expense-editor-image-add/u,
+  )
+  assert.match(
+    globalsSource,
+    /\.expense-editor-image-strip \{[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[\s\S]*\.expense-editor-image-preview,[\s\S]*aspect-ratio: 4 \/ 3;/u,
+  )
   assert.doesNotMatch(
     globalsSource.slice(0, globalsSource.indexOf("@media (min-width: 768px)")),
     /\.expense-detail-modal \.expense-(?:detail|editor)-(?:content|gallery)/u,

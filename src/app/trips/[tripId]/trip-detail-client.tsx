@@ -3073,25 +3073,52 @@ function EditExpenseModal({
               <div className="expense-editor-panel expense-editor-overview">
                 <div className="expense-editor-panel-title">基本資料</div>
 
-              {/* 分類 */}
-              <div
-                className="expense-editor-categories"
-                role="group"
-                aria-label={locale === 'en' ? 'Category' : '分類'}
-                style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
-              >
-                {EXPENSE_CATEGORIES.map(c => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => setForm({ ...form, category: c.value })}
-                    aria-pressed={form.category === c.value}
-                    className="trip-choice-button trip-choice-button--compact trip-choice-button--category"
-                    style={{ '--choice-accent': c.color } as React.CSSProperties}
+              <div className="expense-editor-classification-row">
+                {/* 分類 */}
+                <div
+                  className="expense-editor-categories"
+                  role="group"
+                  aria-label={locale === 'en' ? 'Category' : '分類'}
+                  style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
+                >
+                  {EXPENSE_CATEGORIES.map(c => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => setForm({ ...form, category: c.value })}
+                      aria-pressed={form.category === c.value}
+                      className="trip-choice-button trip-choice-button--compact trip-choice-button--category"
+                      style={{ '--choice-accent': c.color } as React.CSSProperties}
+                    >
+                      {t(`cat.${c.value}`)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 幣種：桌機版接在分類後方，窄螢幕自然換行。 */}
+                <div className="expense-editor-currency-field">
+                  <span className="expense-editor-field-label">幣種</span>
+                  <div
+                    className="expense-editor-currencies"
+                    role="group"
+                    aria-label={t('form.currency')}
+                    style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
                   >
-                    {t(`cat.${c.value}`)}
-                  </button>
-                ))}
+                    {editCurrencyOptions.map(cur => (
+                      <button
+                        key={cur}
+                        type="button"
+                        onClick={() => setForm({
+                          ...form, currency: cur, reconciled: false, settledAmount: '',
+                        })}
+                        aria-pressed={form.currency === cur}
+                        className="trip-choice-button trip-choice-button--compact"
+                      >
+                        {getCurrencyChipLabel(cur, cleanCountries, locale)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div className="expense-editor-overview-grid">
@@ -3160,30 +3187,6 @@ function EditExpenseModal({
                 </div>
               </div>
 
-              {/* 幣種 */}
-              <div className="expense-editor-currency-field">
-                <span className="expense-editor-field-label">幣種</span>
-                <div
-                  className="expense-editor-currencies"
-                  role="group"
-                  aria-label={t('form.currency')}
-                  style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}
-                >
-                  {editCurrencyOptions.map(cur => (
-                    <button
-                      key={cur}
-                      type="button"
-                      onClick={() => setForm({
-                        ...form, currency: cur, reconciled: false, settledAmount: '',
-                      })}
-                      aria-pressed={form.currency === cur}
-                      className="trip-choice-button trip-choice-button--compact"
-                    >
-                      {getCurrencyChipLabel(cur, cleanCountries, locale)}
-                    </button>
-                  ))}
-                </div>
-              </div>
               </div>
 
               <div className="expense-editor-lower-grid">
@@ -3298,62 +3301,51 @@ function EditExpenseModal({
                 }}>
                   附圖（最多 3 張）
                 </label>
-                {editImages.length > 0 && (
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                    {editImages.map((src, idx) => (
-                      <div key={idx} style={{ position: 'relative' }}>
-                        <img src={src} alt="" style={{
-                          width: 72, height: 72, objectFit: 'cover',
-                          borderRadius: '8px', border: '1px solid var(--border-color)',
-                        }} />
-                        <button
-                          type="button"
-                          onClick={() => setEditImages(prev => prev.filter((_, i) => i !== idx))}
-                          style={{
-                            position: 'absolute', top: -6, right: -6,
-                            width: 20, height: 20, borderRadius: '50%',
-                            background: '#ef4444', color: '#fff',
-                            border: '2px solid white', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '10px', fontWeight: 700, lineHeight: 1,
-                          }}
-                        >✕</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {compressing ? (
-                  <div style={{
-                    padding: '0.4rem 0.75rem', fontSize: '0.75rem',
-                    display: 'flex', alignItems: 'center', gap: '0.375rem',
-                    color: 'var(--color-primary)',
-                  }}>
-                    <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                    圖片處理中...
-                  </div>
-                ) : editImages.length < 3 && (
-                  <>
-                    <input
-                      ref={editFileRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleEditImageSelect}
-                      style={{ display: 'none' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => editFileRef.current?.click()}
-                      className="btn-nav"
-                      style={{
-                        padding: '0.4rem 0.75rem', fontSize: '0.75rem',
-                        display: 'flex', alignItems: 'center', gap: '0.375rem',
-                      }}
-                    >
-                      <ImagePlus size={14} /> 新增圖片
-                    </button>
-                  </>
-                )}
+                <div className="expense-editor-image-strip">
+                  {editImages.length > 0 && editImages.map((src, idx) => (
+                    <div key={idx} className="expense-editor-image-preview">
+                      <Image
+                        unoptimized
+                        src={src}
+                        alt={`附圖 ${idx + 1}`}
+                        width={160}
+                        height={120}
+                        className="expense-editor-image-thumbnail"
+                      />
+                      <button
+                        type="button"
+                        aria-label={`移除附圖 ${idx + 1}`}
+                        onClick={() => setEditImages(prev => prev.filter((_, i) => i !== idx))}
+                        className="expense-editor-image-remove"
+                      >✕</button>
+                    </div>
+                  ))}
+                  {compressing ? (
+                    <div className="expense-editor-image-add expense-editor-image-add--loading" role="status">
+                      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                      <span>圖片處理中...</span>
+                    </div>
+                  ) : editImages.length < 3 && (
+                    <>
+                      <input
+                        ref={editFileRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleEditImageSelect}
+                        style={{ display: 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => editFileRef.current?.click()}
+                        className="expense-editor-image-add"
+                      >
+                        <ImagePlus size={20} />
+                        <span>新增圖片</span>
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
                 </div>
               </div>
