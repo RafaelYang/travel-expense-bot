@@ -10,6 +10,10 @@ const globalCss = readFileSync(
   new URL("../src/app/globals.css", import.meta.url),
   "utf8",
 )
+const i18nSource = readFileSync(
+  new URL("../src/lib/i18n.ts", import.meta.url),
+  "utf8",
+)
 
 function cssRule(selector: string) {
   const start = globalCss.indexOf(`${selector} {`)
@@ -65,7 +69,9 @@ test("normal transaction rows prioritize item and amount without recorder or rec
   assert.doesNotMatch(clientSource, /\{exchange\.user\?\.name\}/u)
 })
 
-test("mobile day headers visually hide the daily-net label while preserving it for assistive technology", () => {
+test("day headers call the expense-only amount a spending total and hide that label visually on mobile", () => {
+  assert.match(i18nSource, /'trip\.dailyNet': '支出合計'/u)
+  assert.doesNotMatch(i18nSource, /當日淨花費/u)
   assert.match(
     clientSource,
     /<span className="transaction-day-net-label">\s*\{t\('trip\.dailyNet'\)\}/u,
