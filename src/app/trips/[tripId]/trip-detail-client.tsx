@@ -2740,6 +2740,12 @@ function EditExpenseModal({
   const netBaseAmount = getExpenseBaseAmount(expense, baseCurrency)
 
   const isBusy = saving || deleting
+  const canSave = !saving
+    && !deleting
+    && !compressing
+    && Boolean(form.item)
+    && Boolean(form.amount)
+    && reconciliationIsValid
 
   useEffect(() => {
     returnFocusRef.current = document.activeElement instanceof HTMLElement
@@ -2807,7 +2813,9 @@ function EditExpenseModal({
   return (
     <ModalScrollLock>
     <div
-      onClick={() => { if (!isBusy) onClose() }}
+      onClick={() => {
+        if (!isBusy && mode === 'view') onClose()
+      }}
       style={{
         position: 'fixed', inset: 0, zIndex: 20000,
         background: 'rgba(0, 0, 0, 0.5)',
@@ -3053,7 +3061,15 @@ function EditExpenseModal({
             </div>
 
             {/* 內容：桌機以雙欄壓縮高度，窄螢幕仍維持原本順序。 */}
-            <div className="trip-modal-scroll-area expense-editor-content" style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+            <form
+              className="trip-modal-scroll-area expense-editor-content"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (!canSave) return
+                void handleSave()
+              }}
+              style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}
+            >
               <div className="expense-editor-panel expense-editor-overview">
                 <div className="expense-editor-panel-title">基本資料</div>
 
@@ -3351,6 +3367,7 @@ function EditExpenseModal({
               {/* 操作按鈕 */}
               <div className="expense-editor-actions" style={{ display: 'flex', gap: '0.75rem' }}>
                 <button
+                  type="button"
                   onClick={handleDelete}
                   disabled={deleting}
                   className="btn-nav"
@@ -3364,8 +3381,8 @@ function EditExpenseModal({
                   {deleting ? '刪除中...' : '刪除'}
                 </button>
                 <button
-                  onClick={handleSave}
-                  disabled={saving || deleting || compressing || !form.item || !form.amount || !reconciliationIsValid}
+                  type="submit"
+                  disabled={!canSave}
                   className="btn-primary"
                   style={{
                     flex: 1, justifyContent: 'center', padding: '0.625rem',
@@ -3383,7 +3400,7 @@ function EditExpenseModal({
                   )}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         )}
       </div>

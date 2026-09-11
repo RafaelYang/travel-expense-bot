@@ -97,6 +97,25 @@ test("desktop expense detail and editing use a wide grouped layout without chang
   )
 })
 
+test("expense editing ignores backdrop clicks and supports Enter-to-save through the form guard", () => {
+  assert.match(
+    tripClientSource,
+    /if \(!isBusy && mode === 'view'\) onClose\(\)/u,
+  )
+  assert.match(
+    tripClientSource,
+    /const canSave = !saving[\s\S]*&& reconciliationIsValid/u,
+  )
+  assert.match(
+    tripClientSource,
+    /<form[\s\S]*className="trip-modal-scroll-area expense-editor-content"[\s\S]*onSubmit=\{\(event\) => \{[\s\S]*event\.preventDefault\(\)[\s\S]*if \(!canSave\) return[\s\S]*void handleSave\(\)[\s\S]*<button[\s\S]*type="submit"[\s\S]*disabled=\{!canSave\}[\s\S]*儲存修改[\s\S]*<\/form>/u,
+  )
+  assert.match(
+    tripClientSource,
+    /<button\s+type="button"\s+onClick=\{handleDelete\}/u,
+  )
+})
+
 test("statistics expose a scoped fee and reward analysis without merging it into categories", () => {
   assert.match(statisticsSource, /adjustmentSummary: summarizeExpenseAdjustments\(scopedExpenses\)/u)
   assert.match(statsModalSource, /type StatsTab = "daily" \| "categories" \| "adjustments"/u)
