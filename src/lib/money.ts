@@ -32,17 +32,18 @@ export interface ExpenseAdjustmentSummary {
 }
 
 export interface TripFinalCostBreakdown {
-  preRewardTotal: number
+  preAdjustmentTotal: number
   finalCost: number
 }
 
 export function getTripFinalCostBreakdown(
   totalSpent: number,
   totalDeposits: number,
+  serviceFee: number,
   totalRewards: number,
 ): TripFinalCostBreakdown {
   return {
-    preRewardTotal: totalSpent + totalRewards,
+    preAdjustmentTotal: totalSpent - serviceFee + totalRewards,
     finalCost: totalSpent - totalDeposits,
   }
 }

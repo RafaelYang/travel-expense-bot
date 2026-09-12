@@ -50,10 +50,18 @@ test("fee and reward view avoids duplicate figures and collapses the fund summar
 
 test("trip fund hero shows a balanced final-cost formula", () => {
   assert.match(modalSource, /trip\.totalDeposits > 0/u)
-  assert.match(modalSource, /getTripFinalCostBreakdown\([\s\S]*?trip\.totalSpent,[\s\S]*?trip\.totalDeposits,[\s\S]*?statistics\.adjustmentSummary\.totalRewards/u)
+  assert.match(modalSource, /getTripFinalCostBreakdown\([\s\S]*?trip\.totalSpent,[\s\S]*?trip\.totalDeposits,[\s\S]*?statistics\.adjustmentSummary\.serviceFee,[\s\S]*?statistics\.adjustmentSummary\.totalRewards/u)
   assert.match(modalSource, /trip\.stats\.costFormula\.current/u)
+  assert.match(modalSource, /trip\.stats\.costFormula\.fee/u)
   assert.match(modalSource, /trip\.stats\.costFormula\.final/u)
-  assert.match(i18nSource, /'trip\.stats\.costFormula\.current': '目前總花費（回饋前）'/u)
+  assert.match(i18nSource, /'trip\.stats\.costFormula\.fee': '＋ 手續費'/u)
+})
+
+test("where-it-went includes the special flight and hotel category", () => {
+  assert.match(modalSource, /FLIGHT_HOTEL_CATEGORY/u)
+  assert.match(modalSource, /resolveCategory: resolveTripStatisticsCategory/u)
+  assert.match(i18nSource, /'trip\.stats\.category\.flightHotel': '✈️ 機＋酒'/u)
+  assert.match(i18nSource, /機票與住宿合併為「機＋酒」/u)
 })
 
 test("daily chart starts without details and toggles the selected day off", () => {

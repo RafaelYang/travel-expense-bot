@@ -3,8 +3,10 @@ import test from "node:test"
 
 import {
   buildTripStatistics,
+  FLIGHT_HOTEL_CATEGORY,
   getTripBoundaryDayKey,
   isDayInStatisticsScope,
+  resolveTripStatisticsCategory,
   type StatisticsExchange,
   type StatisticsExpense,
 } from "../src/lib/trip-statistics.ts"
@@ -300,6 +302,31 @@ test("category consumption includes cash, keeps missing conversions, and groups 
   assert.equal(result.categories[1].pricedCount, 0)
   assert.equal(result.categories[1].missingConversionCount, 1)
   assert.equal(result.categories[1].percentOfKnownTotal, 0)
+})
+
+test("flight and hotel classification combines airfare and stays without double counting", () => {
+  const result = buildTripStatistics({
+    expenses: [
+      expense({ id: "hotel", dayKey: "2026-07-18", category: "accommodation", item: "Sydney hotel", amount: 400 }),
+      expense({ id: "airfare", dayKey: "2026-07-18", category: "transport", item: "機票", amount: 1_000 }),
+      expense({ id: "airport-train", dayKey: "2026-07-18", category: "transport", item: "機場捷運", amount: 200 }),
+      expense({ id: "meal", dayKey: "2026-07-18", category: "food", amount: 100 }),
+    ],
+    exchanges: [],
+    baseCurrency: "TWD",
+    range,
+    scope: "trip",
+    categoryOrder: [FLIGHT_HOTEL_CATEGORY, ...categories],
+    resolveCategory: resolveTripStatisticsCategory,
+  })
+
+  const flightHotel = result.categories.find((category) => category.category === FLIGHT_HOTEL_CATEGORY)
+  const transport = result.categories.find((category) => category.category === "transport")
+  assert.equal(flightHotel?.total, 1_400)
+  assert.deepEqual(flightHotel?.details.map((detail) => detail.expense.id), ["airfare", "hotel"])
+  assert.equal(transport?.total, 200)
+  assert.equal(result.consumptionTotal, 1_700)
+  assert.equal(result.categories.reduce((total, category) => total + category.total, 0), 1_700)
 })
 
 test("category details have a stable newest-first ordering", () => {

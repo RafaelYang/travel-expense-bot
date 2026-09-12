@@ -22,7 +22,9 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useLanguage } from "@/components/language-provider"
 import {
   buildTripStatistics,
+  FLIGHT_HOTEL_CATEGORY,
   getTripBoundaryDayKey,
+  resolveTripStatisticsCategory,
   type StatisticsExpense,
 } from "@/lib/trip-statistics"
 import { getTripFinalCostBreakdown } from "@/lib/money"
@@ -84,7 +86,11 @@ type PendingFocus =
   | { kind: "category"; category: string }
   | { kind: "expense"; expenseId: string }
 
-const CATEGORY_ORDER = EXPENSE_CATEGORIES.map((category) => category.value)
+const CATEGORY_ORDER = [
+  FLIGHT_HOTEL_CATEGORY,
+  ...EXPENSE_CATEGORIES.map((category) => category.value),
+]
+const FLIGHT_HOTEL_CATEGORY_COLOR = "#0ea5e9"
 
 function calendarDayKey(value: string | Date) {
   return format(new Date(value), "yyyy-MM-dd")
@@ -146,6 +152,7 @@ export function TripStatsModal({
     },
     scope: "all",
     categoryOrder: CATEGORY_ORDER,
+    resolveCategory: resolveTripStatisticsCategory,
     fillTripDaysThrough: todayDayKey,
   }), [
     statisticsExchanges,
@@ -192,6 +199,7 @@ export function TripStatsModal({
   const finalCostBreakdown = getTripFinalCostBreakdown(
     trip.totalSpent,
     trip.totalDeposits,
+    statistics.adjustmentSummary.serviceFee,
     statistics.adjustmentSummary.totalRewards,
   )
 
@@ -218,7 +226,14 @@ export function TripStatsModal({
     { locale: dateLocale },
   )
   const categoryLabel = (category: string) => t(
-    `cat.${CATEGORY_ORDER.some((knownCategory) => knownCategory === category) ? category : "other"}`,
+    category === FLIGHT_HOTEL_CATEGORY
+      ? "trip.stats.category.flightHotel"
+      : `cat.${EXPENSE_CATEGORIES.some((knownCategory) => knownCategory.value === category) ? category : "other"}`,
+  )
+  const categoryColor = (category: string) => (
+    category === FLIGHT_HOTEL_CATEGORY
+      ? FLIGHT_HOTEL_CATEGORY_COLOR
+      : getCategoryInfo(category).color
   )
 
   useEffect(() => {
@@ -373,7 +388,11 @@ export function TripStatsModal({
                           {t("trip.stats.costFormula.current")}
                           {totalIsEstimated && <span className={styles.estimated}> {t("trip.stats.estimated")}</span>}
                         </dt>
-                        <dd>{money(finalCostBreakdown.preRewardTotal)}</dd>
+                        <dd>{money(finalCostBreakdown.preAdjustmentTotal)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("trip.stats.costFormula.fee")}</dt>
+                        <dd>{money(statistics.adjustmentSummary.serviceFee)}</dd>
                       </div>
                       <div>
                         <dt>{t("trip.stats.costFormula.deposit")}</dt>
@@ -619,7 +638,6 @@ export function TripStatsModal({
                     {statistics.categories.length > 0 ? (
                       <ul className={styles.categoryList}>
                         {statistics.categories.map((category) => {
-                          const info = getCategoryInfo(category.category)
                           return (
                             <li key={category.category}>
                               <button
@@ -644,7 +662,7 @@ export function TripStatsModal({
                                     })
                                     : t("trip.stats.allConverted"),
                                 })}
-                                style={{ "--category-color": info.color } as CSSProperties}
+                                style={{ "--category-color": categoryColor(category.category) } as CSSProperties}
                               >
                                 <span className={styles.categoryTopline}>
                                   <span className={styles.categoryName}>{categoryLabel(category.category)}</span>
@@ -779,7 +797,7 @@ export function TripStatsModal({
               <section>
                 <div
                   className={styles.categorySummary}
-                  style={{ "--category-color": getCategoryInfo(selectedCategory.category).color } as CSSProperties}
+                  style={{ "--category-color": categoryColor(selectedCategory.category) } as CSSProperties}
                 >
                   <div>
                     <span>{categoryLabel(selectedCategory.category)}</span>
@@ -882,7 +900,7 @@ export function TripStatsModal({
               <article className={styles.expenseDetail}>
                 <span
                   className={styles.detailCategory}
-                  style={{ "--category-color": getCategoryInfo(selectedCategory.category).color } as CSSProperties}
+                  style={{ "--category-color": categoryColor(selectedCategory.category) } as CSSProperties}
                 >
                   {categoryLabel(selectedCategory.category)}
                 </span>

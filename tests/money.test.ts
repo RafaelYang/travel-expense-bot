@@ -10,13 +10,13 @@ import {
 } from "../src/lib/money.ts"
 
 test("final trip cost subtracts deposits and rewards exactly once", () => {
-  const result = getTripFinalCostBreakdown(225_832, 155_000, 7_539)
+  const result = getTripFinalCostBreakdown(225_832, 155_000, 2_018, 7_539)
 
   assert.deepEqual(result, {
-    preRewardTotal: 233_371,
+    preAdjustmentTotal: 231_353,
     finalCost: 70_832,
   })
-  assert.equal(result.preRewardTotal - 155_000 - 7_539, result.finalCost)
+  assert.equal(result.preAdjustmentTotal + 2_018 - 155_000 - 7_539, result.finalCost)
 })
 
 test("expense totals never treat a missing foreign exchange rate as 1:1", () => {

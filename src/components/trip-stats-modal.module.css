@@ -131,7 +131,7 @@
 .heroEquation {
   display: grid;
   width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   margin: 0;
 }
 
@@ -1134,6 +1134,10 @@
     border-right: 0;
   }
 
+  .heroEquation > div:nth-child(4) {
+    border-right: 0;
+  }
+
   .heroEquation > div:first-child,
   .heroEquation > div:nth-child(3) {
     padding-left: 0;
@@ -1141,6 +1145,10 @@
 
   .heroEquation dd {
     font-size: clamp(1rem, 5.8vw, 1.25rem);
+  }
+
+  .heroEquation .heroEquationResult {
+    grid-column: 1 / -1;
   }
 
   .header {

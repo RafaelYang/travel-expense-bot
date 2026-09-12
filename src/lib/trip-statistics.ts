@@ -55,6 +55,20 @@ export interface CategoryConsumption<E> {
   details: CategoryExpenseDetail<E>[]
 }
 
+export const FLIGHT_HOTEL_CATEGORY = "flightHotel"
+
+const AIRFARE_ITEM_PATTERN = /(?:機票|航班|航空|飛機票|air\s*ticket|airfare|airline|flight)/iu
+
+export function resolveTripStatisticsCategory(
+  expense: Pick<StatisticsExpense, "category" | "item">,
+) {
+  if (expense.category === "accommodation") return FLIGHT_HOTEL_CATEGORY
+  if (expense.category === "transport" && AIRFARE_ITEM_PATTERN.test(expense.item)) {
+    return FLIGHT_HOTEL_CATEGORY
+  }
+  return expense.category
+}
+
 const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 export function getTripBoundaryDayKey(value: string) {
@@ -125,6 +139,7 @@ export function buildTripStatistics<
   range: StatisticsRange
   scope: StatisticsScope
   categoryOrder: readonly string[]
+  resolveCategory?: (expense: E) => string
   fillTripDaysThrough?: DayKey
 }) {
   const {
@@ -134,6 +149,7 @@ export function buildTripStatistics<
     range,
     scope,
     categoryOrder,
+    resolveCategory,
     fillTripDaysThrough,
   } = input
   assertRange(range)
@@ -217,9 +233,10 @@ export function buildTripStatistics<
   }>()
 
   for (const expense of scopedExpenses) {
-    const category = categoryOrder.includes(expense.category)
-      ? expense.category
-      : (fallbackCategory ?? expense.category)
+    const resolvedCategory = resolveCategory?.(expense) ?? expense.category
+    const category = categoryOrder.includes(resolvedCategory)
+      ? resolvedCategory
+      : (fallbackCategory ?? resolvedCategory)
     const current = categoryMap.get(category) ?? {
       total: 0,
       count: 0,
