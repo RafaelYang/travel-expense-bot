@@ -9,7 +9,7 @@ import { Navbar } from "@/components/navbar"
 import {
   ArrowLeft, Copy, Check, PlusCircle, Trash2,
   Loader2, Settings, Users, Share2, AlertTriangle, Mail, Send,
-  UserMinus,
+  UserMinus, BadgeCheck,
 } from "lucide-react"
 import Link from "next/link"
 import { useLanguage } from "@/components/language-provider"
@@ -104,6 +104,12 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
   const [emailSending, setEmailSending] = useState(false)
   const [emailSent, setEmailSent] = useState(false)
   const [emailError, setEmailError] = useState("")
+  const [completionSending, setCompletionSending] = useState(false)
+  const [completionResult, setCompletionResult] = useState<{
+    sentCount: number
+    failedCount: number
+  } | null>(null)
+  const [completionError, setCompletionError] = useState("")
   const [removingMember, setRemovingMember] = useState<string | null>(null)
   const { t, locale } = useLanguage()
 
@@ -350,6 +356,39 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
       setSaveError(error instanceof Error ? error.message : t('settings.save.error'))
     } finally {
       setSaving(false)
+    }
+  }
+
+  const sendCompletionNotification = async () => {
+    if (!trip || hasUnsavedChanges || saving) return
+    const confirmed = window.confirm(t('settings.completion.confirm', {
+      count: String(trip.members.length),
+    }))
+    if (!confirmed) return
+
+    setCompletionSending(true)
+    setCompletionResult(null)
+    setCompletionError("")
+    try {
+      const response = await fetch(`/api/trips/${tripId}/completion-email`, {
+        method: "POST",
+      })
+      const result = await response.json().catch(() => null) as {
+        error?: string
+        sentCount?: number
+        failedCount?: number
+      } | null
+      if (!response.ok || typeof result?.sentCount !== "number") {
+        throw new Error(result?.error || t('settings.completion.error'))
+      }
+      setCompletionResult({
+        sentCount: result.sentCount,
+        failedCount: result.failedCount || 0,
+      })
+    } catch (error) {
+      setCompletionError(error instanceof Error ? error.message : t('settings.completion.error'))
+    } finally {
+      setCompletionSending(false)
     }
   }
 
@@ -733,6 +772,91 @@ export default function TripSettingsPage({ params }: { params: Promise<{ tripId:
             )}
           </fieldset>
         </div>
+
+        {trip.userRole === 'owner' && (
+          <section className="glass-card" style={{
+            padding: '1.5rem', marginBottom: '1rem',
+            border: '1px solid rgba(14, 165, 233, 0.24)',
+          }}>
+            <h3 style={{
+              fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.5rem',
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+            }}>
+              <BadgeCheck size={17} style={{ color: 'var(--color-primary)' }} />
+              {t('settings.completion.title')}
+            </h3>
+            <p style={{
+              fontSize: '0.8rem', color: 'var(--text-muted)',
+              marginBottom: '1rem', lineHeight: 1.6,
+            }}>
+              {t('settings.completion.desc', { count: String(trip.members.length) })}
+            </p>
+
+            <button
+              type="button"
+              onClick={sendCompletionNotification}
+              className="btn-primary"
+              disabled={completionSending || hasUnsavedChanges || saving}
+              style={{
+                justifyContent: 'center', width: '100%',
+                opacity: completionSending || hasUnsavedChanges || saving ? 0.6 : 1,
+              }}
+            >
+              {completionSending ? (
+                <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> {t('settings.completion.sending')}</>
+              ) : (
+                <><Send size={16} /> {t('settings.completion.send')}</>
+              )}
+            </button>
+
+            {hasUnsavedChanges && (
+              <p style={{
+                margin: '0.625rem 0 0', fontSize: '0.72rem',
+                color: 'var(--color-primary-text)', textAlign: 'center',
+              }}>
+                {t('settings.completion.saveFirst')}
+              </p>
+            )}
+
+            {completionResult && (
+              <div role="status" aria-live="polite" style={{
+                marginTop: '0.75rem', padding: '0.625rem 0.875rem',
+                borderRadius: 'var(--radius)',
+                background: completionResult.failedCount > 0
+                  ? 'rgba(245, 158, 11, 0.1)'
+                  : 'rgba(34, 197, 94, 0.1)',
+                border: completionResult.failedCount > 0
+                  ? '1px solid rgba(245, 158, 11, 0.25)'
+                  : '1px solid rgba(34, 197, 94, 0.2)',
+                color: completionResult.failedCount > 0
+                  ? 'var(--color-primary-text)'
+                  : 'var(--color-success)',
+                fontSize: '0.8rem', fontWeight: 600,
+              }}>
+                {completionResult.failedCount > 0
+                  ? t('settings.completion.partial', {
+                    sent: String(completionResult.sentCount),
+                    failed: String(completionResult.failedCount),
+                  })
+                  : t('settings.completion.sent', {
+                    count: String(completionResult.sentCount),
+                  })}
+              </div>
+            )}
+
+            {completionError && (
+              <div role="alert" style={{
+                marginTop: '0.75rem', padding: '0.625rem 0.875rem',
+                borderRadius: 'var(--radius)',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                color: 'var(--color-danger)', fontSize: '0.8rem', fontWeight: 600,
+              }}>
+                {completionError}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 邀請碼區塊 */}
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
