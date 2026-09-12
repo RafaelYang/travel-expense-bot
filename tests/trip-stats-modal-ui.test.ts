@@ -33,3 +33,18 @@ test("desktop statistics use a wider and taller dialog while mobile remains full
     /@media \(max-width: 640px\) \{[\s\S]*?\.modal \{[\s\S]*?width: 100vw;[\s\S]*?height: 100dvh;[\s\S]*?max-height: none;/u,
   )
 })
+
+test("fee and reward view avoids duplicate figures and collapses the fund summary", () => {
+  assert.match(modalSource, /trip\.stats\.adjustmentResult\.saved/u)
+  assert.doesNotMatch(modalSource, /trip\.stats\.(?:adjustmentCount|totalRewards|netAdjustment)/u)
+  assert.doesNotMatch(modalSource, /statistics\.adjustmentSummary\.totalRewards/u)
+  assert.doesNotMatch(modalSource, /styles\.adjustmentSummary/u)
+  assert.match(
+    modalSource,
+    /<details className=\{styles\.fundSummary\}>[\s\S]*?<summary className=\{styles\.fundSummaryToggle\}>/u,
+  )
+  assert.match(
+    modalStyles,
+    /\.fundSummary\[open\] \.fundSummaryToggle svg \{[\s\S]*?transform: rotate\(90deg\);/u,
+  )
+})

@@ -655,13 +655,6 @@ export function TripStatsModal({
                         <h3 id="expense-adjustment-title">{t("trip.stats.adjustmentsTitle")}</h3>
                         <p>{t("trip.stats.adjustmentsHelp")}</p>
                       </div>
-                      <div className={styles.sectionMetric}>
-                        <span>{t("trip.stats.scope.all")}</span>
-                        <strong className={statistics.adjustmentSummary.netAdjustment < 0 ? styles.negativeMoney : undefined}>
-                          {statistics.adjustmentSummary.netAdjustment > 0 ? "+" : ""}
-                          {money(statistics.adjustmentSummary.netAdjustment)}
-                        </strong>
-                      </div>
                     </div>
 
                     {hasAdjustmentActivity ? (
@@ -670,39 +663,36 @@ export function TripStatsModal({
                           <article className={`${styles.adjustmentCard} ${styles.adjustmentFee}`}>
                             <span>{t("expense.adjustments.serviceFee")}</span>
                             <strong>+{money(statistics.adjustmentSummary.serviceFee)}</strong>
-                            <small>{t("trip.stats.adjustmentCount", { count: String(statistics.adjustmentSummary.serviceFeeCount) })}</small>
                           </article>
                           <article className={`${styles.adjustmentCard} ${styles.adjustmentReward}`}>
                             <span>{t("expense.adjustments.shopback")}</span>
                             <strong>−{money(statistics.adjustmentSummary.shopbackReward)}</strong>
-                            <small>{t("trip.stats.adjustmentCount", { count: String(statistics.adjustmentSummary.shopbackRewardCount) })}</small>
                           </article>
                           <article className={`${styles.adjustmentCard} ${styles.adjustmentReward}`}>
                             <span>{t("expense.adjustments.creditCard")}</span>
                             <strong>−{money(statistics.adjustmentSummary.creditCardReward)}</strong>
-                            <small>{t("trip.stats.adjustmentCount", { count: String(statistics.adjustmentSummary.creditCardRewardCount) })}</small>
                           </article>
                         </div>
-                        <dl className={styles.adjustmentSummary}>
-                          <div>
-                            <dt>{t("trip.stats.totalRewards")}</dt>
-                            <dd>−{money(statistics.adjustmentSummary.totalRewards)}</dd>
-                          </div>
-                          <div>
-                            <dt>{t("trip.stats.netAdjustment")}</dt>
-                            <dd className={statistics.adjustmentSummary.netAdjustment < 0 ? styles.negativeMoney : undefined}>
-                              {statistics.adjustmentSummary.netAdjustment > 0 ? "+" : ""}
-                              {money(statistics.adjustmentSummary.netAdjustment)}
-                            </dd>
-                          </div>
-                        </dl>
-                        <p className={styles.adjustmentOutcome}>
-                          {statistics.adjustmentSummary.netAdjustment < 0
-                            ? t("trip.stats.adjustmentSaved", { amount: money(Math.abs(statistics.adjustmentSummary.netAdjustment)) })
-                            : statistics.adjustmentSummary.netAdjustment > 0
-                              ? t("trip.stats.adjustmentAdded", { amount: money(statistics.adjustmentSummary.netAdjustment) })
-                              : t("trip.stats.adjustmentEven")}
-                        </p>
+                        <div className={styles.adjustmentOutcome}>
+                          <span>
+                            {statistics.adjustmentSummary.netAdjustment < 0
+                              ? t("trip.stats.adjustmentResult.saved")
+                              : statistics.adjustmentSummary.netAdjustment > 0
+                                ? t("trip.stats.adjustmentResult.added")
+                                : t("trip.stats.adjustmentResult.even")}
+                          </span>
+                          <strong
+                            className={
+                              statistics.adjustmentSummary.netAdjustment < 0
+                                ? styles.negativeMoney
+                                : statistics.adjustmentSummary.netAdjustment > 0
+                                  ? styles.dangerMoney
+                                  : undefined
+                            }
+                          >
+                            {money(Math.abs(statistics.adjustmentSummary.netAdjustment))}
+                          </strong>
+                        </div>
                       </>
                     ) : (
                       <div className={styles.emptyState}>
@@ -713,40 +703,46 @@ export function TripStatsModal({
                   </section>
                 )}
 
-                <section className={styles.fundSummary} aria-label={t("trip.stats.fundSummary")}>
-                  <div>
-                    <span>{t("trip.stats.deposited", { count: String(includedDepositCount) })}</span>
-                    <strong>{money(trip.totalDeposits)}</strong>
-                  </div>
-                  {foreignDepositCount > 0 && (
-                    <p className={styles.warningText}>
-                      {t("trip.stats.depositIncomplete", { count: String(foreignDepositCount) })}
-                    </p>
-                  )}
-                  <div className={styles.balanceRow}>
-                    <span>{t("trip.stats.estimatedBalance")}</span>
-                    <strong className={(trip.totalDeposits - trip.totalSpent) < 0 ? styles.dangerMoney : undefined}>
-                      {money(trip.totalDeposits - trip.totalSpent)}
-                    </strong>
-                  </div>
-                  <details className={styles.calculationDetails}>
-                    <summary>
-                      <Info size={16} aria-hidden="true" />
-                      {t("trip.stats.calculation")}
-                    </summary>
-                    <p>{t("trip.stats.calculationFundFlow")}</p>
-                    <p>{t("trip.stats.calculationCategories")}</p>
-                    <p>{t("trip.stats.calculationAdjustments")}</p>
-                    {((trip.missingConversionCount ?? 0) > 0 || (trip.foreignCurrencyDepositCount ?? 0) > 0) && (
+                <details className={styles.fundSummary}>
+                  <summary className={styles.fundSummaryToggle}>
+                    <span>{t("trip.stats.fundSummary")}</span>
+                    <ChevronRight size={18} aria-hidden="true" />
+                  </summary>
+                  <div className={styles.fundSummaryContent}>
+                    <div className={styles.fundSummaryRow}>
+                      <span>{t("trip.stats.deposited", { count: String(includedDepositCount) })}</span>
+                      <strong>{money(trip.totalDeposits)}</strong>
+                    </div>
+                    {foreignDepositCount > 0 && (
                       <p className={styles.warningText}>
-                        {t("trip.total.incomplete", {
-                          expenses: String(trip.missingConversionCount ?? 0),
-                          deposits: String(trip.foreignCurrencyDepositCount ?? 0),
-                        })}
+                        {t("trip.stats.depositIncomplete", { count: String(foreignDepositCount) })}
                       </p>
                     )}
-                  </details>
-                </section>
+                    <div className={`${styles.fundSummaryRow} ${styles.balanceRow}`}>
+                      <span>{t("trip.stats.estimatedBalance")}</span>
+                      <strong className={(trip.totalDeposits - trip.totalSpent) < 0 ? styles.dangerMoney : undefined}>
+                        {money(trip.totalDeposits - trip.totalSpent)}
+                      </strong>
+                    </div>
+                    <details className={styles.calculationDetails}>
+                      <summary>
+                        <Info size={16} aria-hidden="true" />
+                        {t("trip.stats.calculation")}
+                      </summary>
+                      <p>{t("trip.stats.calculationFundFlow")}</p>
+                      <p>{t("trip.stats.calculationCategories")}</p>
+                      <p>{t("trip.stats.calculationAdjustments")}</p>
+                      {((trip.missingConversionCount ?? 0) > 0 || (trip.foreignCurrencyDepositCount ?? 0) > 0) && (
+                        <p className={styles.warningText}>
+                          {t("trip.total.incomplete", {
+                            expenses: String(trip.missingConversionCount ?? 0),
+                            deposits: String(trip.foreignCurrencyDepositCount ?? 0),
+                          })}
+                        </p>
+                      )}
+                    </details>
+                  </div>
+                </details>
               </>
             )}
 

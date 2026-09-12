@@ -489,7 +489,7 @@
 .adjustmentCard {
   display: flex;
   min-width: 0;
-  min-height: 112px;
+  min-height: 96px;
   flex-direction: column;
   justify-content: center;
   padding: 0.8rem;
@@ -498,8 +498,7 @@
   background: var(--bg-input);
 }
 
-.adjustmentCard span,
-.adjustmentCard small {
+.adjustmentCard span {
   color: var(--text-secondary);
 }
 
@@ -515,11 +514,6 @@
   overflow-wrap: anywhere;
 }
 
-.adjustmentCard small {
-  margin-top: 0.25rem;
-  font-size: 0.68rem;
-}
-
 .adjustmentFee strong {
   color: var(--color-warning-text);
 }
@@ -528,44 +522,30 @@
   color: var(--color-success);
 }
 
-.adjustmentSummary {
-  margin-top: 0.75rem;
+.adjustmentOutcome {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.7rem;
+  padding: 0.65rem 0.8rem;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: var(--bg-card-hover);
 }
 
-.adjustmentSummary div {
-  display: flex;
-  min-height: 44px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.55rem 0.75rem;
-}
-
-.adjustmentSummary div + div {
-  border-top: 1px solid var(--border-color);
-}
-
-.adjustmentSummary dt {
+.adjustmentOutcome span {
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
+  font-weight: 800;
 }
 
-.adjustmentSummary dd {
+.adjustmentOutcome strong {
   color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 850;
+  font-size: 1.1rem;
   font-variant-numeric: tabular-nums;
-}
-
-.adjustmentOutcome {
-  margin-top: 0.7rem;
-  color: var(--text-secondary);
-  font-size: 0.76rem;
-  line-height: 1.5;
-  text-align: center;
+  white-space: nowrap;
 }
 
 .negativeMoney {
@@ -695,10 +675,46 @@
 
 .fundSummary {
   margin-top: 1rem;
-  padding: 0.9rem 1rem;
+  overflow: hidden;
 }
 
-.fundSummary > div {
+.fundSummaryToggle {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 1rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+}
+
+.fundSummaryToggle::-webkit-details-marker {
+  display: none;
+}
+
+.fundSummaryToggle span {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+.fundSummaryToggle svg {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  transition: transform 160ms ease;
+}
+
+.fundSummary[open] .fundSummaryToggle svg {
+  transform: rotate(90deg);
+}
+
+.fundSummaryContent {
+  padding: 0.2rem 1rem 0.9rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.fundSummaryRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1116,7 +1132,7 @@
   }
 
   .adjustmentCard {
-    min-height: 88px;
+    min-height: 78px;
   }
 
   .categoryBottomline {
