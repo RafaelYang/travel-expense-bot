@@ -231,27 +231,17 @@
   font-size: 0.7rem;
 }
 
-.segmented,
-.scopeGroup {
+.segmented {
   display: grid;
   padding: 4px;
   border: 1px solid var(--border-color);
   border-radius: 13px;
   background: var(--bg-input);
-}
-
-.segmented {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 1rem;
 }
 
-.scopeGroup {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 0.6rem;
-}
-
-.segmented button,
-.scopeGroup button {
+.segmented button {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
@@ -267,13 +257,11 @@
   cursor: pointer;
 }
 
-.segmented button:hover,
-.scopeGroup button:hover {
+.segmented button:hover {
   color: var(--text-primary);
 }
 
-.segmented .segmentActive,
-.scopeGroup .scopeActive {
+.segmented .segmentActive {
   background: var(--bg-card-hover);
   color: var(--color-primary-text);
   box-shadow: 0 2px 8px rgba(2, 6, 23, 0.16);
@@ -1046,6 +1034,17 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+@media (min-width: 768px) {
+  .modal {
+    width: min(1180px, calc(100vw - 3rem));
+    max-height: min(94dvh, 1040px);
+  }
+
+  .scrollArea {
+    padding: 1.25rem 1.5rem 1.6rem;
+  }
 }
 
 @media (max-width: 640px) {

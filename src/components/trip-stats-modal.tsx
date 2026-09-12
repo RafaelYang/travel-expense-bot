@@ -24,7 +24,6 @@ import {
   buildTripStatistics,
   getTripBoundaryDayKey,
   type StatisticsExpense,
-  type StatisticsScope,
 } from "@/lib/trip-statistics"
 import { EXPENSE_CATEGORIES, getCategoryInfo, getCurrencySymbol } from "@/lib/utils"
 
@@ -90,14 +89,6 @@ function calendarDayKey(value: string | Date) {
   return format(new Date(value), "yyyy-MM-dd")
 }
 
-function defaultStatisticsScope(startDate: string): StatisticsScope {
-  return calendarDayKey(new Date()) < getTripBoundaryDayKey(startDate) ? "pretrip" : "trip"
-}
-
-function scopeTranslationKey(scope: StatisticsScope) {
-  return `trip.stats.scope.${scope}`
-}
-
 function statsViewKey(view: StatsView) {
   if (view.kind === "overview") return "overview"
   if (view.kind === "category") return `category:${view.category}`
@@ -130,7 +121,6 @@ export function TripStatsModal({
   const dayBarRefs = useRef(new Map<string, HTMLButtonElement>())
   const modalHandoffRef = useRef(false)
   const [tab, setTab] = useState<StatsTab>("daily")
-  const [scope, setScope] = useState<StatisticsScope>(() => defaultStatisticsScope(trip.startDate))
   const [view, setView] = useState<StatsView>({ kind: "overview" })
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null)
 
@@ -153,11 +143,10 @@ export function TripStatsModal({
       startDay: getTripBoundaryDayKey(trip.startDate),
       endDay: getTripBoundaryDayKey(trip.endDate),
     },
-    scope,
+    scope: "all",
     categoryOrder: CATEGORY_ORDER,
     fillTripDaysThrough: todayDayKey,
   }), [
-    scope,
     statisticsExchanges,
     statisticsExpenses,
     todayDayKey,
@@ -451,27 +440,6 @@ export function TripStatsModal({
                   </button>
                 </div>
 
-                <div
-                  className={styles.scopeGroup}
-                  role="group"
-                  aria-label={t("trip.stats.scopeLabel")}
-                >
-                  {(["pretrip", "trip", "all"] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className={scope === option ? styles.scopeActive : undefined}
-                      onClick={() => {
-                        setScope(option)
-                        setSelectedDayKey(null)
-                      }}
-                      aria-pressed={scope === option}
-                    >
-                      {t(scopeTranslationKey(option))}
-                    </button>
-                  ))}
-                </div>
-
                 {tab === "daily" ? (
                   <section className={styles.sectionCard} aria-labelledby="daily-fund-flow-title">
                     <div className={styles.sectionHeading}>
@@ -480,7 +448,7 @@ export function TripStatsModal({
                         <p>{t("trip.stats.dailyHelp")}</p>
                       </div>
                       <div className={styles.sectionMetric}>
-                        <span>{t(scopeTranslationKey(scope))}</span>
+                        <span>{t("trip.stats.scope.all")}</span>
                         <strong className={statistics.netFundFlowTotal < 0 ? styles.negativeMoney : undefined}>
                           {money(statistics.netFundFlowTotal)}
                           {statistics.fundFlowMissingConversionCount > 0 && t("trip.stats.estimated")}
@@ -604,7 +572,7 @@ export function TripStatsModal({
                         <p>{t("trip.stats.categoriesHelp")}</p>
                       </div>
                       <div className={styles.sectionMetric}>
-                        <span>{t(scopeTranslationKey(scope))}</span>
+                        <span>{t("trip.stats.scope.all")}</span>
                         <strong>
                           {money(statistics.consumptionTotal)}
                           {statistics.consumptionMissingConversionCount > 0 && t("trip.stats.estimated")}
@@ -688,7 +656,7 @@ export function TripStatsModal({
                         <p>{t("trip.stats.adjustmentsHelp")}</p>
                       </div>
                       <div className={styles.sectionMetric}>
-                        <span>{t(scopeTranslationKey(scope))}</span>
+                        <span>{t("trip.stats.scope.all")}</span>
                         <strong className={statistics.adjustmentSummary.netAdjustment < 0 ? styles.negativeMoney : undefined}>
                           {statistics.adjustmentSummary.netAdjustment > 0 ? "+" : ""}
                           {money(statistics.adjustmentSummary.netAdjustment)}
@@ -799,7 +767,6 @@ export function TripStatsModal({
                     {t("trip.stats.categorySummary", {
                       percent: selectedCategory.percentOfKnownTotal.toFixed(1),
                       count: String(selectedCategory.count),
-                      scope: t(scopeTranslationKey(scope)),
                     })}
                   </p>
                   {selectedCategory.missingConversionCount > 0 && (
