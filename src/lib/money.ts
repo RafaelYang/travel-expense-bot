@@ -31,6 +31,22 @@ export interface ExpenseAdjustmentSummary {
   creditCardRewardCount: number
 }
 
+export interface TripFinalCostBreakdown {
+  preRewardTotal: number
+  finalCost: number
+}
+
+export function getTripFinalCostBreakdown(
+  totalSpent: number,
+  totalDeposits: number,
+  totalRewards: number,
+): TripFinalCostBreakdown {
+  return {
+    preRewardTotal: totalSpent + totalRewards,
+    finalCost: totalSpent - totalDeposits,
+  }
+}
+
 export function getExpenseBaseAmount(
   expense: ExpenseAmount,
   baseCurrency: string,

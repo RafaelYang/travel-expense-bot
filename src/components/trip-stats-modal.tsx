@@ -25,6 +25,7 @@ import {
   getTripBoundaryDayKey,
   type StatisticsExpense,
 } from "@/lib/trip-statistics"
+import { getTripFinalCostBreakdown } from "@/lib/money"
 import { EXPENSE_CATEGORIES, getCategoryInfo, getCurrencySymbol } from "@/lib/utils"
 
 import styles from "./trip-stats-modal.module.css"
@@ -183,16 +184,16 @@ export function TripStatsModal({
     : view.kind === "expense"
       ? !selectedCategory || !selectedExpenseDetail || !selectedExpense
       : false
-  const latestActivityPoint = statistics.dailyFundFlow.findLast((point) => (
-    point.directExpenseCount > 0 || point.exchangeCount > 0
-  ))
   const selectedPoint = statistics.dailyFundFlow.find((point) => point.dayKey === selectedDayKey)
-    ?? latestActivityPoint
-    ?? statistics.dailyFundFlow.at(-1)
   const selectedPointDayKey = selectedPoint?.dayKey
   const hasAdjustmentActivity = statistics.adjustmentSummary.serviceFeeCount > 0
     || statistics.adjustmentSummary.shopbackRewardCount > 0
     || statistics.adjustmentSummary.creditCardRewardCount > 0
+  const finalCostBreakdown = getTripFinalCostBreakdown(
+    trip.totalSpent,
+    trip.totalDeposits,
+    statistics.adjustmentSummary.totalRewards,
+  )
 
   const maxPositive = Math.max(0, ...statistics.dailyFundFlow.map((point) => point.net))
   const maxNegative = Math.max(0, ...statistics.dailyFundFlow.map((point) => -point.net))
@@ -365,13 +366,39 @@ export function TripStatsModal({
             {view.kind === "overview" && (
               <>
                 <section className={styles.heroCard} aria-labelledby="stats-total-label">
-                  <div>
-                    <p id="stats-total-label" className={styles.eyebrow}>
-                      {t("trip.stats.currentTotal")}
-                      {totalIsEstimated && <span className={styles.estimated}> {t("trip.stats.estimated")}</span>}
-                    </p>
-                    <p className={styles.heroAmount}>{money(trip.totalSpent)}</p>
-                  </div>
+                  {trip.totalDeposits > 0 ? (
+                    <dl className={styles.heroEquation}>
+                      <div>
+                        <dt id="stats-total-label">
+                          {t("trip.stats.costFormula.current")}
+                          {totalIsEstimated && <span className={styles.estimated}> {t("trip.stats.estimated")}</span>}
+                        </dt>
+                        <dd>{money(finalCostBreakdown.preRewardTotal)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("trip.stats.costFormula.deposit")}</dt>
+                        <dd>{money(trip.totalDeposits)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t("trip.stats.costFormula.rewards")}</dt>
+                        <dd>{money(statistics.adjustmentSummary.totalRewards)}</dd>
+                      </div>
+                      <div className={styles.heroEquationResult}>
+                        <dt>{t("trip.stats.costFormula.final")}</dt>
+                        <dd className={finalCostBreakdown.finalCost < 0 ? styles.negativeMoney : undefined}>
+                          {money(finalCostBreakdown.finalCost)}
+                        </dd>
+                      </div>
+                    </dl>
+                  ) : (
+                    <div>
+                      <p id="stats-total-label" className={styles.eyebrow}>
+                        {t("trip.stats.currentTotal")}
+                        {totalIsEstimated && <span className={styles.estimated}> {t("trip.stats.estimated")}</span>}
+                      </p>
+                      <p className={styles.heroAmount}>{money(trip.totalSpent)}</p>
+                    </div>
+                  )}
                 </section>
 
                 {budgetAmount > 0 && (
@@ -494,7 +521,7 @@ export function TripStatsModal({
                                     ? Math.max(3, (-point.net / Math.max(maxNegative, 1)) * negativeSpace)
                                     : 4
                                 const barTop = point.net > 0 ? zeroY - barHeight : zeroY
-                                const isSelected = selectedPoint?.dayKey === point.dayKey
+                                const isSelected = selectedDayKey === point.dayKey
                                 return (
                                   <button
                                     key={point.dayKey}
@@ -504,7 +531,9 @@ export function TripStatsModal({
                                       if (node) dayBarRefs.current.set(point.dayKey, node)
                                       else dayBarRefs.current.delete(point.dayKey)
                                     }}
-                                    onClick={() => setSelectedDayKey(point.dayKey)}
+                                    onClick={() => setSelectedDayKey((currentDayKey) => (
+                                      currentDayKey === point.dayKey ? null : point.dayKey
+                                    ))}
                                     aria-pressed={isSelected}
                                     aria-label={t("trip.stats.dayAria", {
                                       date: dayLabel(point.dayKey),

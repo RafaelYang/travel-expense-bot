@@ -37,7 +37,6 @@ test("desktop statistics use a wider and taller dialog while mobile remains full
 test("fee and reward view avoids duplicate figures and collapses the fund summary", () => {
   assert.match(modalSource, /trip\.stats\.adjustmentResult\.saved/u)
   assert.doesNotMatch(modalSource, /trip\.stats\.(?:adjustmentCount|totalRewards|netAdjustment)/u)
-  assert.doesNotMatch(modalSource, /statistics\.adjustmentSummary\.totalRewards/u)
   assert.doesNotMatch(modalSource, /styles\.adjustmentSummary/u)
   assert.match(
     modalSource,
@@ -47,4 +46,20 @@ test("fee and reward view avoids duplicate figures and collapses the fund summar
     modalStyles,
     /\.fundSummary\[open\] \.fundSummaryToggle svg \{[\s\S]*?transform: rotate\(90deg\);/u,
   )
+})
+
+test("trip fund hero shows a balanced final-cost formula", () => {
+  assert.match(modalSource, /trip\.totalDeposits > 0/u)
+  assert.match(modalSource, /getTripFinalCostBreakdown\([\s\S]*?trip\.totalSpent,[\s\S]*?trip\.totalDeposits,[\s\S]*?statistics\.adjustmentSummary\.totalRewards/u)
+  assert.match(modalSource, /trip\.stats\.costFormula\.current/u)
+  assert.match(modalSource, /trip\.stats\.costFormula\.final/u)
+  assert.match(i18nSource, /'trip\.stats\.costFormula\.current': '目前總花費（回饋前）'/u)
+})
+
+test("daily chart starts without details and toggles the selected day off", () => {
+  assert.match(modalSource, /const \[selectedDayKey, setSelectedDayKey\] = useState<string \| null>\(null\)/u)
+  assert.match(modalSource, /const selectedPoint = statistics\.dailyFundFlow\.find\(\(point\) => point\.dayKey === selectedDayKey\)/u)
+  assert.doesNotMatch(modalSource, /selectedPoint[\s\S]{0,100}\?\? statistics\.dailyFundFlow/u)
+  assert.match(modalSource, /currentDayKey === point\.dayKey \? null : point\.dayKey/u)
+  assert.match(modalSource, /\{selectedPoint && \([\s\S]*?styles\.selectedDay/u)
 })

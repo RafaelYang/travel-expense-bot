@@ -2,11 +2,22 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  getTripFinalCostBreakdown,
   summarizeDeposits,
   summarizeExpenseAdjustments,
   summarizeExpenses,
   summarizeTripSpending,
 } from "../src/lib/money.ts"
+
+test("final trip cost subtracts deposits and rewards exactly once", () => {
+  const result = getTripFinalCostBreakdown(225_832, 155_000, 7_539)
+
+  assert.deepEqual(result, {
+    preRewardTotal: 233_371,
+    finalCost: 70_832,
+  })
+  assert.equal(result.preRewardTotal - 155_000 - 7_539, result.finalCost)
+})
 
 test("expense totals never treat a missing foreign exchange rate as 1:1", () => {
   const result = summarizeExpenses([
